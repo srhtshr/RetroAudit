@@ -105,32 +105,73 @@
             <!-- Left: Platforms -->
             <Border Grid.Column="0" Background="{StaticResource Brush.Background.Panel}">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="Platforms" FontWeight="Bold" Margin="10,10,10,6"
-                               Foreground="{StaticResource Brush.Text.Primary}" />
-                    <ListBox ItemsSource="{Binding Platforms}" SelectedItem="{Binding SelectedPlatform}"
+                    <Grid DockPanel.Dock="Top" Margin="10,10,10,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Platforms" FontWeight="Bold"
+                                   Foreground="{StaticResource Brush.Text.Primary}" VerticalAlignment="Center" />
+
+                        <!-- "+" butonu: hangi platformların sol panelde görüneceğini seçen popup'ı açar/kapatır. -->
+                        <Button x:Name="PlatformPickerButton" Grid.Column="1" Content="+" Width="22" Height="22"
+                                Padding="0" FontWeight="Bold" Command="{Binding TogglePlatformPickerCommand}" />
+
+                        <Popup PlacementTarget="{Binding ElementName=PlatformPickerButton}" Placement="Bottom"
+                               IsOpen="{Binding IsPlatformPickerOpen}" StaysOpen="False" AllowsTransparency="True">
+                            <Border Background="{StaticResource Brush.Background.Elevated}"
+                                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" CornerRadius="4"
+                                    Width="220" Padding="10" Margin="0,4,0,0">
+                                <StackPanel>
+                                    <TextBlock Text="Görünecek platformlar" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                    <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+                                        <ItemsControl ItemsSource="{Binding SelectablePlatforms}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate DataType="{x:Type models:Platform}">
+                                                    <CheckBox Content="{Binding Name}" IsChecked="{Binding IsVisible}" Margin="0,3" />
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                    <Button Content="Uygula" Margin="0,8,0,0" HorizontalAlignment="Right" Width="80"
+                                            Style="{StaticResource LaunchButton}" Padding="0,4"
+                                            Command="{Binding ApplyPlatformVisibilityCommand}" />
+                                </StackPanel>
+                            </Border>
+                        </Popup>
+                    </Grid>
+
+                    <!-- Sol paneli ortadaki DataGrid'den ayıran çizgiye ek olarak, liste içindeki her satırın
+                         altına ince bir yatay ayırıcı ve logo/ad bloğu arasına dikey bir ayırıcı eklendi;
+                         böylece referans tasarımdaki gibi platform satırları net biçimde birbirinden ayrılıyor. -->
+                    <ListBox ItemsSource="{Binding VisiblePlatforms}" SelectedItem="{Binding SelectedPlatform}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type models:Platform}">
-                                <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="34" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="28" Height="28" CornerRadius="4"
-                                            Background="{StaticResource Brush.Background.Elevated}">
-                                        <TextBlock Text="{Binding IconGlyph}" FontSize="8" FontWeight="Bold"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
-                                    </Border>
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
-                                               Margin="8,0,4,0" TextTrimming="CharacterEllipsis" />
-                                    <Border Grid.Column="2" Background="{StaticResource Brush.Background.Elevated}"
-                                            CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding GameCount}" FontSize="10"
-                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
-                                    </Border>
-                                </Grid>
+                                <Border BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,0,1" Padding="0,3">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="34" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="28" Height="28" CornerRadius="4"
+                                                Background="{StaticResource Brush.Background.Elevated}">
+                                            <TextBlock Text="{Binding IconGlyph}" FontSize="8" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource Brush.Text.Secondary}" />
+                                        </Border>
+                                        <Rectangle Grid.Column="1" Width="1" Margin="8,1" Fill="{StaticResource Brush.Border}" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center"
+                                                   Margin="8,0,4,0" TextTrimming="CharacterEllipsis" />
+                                        <Border Grid.Column="3" Background="{StaticResource Brush.Background.Elevated}"
+                                                CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding GameCount}" FontSize="10"
+                                                       Foreground="{StaticResource Brush.Text.Secondary}" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>

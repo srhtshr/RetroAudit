@@ -315,7 +315,10 @@
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="RowBackground" Value="{StaticResource Brush.Background.Base}" />
         <Setter Property="AlternatingRowBackground" Value="{StaticResource Brush.Background.Panel}" />
-        <Setter Property="GridLinesVisibility" Value="None" />
+        <!-- Satır/sütunlar arasında ince ayırıcı çizgiler: alternatif satır renklendirmesiyle birlikte
+             okunabilirliği artırmak için "None" yerine "All" — VerticalGridLinesBrush/HorizontalGridLinesBrush
+             zaten mevcut tema border rengini (Brush.Border) kullanıyor, bu yüzden görünüm sertleşmiyor. -->
+        <Setter Property="GridLinesVisibility" Value="All" />
         <Setter Property="HeadersVisibility" Value="Column" />
         <Setter Property="AutoGenerateColumns" Value="False" />
         <Setter Property="CanUserAddRows" Value="False" />

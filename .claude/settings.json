@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(\"/c/Users/srhts/Desktop/Retroaudit/RetroAudit/bin/Debug/net9.0-windows/RetroAudit.exe\")",
+      "PowerShell(Get-Process RetroAudit -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force -Confirm:$false 2>$null)",
+      "PowerShell(\"stopped\")",
+      "Bash(\"/c/Program Files/dotnet/dotnet.exe\" build RetroAudit.sln)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
+    ]
+  }
+}

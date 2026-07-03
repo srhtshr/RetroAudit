@@ -2,6 +2,21 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.07] - 2026-07-03
+
+### Added
+- Sol "Platforms" panelinde başlığın yanına **(+)** butonu eklendi; açılan popup'tan hangi
+  platformların panelde görüneceği çoklu seçimle (checkbox listesi) belirlenebiliyor.
+- `Platform.IsVisible` alanı ve `MainViewModel.VisiblePlatforms`/`SelectablePlatforms` — sol panel
+  artık tam platform listesi yerine kullanıcının seçtiği alt kümeyi gösteriyor.
+- Platform satırlarına yatay ayırıcı çizgi (satır altı) ve logo/isim arasında ince dikey ayırıcı
+  eklendi; oyun sayısı rozeti (badge) korunarak daha düzenli bir liste görünümü sağlandı.
+
+### Changed
+- Orta paneldeki oyun `DataGrid`'inde satır/sütunları ayıran ince grid çizgileri açıldı
+  (`GridLinesVisibility="All"`), mevcut tema renkleri (Brush.Border) kullanılarak okunabilirlik
+  artırıldı; genel görünüm ve renk paleti değişmedi.
+
 ## [0.06] - 2026-07-03
 
 ### Added

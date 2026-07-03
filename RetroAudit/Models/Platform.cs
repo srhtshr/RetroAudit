@@ -20,4 +20,9 @@ public class Platform
     // "All Platforms" satırını normal platformlardan ayırt eder; true ise
     // MainViewModel.ApplyFilter platform bazlı filtrelemeyi atlar.
     public bool IsAllPlatforms { get; set; }
+
+    // Sol paneldeki "+" butonuyla açılan çoklu seçim listesinden kullanıcı bu platformu
+    // kapatırsa false olur; MainViewModel.RefreshVisiblePlatforms bu bayrağa göre
+    // Platforms (tam liste) içinden VisiblePlatforms'u (sidebar'da gösterilen liste) süzer.
+    public bool IsVisible { get; set; } = true;
 }

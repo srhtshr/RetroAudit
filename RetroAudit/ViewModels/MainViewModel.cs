@@ -15,7 +15,17 @@ public partial class MainViewModel : ObservableObject
     // Filtrelenmemiş tam oyun listesi; Games koleksiyonu bunun bir alt kümesidir (bkz. ApplyFilter).
     private readonly List<Game> _allGames;
 
+    // Tam platform listesi (mock veri). Sol panelde doğrudan bu değil, IsVisible'a göre
+    // süzülmüş VisiblePlatforms gösterilir.
     public ObservableCollection<Platform> Platforms { get; }
+
+    // Sol paneldeki ListBox'a bağlanan, kullanıcının "+" ile açtığı çoklu seçim listesinden
+    // seçtiği platformlarla sınırlı görünen liste (bkz. RefreshVisiblePlatforms).
+    public ObservableCollection<Platform> VisiblePlatforms { get; } = new();
+
+    // "+" popup'ında gösterilecek seçilebilir platformlar. "All Platforms" özel bir satır
+    // olduğu için (her zaman görünür kalması gerektiğinden) bu listeye dahil edilmiyor.
+    public IEnumerable<Platform> SelectablePlatforms => Platforms.Where(p => !p.IsAllPlatforms);
 
     // DataGrid'e bağlanan, filtreleme sonrası görünen oyun listesi.
     public ObservableCollection<Game> Games { get; } = new();
@@ -60,6 +70,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private double rowHeight = 30;
 
+    // "Platforms" başlığının yanındaki "+" butonuyla açılıp kapanan çoklu seçim popup'ının durumu.
+    [ObservableProperty]
+    private bool isPlatformPickerOpen;
+
     // Stats bar'daki "Görünen / Toplam" metnini besleyen salt-okunur sayaçlar.
     public int TotalCount => _allGames.Count;
     public int VisibleCount => Games.Count;
@@ -68,6 +82,8 @@ public partial class MainViewModel : ObservableObject
     {
         _allGames = MockDataService.GetGames();
         Platforms = new ObservableCollection<Platform>(MockDataService.GetPlatforms());
+
+        RefreshVisiblePlatforms();
 
         // Backing field'a doğrudan atama yapılıyor ki henüz Games/ApplyFilter hazır değilken
         // OnSelectedPlatformChanged tetiklenip erken/eksik bir filtreleme yapılmasın.
@@ -123,6 +139,32 @@ public partial class MainViewModel : ObservableObject
 
         OnPropertyChanged(nameof(VisibleCount));
         OnPropertyChanged(nameof(TotalCount));
+    }
+
+    // Platforms (tam liste) içinden IsVisible=true olanları (ve her zaman "All Platforms" satırını)
+    // VisiblePlatforms'a kopyalar. Sol paneldeki ListBox bu koleksiyona bağlıdır.
+    private void RefreshVisiblePlatforms()
+    {
+        VisiblePlatforms.Clear();
+        foreach (var platform in Platforms.Where(p => p.IsAllPlatforms || p.IsVisible))
+            VisiblePlatforms.Add(platform);
+
+        // Seçili platform popup'tan kapatılmışsa (artık VisiblePlatforms'ta yoksa), seçimi
+        // "All Platforms"a düşürerek DataGrid'in boş bir seçime bağlı kalmasını önlüyoruz.
+        if (SelectedPlatform is not null && !VisiblePlatforms.Contains(SelectedPlatform))
+            SelectedPlatform = VisiblePlatforms.FirstOrDefault(p => p.IsAllPlatforms) ?? VisiblePlatforms.FirstOrDefault();
+    }
+
+    // "+" butonuna basılınca popup'ı açar/kapatır.
+    [RelayCommand]
+    private void TogglePlatformPicker() => IsPlatformPickerOpen = !IsPlatformPickerOpen;
+
+    // Popup içindeki checkbox'larla değiştirilen IsVisible değerlerini sol panele uygular ve popup'ı kapatır.
+    [RelayCommand]
+    private void ApplyPlatformVisibility()
+    {
+        RefreshVisiblePlatforms();
+        IsPlatformPickerOpen = false;
     }
 
     // --- Toolbar komutları ---
