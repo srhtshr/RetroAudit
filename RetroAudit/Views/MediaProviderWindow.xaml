@@ -48,7 +48,11 @@
             <Border Grid.Column="2" Background="{StaticResource Brush.Background.Base}">
                 <DockPanel Margin="10">
                     <TextBlock DockPanel.Dock="Top" Text="Eksik Öğeler" FontWeight="Bold" Margin="0,0,0,8" />
-                    <ListBox ItemsSource="{Binding MissingItems}" SelectedItem="{Binding SelectedMissingItem}">
+                    <!-- Sağdaki kartlar buraya sürüklenip bırakıldığında MediaProviderWindow.xaml.cs
+                         içindeki MissingList_Drop olayı, hangi satırın üzerine bırakıldığını bulup
+                         ViewModel.ApplyDrop(...) çağırarak eşleştirmeyi simüle eder. -->
+                    <ListBox ItemsSource="{Binding MissingItems}" SelectedItem="{Binding SelectedMissingItem}"
+                             AllowDrop="True" DragOver="MissingList_DragOver" Drop="MissingList_Drop">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:MissingMediaItem}">
                                 <StackPanel Margin="2,4">
@@ -78,7 +82,11 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate DataType="{x:Type vm:MediaSearchResult}">
-                                    <Border Width="150" Height="170" Margin="6" CornerRadius="4"
+                                    <!-- Kart: sol tuşla basılı tutup sürüklemeye başlanınca (bkz. Card_MouseMove)
+                                         bu kartın DataContext'i (MediaSearchResult) sürükleme verisi olarak taşınır. -->
+                                    <Border Width="150" Height="170" Margin="6" CornerRadius="4" Cursor="Hand"
+                                            PreviewMouseLeftButtonDown="Card_PreviewMouseLeftButtonDown"
+                                            MouseMove="Card_MouseMove"
                                             Background="{StaticResource Brush.Background.Panel}"
                                             BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
                                         <Grid Margin="6">

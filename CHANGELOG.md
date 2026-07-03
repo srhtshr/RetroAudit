@@ -2,6 +2,15 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.03] - 2026-07-03
+
+### Added
+- `MediaProviderWindow`: sağdaki arama sonucu kartları artık ortadaki eksik öğe listesine
+  sürükle-bırak (drag & drop) ile taşınabiliyor; bırakılan kart, üzerine geldiği satırı
+  "çözüldü" kabul edip listeden kaldırıyor (simülasyon — gerçek indirme yok).
+- Aynı eşleştirme, "Uygula" butonuyla da (seçili satır + seçili kart) tetiklenebiliyor.
+- `MediaProviderViewModel.ApplyDrop(...)` — hem drag&drop hem buton akışının paylaştığı ortak mantık.
+
 ## [0.02] - 2026-07-03
 
 ### Added
