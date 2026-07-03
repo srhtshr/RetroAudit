@@ -2,6 +2,15 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.02] - 2026-07-03
+
+### Added
+- `AppSettings` / `EmulatorConfig` modelleri ve `ConfigService` (JSON export/import).
+- `SettingsWindow` (Admin/Ayarlar paneli): LaunchBox kök dizini, platform başına emülatör yolu/parametreleri,
+  bölge önceliği sıralaması (USA > EU > JP), Export/Import Config (JSON) butonları.
+- `SettingsViewModel` — tüm ayar alanları RelayCommand'larla (Gözat, Ekle, Sil, Taşı, Export, Import) yönetiliyor.
+- Ana penceredeki `Tools` menüsüne "Ayarlar..." seçeneği eklendi.
+
 ## [0.01] - 2026-07-03
 
 ### Added

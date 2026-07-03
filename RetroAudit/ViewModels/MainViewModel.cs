@@ -12,10 +12,11 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<Platform> Platforms { get; }
     public ObservableCollection<Game> Games { get; } = new();
-    public ObservableCollection<string> ToolMenuItems { get; } = new() { "Tools", "Media Provider...", "Crop Editor..." };
+    public ObservableCollection<string> ToolMenuItems { get; } = new() { "Tools", "Media Provider...", "Crop Editor...", "Ayarlar..." };
 
     public event Action? RequestOpenMediaProvider;
     public event Action? RequestOpenCropEditor;
+    public event Action? RequestOpenSettings;
 
     [ObservableProperty]
     private string selectedToolAction = "Tools";
@@ -57,6 +58,8 @@ public partial class MainViewModel : ObservableObject
             OpenMediaProvider();
         else if (value == "Crop Editor...")
             OpenCropEditor();
+        else if (value == "Ayarlar...")
+            OpenSettings();
 
         if (value != "Tools")
             SelectedToolAction = "Tools";
@@ -125,4 +128,7 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void OpenCropEditor() => RequestOpenCropEditor?.Invoke();
+
+    [RelayCommand]
+    private void OpenSettings() => RequestOpenSettings?.Invoke();
 }

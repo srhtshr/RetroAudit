@@ -13,6 +13,7 @@ public partial class MainWindow : Window
         {
             vm.RequestOpenMediaProvider += () => new MediaProviderWindow { Owner = this }.Show();
             vm.RequestOpenCropEditor += () => new CropEditorDialog { Owner = this }.ShowDialog();
+            vm.RequestOpenSettings += () => new SettingsWindow { Owner = this }.Show();
         }
     }
 }
