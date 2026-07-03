@@ -41,6 +41,9 @@
                     <Button Content="Metadata Yenile" Command="{Binding MetadataRefreshCommand}" Margin="0,0,6,0" />
                     <Button Content="LB Taşı" Command="{Binding LbTasiCommand}" Margin="0,0,14,0" />
 
+                    <!-- "Tools" menüsü bir seçim kutusu gibi görünse de aslında bir eylem tetikleyicisi:
+                         seçilen öğe MainViewModel.OnSelectedToolActionChanged içinde işlenip ilgili
+                         pencere açılır, ardından seçim otomatik olarak "Tools" placeholder'ına döner. -->
                     <ComboBox Width="90" Margin="0,0,6,0" ItemsSource="{Binding ToolMenuItems}"
                               SelectedItem="{Binding SelectedToolAction}" />
                     <ComboBox Width="110" Margin="0,0,14,0" SelectedIndex="0">
@@ -50,6 +53,9 @@
                         <ComboBoxItem Content="Filter: Missing SS" />
                     </ComboBox>
 
+                    <!-- WPF TextBox'ın yerleşik bir "placeholder" özelliği olmadığından, arama kutusu
+                         boşken üzerine bindirilen bir TextBlock ile "Ara..." ipucu simüle ediliyor.
+                         TextBlock IsHitTestVisible="False" olduğu için fare tıklamalarını etkilemez. -->
                     <Grid Width="220" Margin="0,0,14,0">
                         <TextBox VerticalContentAlignment="Center"
                                  Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
@@ -134,7 +140,11 @@
             <GridSplitter Grid.Column="1" Width="1" HorizontalAlignment="Stretch"
                           Background="{StaticResource Brush.Border}" />
 
-            <!-- Center: Game grid -->
+            <!-- Center: Game grid.
+                 Sanallaştırma (virtualization) özellikleri, binlerce satırlık gerçek verilerle
+                 kullanıldığında kaydırma sırasında kasmayı önlemek için bilinçli olarak açık:
+                 sadece ekranda görünen satırlar için UI elemanı oluşturulur, kaydırırken
+                 elemanlar oluşturulup atılmak yerine "Recycling" moduyla yeniden kullanılır. -->
             <DataGrid Grid.Column="2"
                       ItemsSource="{Binding Games}"
                       SelectedItem="{Binding SelectedGame}"

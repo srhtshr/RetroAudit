@@ -5,6 +5,10 @@ using System.Windows.Media;
 
 namespace RetroAudit.Converters;
 
+// DataGrid'deki Box/BG/SS nokta göstergeleri ve durum ikonu için ortak renk mantığı:
+// true -> mor (Brush.Status.Ok), false -> kırmızı (Brush.Status.Missing).
+// Renkler ObsidianDark.xaml içinde tanımlı; burada sadece anahtar seçiliyor, böylece
+// tema değişse bile bu converter'ın değişmesi gerekmez.
 public class BoolToStatusBrushConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -18,6 +22,9 @@ public class BoolToStatusBrushConverter : IValueConverter
         => throw new NotSupportedException();
 }
 
+// Durum ikonu (mor tik / kırmızı çarpı) için Segoe MDL2 Assets glyph karakterini seçer.
+// Karakterler \u kaçış dizisiyle yazıldı çünkü görünmez Unicode özel-kullanım-alanı
+// karakterleri metin editörleri/araçlar arasında bozulmaya açık.
 public class BoolToStatusGlyphConverter : IValueConverter
 {
     // Segoe MDL2 Assets glyphs: E73E = CheckMark, E711 = Cancel (X)

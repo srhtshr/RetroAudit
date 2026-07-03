@@ -16,7 +16,9 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- Aspect ratio selector -->
+        <!-- Aspect ratio selector: yatay bir ListBox, sekmeli buton grubu gibi görünsün diye
+             ItemsPanel StackPanel Orientation=Horizontal olarak değiştirildi ve mevcut
+             ListBoxItem stili (dikey sidebar için tasarlanan sağ kenar vurgusu) korundu. -->
         <Border Grid.Row="0" Background="{StaticResource Brush.Background.Panel}"
                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,0,1" Padding="10">
             <ListBox ItemsSource="{Binding AspectRatios}" SelectedItem="{Binding SelectedAspectRatio}"

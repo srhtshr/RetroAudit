@@ -2,8 +2,14 @@ using RetroAudit.Models;
 
 namespace RetroAudit.Services;
 
+// UI prototipi aşamasında gerçek bir veritabanı/XML tarama olmadığı için tüm platform ve
+// oyun verisi burada elle tanımlanır. İleride bu sınıfın yerini gerçek bir tarama/okuma
+// servisi alacak, ancak döndürdüğü Platform/Game tipleri aynı kalacağı için ViewModel'lerde
+// değişiklik gerekmeyecek.
 public static class MockDataService
 {
+    // Sol paneldeki platform listesini doldurur. Sıra ve oyun sayıları referans ekran
+    // görüntüsüyle uyumlu olacak şekilde seçildi (gerçek veriler değil, placeholder).
     public static List<Platform> GetPlatforms()
     {
         return new List<Platform>
@@ -29,6 +35,9 @@ public static class MockDataService
         };
     }
 
+    // Orta paneldeki DataGrid'i doldurur. Nintendo (NES) listesi referans ekran görüntüsündeki
+    // "K" harfiyle başlayan başlıklarla birebir eşleşecek şekilde elle girildi; diğer platformlar
+    // için ise sadece çeşitlilik göstermesi amacıyla birkaç tanınmış başlık eklendi.
     public static List<Game> GetGames()
     {
         var games = new List<Game>();
@@ -87,6 +96,8 @@ public static class MockDataService
             });
         }
 
+        // Referans ekran görüntüsünde varsayılan seçili oyun buydu; MainViewModel de açılışta
+        // bunu SelectedGame olarak seçiyor, böylece sağ detay paneli baştan dolu görünüyor.
         games.Add(new Game
         {
             Title = "A Week of Garfield",
@@ -108,6 +119,7 @@ public static class MockDataService
             Description = "Garfield, the lovable fat orange cat, has gotten himself into a spot of trouble. His pal and center of abuse, the yellow bird Nermal, has been kidnapped.",
         });
 
+        // Diğer platformlar için sadece filtreleme/görsel çeşitlilik amaçlı birkaç örnek başlık.
         (string Title, string Platform, string Genres)[] others =
         {
             ("Chrono Trigger", "Super Nintendo", "Role-Playing"),

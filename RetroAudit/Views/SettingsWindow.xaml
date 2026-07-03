@@ -35,6 +35,10 @@
                 <!-- Emülatör listesi -->
                 <TextBlock Text="Emülatör Ayarları (Platform → Çalıştırılabilir Dosya + Parametreler)"
                            FontWeight="Bold" Margin="0,0,0,6" />
+                <!-- Hücre şablonlarındaki butonların DataContext'i satırdaki EmulatorConfig olduğu için,
+                     ViewModel komutlarına ulaşmak amacıyla RelativeSource AncestorType=Window ile
+                     Window.DataContext (SettingsViewModel) üzerinden komut aranıyor; CommandParameter
+                     olarak da satırın kendisi (EmulatorConfig) veriliyor. -->
                 <DataGrid ItemsSource="{Binding Emulators}" SelectedItem="{Binding SelectedEmulator}"
                           AutoGenerateColumns="False" CanUserAddRows="False" Height="220" Margin="0,0,0,8">
                     <DataGrid.Columns>

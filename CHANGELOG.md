@@ -2,6 +2,14 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.04] - 2026-07-03
+
+### Changed
+- Tüm ViewModel'lere, modellere, converter'lara ve XAML görünümlerine "ne işe yarıyor" ve
+  "neden bu şekilde yapıldı" açıklamalı satır içi yorumlar eklendi (Değişmez Sistem Kuralı 2).
+  Kapsam: `MainViewModel`, `MediaProviderViewModel`, `CropEditorViewModel`, `Models/*`,
+  `Converters/*`, `MockDataService`, ve tüm `Views/*` XAML/code-behind dosyaları.
+
 ## [0.03] - 2026-07-03
 
 ### Added
