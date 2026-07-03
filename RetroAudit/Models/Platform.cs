@@ -1,7 +1,7 @@
 namespace RetroAudit.Models;
 
 // Sol paneldeki platform listesinde gösterilen tek bir satırı temsil eder
-// (ör. "Nintendo", "PlayStation 2"). "All Platforms" satırı da bu tipten,
+// (ör. "Nintendo Entertainment System", "PlayStation 2"). "All Platforms" satırı da bu tipten,
 // IsAllPlatforms bayrağıyla ayırt edilir.
 public class Platform
 {
@@ -14,15 +14,12 @@ public class Platform
     // Listede platform adının yanında gösterilen oyun sayısı rozeti.
     public int GameCount { get; set; }
 
-    // Favori yıldızı gösterilsin mi (şu an sadece görsel; favorileme mantığı henüz yok).
-    public bool IsFavorite { get; set; }
-
     // "All Platforms" satırını normal platformlardan ayırt eder; true ise
     // MainViewModel.ApplyFilter platform bazlı filtrelemeyi atlar.
     public bool IsAllPlatforms { get; set; }
 
-    // Sol paneldeki "+" butonuyla açılan çoklu seçim listesinden kullanıcı bu platformu
-    // kapatırsa false olur; MainViewModel.RefreshVisiblePlatforms bu bayrağa göre
-    // Platforms (tam liste) içinden VisiblePlatforms'u (sidebar'da gösterilen liste) süzer.
-    public bool IsVisible { get; set; } = true;
+    // Sol paneldeki kategori başlığı (ör. "CONSOLES", "HANDHELDS", "OTHERS"). Bir platformu bir
+    // kategoriden diğerine taşımak (ör. "OTHERS" -> "CONSOLES") sadece bu alanı değiştirmekle
+    // olur — MainViewModel.RebuildPlatformListItems sıralamayı/gruplamayı bu alana göre kurar.
+    public string Category { get; set; } = string.Empty;
 }

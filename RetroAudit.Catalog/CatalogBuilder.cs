@@ -11,17 +11,42 @@ namespace RetroAudit.Catalog;
 // bu metodu çağırır; asıl mantık burada ve test edilebilir bir kütüphanede yaşıyor.
 public static class CatalogBuilder
 {
+    // BuildInfo tablosuna yazılan sabitler. SchemaVersion, Games/GameVersions/Platforms tablo
+    // yapısı değiştikçe (ör. bu turda Games.HiddenByDefault eklendi) artırılır; WPF tarafı
+    // (Stage B) ileride uyumsuz bir RetroAudit.db'yi bu alana bakarak erkenden reddedebilir.
+    public const string SchemaVersion = "1.2";
+    public const string BuilderVersion = "1.2.0";
+
+    // Ana listede varsayılan olarak gizlenecek (ama SİLİNMEYECEK) LaunchBox tür etiketleri —
+    // kullanıcı kararı: gerçek video oyunu sayılmayan Casino/Gambling/Mahjong/Pachinko/Pachislot/
+    // Quiz/masa oyunu/eğitim yazılımı türleri veri kaybı olmadan HiddenByDefault=1 ile işaretlenir.
+    // Contains ile kontrol edildiği için "Board Game"/"Board Games", "Educational"/"Education"
+    // gibi tekil/çoğul ya da sıfat/isim varyasyonlarının hepsini yakalar.
+    private static readonly string[] HiddenGenreKeywords =
+    {
+        "Casino", "Gambling", "Mahjong", "Pachinko", "Pachislot", "Pachi-Slot",
+        "Quiz", "Board Game", "Tabletop", "Card Game", "Educational", "Education",
+    };
+
+    private static bool IsHiddenByGenre(IEnumerable<string> genres) =>
+        genres.Any(g => HiddenGenreKeywords.Any(k => g.Contains(k, StringComparison.OrdinalIgnoreCase)));
+
     public static BuildReport Run(BuildOptions options)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var report = new BuildReport();
 
         var scan = DatSourceScanner.Scan(options.DatRoot, options.SourceCategories, options.PlatformFilter);
         report.SkippedDatFiles.AddRange(scan.SkippedFiles);
         report.ExcludedPlatforms.AddRange(scan.ExcludedPlatforms);
+        report.OutOfScopePlatforms.AddRange(scan.OutOfScopePlatforms);
         foreach (var resolution in scan.PlatformResolutions.Where(r => r.WasAmbiguous && !r.WasExplicitOverride))
             report.AmbiguousPlatformsDefaulted.Add((resolution.PlatformName, resolution.ChosenSource, resolution.AvailableSources));
 
+
         var games = VersionResolver.Group(scan.Entries);
+        report.FilteredRecordCount = scan.Entries.Count - games.Sum(g => g.Versions.Count);
+        report.UnknownRegionVersionCount = games.Sum(g => g.Versions.Count(v => v.Regions.Contains("Unknown", StringComparer.OrdinalIgnoreCase)));
 
         using (var metadataReader = new LaunchBoxMetadataReader(options.LaunchBoxDbPath))
         {
@@ -64,6 +89,12 @@ public static class CatalogBuilder
                         report.FuzzyMatched++;
                     if (game.NeedsReview)
                         report.NeedsReview++;
+
+                    if (IsHiddenByGenre(game.Genres))
+                    {
+                        game.HiddenByDefault = true;
+                        report.HiddenByDefaultCount++;
+                    }
                 }
                 else
                 {
@@ -75,18 +106,34 @@ public static class CatalogBuilder
             }
         }
 
-        WriteDatabase(options.OutputDbPath, games, report);
+        WriteDatabase(options, games, report);
 
         report.PlatformCount = games.Select(g => g.PlatformName).Distinct(StringComparer.OrdinalIgnoreCase).Count();
         report.GameCount = games.Count;
         report.VersionCount = games.Sum(g => g.Versions.Count);
         report.HashCount = games.Sum(g => g.Versions.Sum(v => v.Roms.Count));
 
+        foreach (var group in games.GroupBy(g => g.PlatformName, StringComparer.OrdinalIgnoreCase))
+            report.GamesByPlatform[group.Key] = group.Count();
+
+        // Kaynak, platformun kendisinden değil oyunun TERCİH EDİLEN sürümünden okunuyor —
+        // PlatformMergeMap birden fazla dat dosyasını (ör. fiziksel + dijital) tek bir platform
+        // altında topladığından, bir platformun "tek kaynağı" artık her zaman doğru olmayabilir.
+        foreach (var game in games)
+        {
+            var source = game.Preferred?.SourceDat ?? "unknown";
+            report.GamesBySource[source] = report.GamesBySource.GetValueOrDefault(source) + 1;
+        }
+
+        stopwatch.Stop();
+        report.BuildDuration = stopwatch.Elapsed;
+
         return report;
     }
 
-    private static void WriteDatabase(string outputPath, List<CatalogGame> games, BuildReport report)
+    private static void WriteDatabase(BuildOptions options, List<CatalogGame> games, BuildReport report)
     {
+        var outputPath = options.OutputDbPath;
         var directory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
@@ -111,6 +158,20 @@ public static class CatalogBuilder
             seedSourceCmd.Parameters.AddWithValue("$version", DBNull.Value);
             seedSourceCmd.Parameters.AddWithValue("$importedAt", DateTime.UtcNow.ToString("O"));
             seedSourceCmd.ExecuteNonQuery();
+        }
+
+        using (var buildInfoCmd = connection.CreateCommand())
+        {
+            buildInfoCmd.CommandText = """
+                INSERT INTO BuildInfo (SchemaVersion, CatalogVersion, BuildDate, BuilderVersion, SourceSummary)
+                VALUES ($schemaVersion, $catalogVersion, $buildDate, $builderVersion, $sourceSummary)
+                """;
+            buildInfoCmd.Parameters.AddWithValue("$schemaVersion", SchemaVersion);
+            buildInfoCmd.Parameters.AddWithValue("$catalogVersion", DateTime.UtcNow.ToString("yyyy.MM.dd"));
+            buildInfoCmd.Parameters.AddWithValue("$buildDate", DateTime.UtcNow.ToString("O"));
+            buildInfoCmd.Parameters.AddWithValue("$builderVersion", BuilderVersion);
+            buildInfoCmd.Parameters.AddWithValue("$sourceSummary", string.Join(",", options.SourceCategories));
+            buildInfoCmd.ExecuteNonQuery();
         }
 
         using var transaction = connection.BeginTransaction();
@@ -165,9 +226,41 @@ public static class CatalogBuilder
             return newId;
         }
 
+        // Platforms tablosu Name dışında Category da tuttuğu için genel GetOrCreateLookup yerine
+        // ayrı bir yol izliyor (bkz. PlatformCategoryMap — UI taksonomisi, Builder hiçbir platformu
+        // bu yüzden atmaz, haritada olmayanlar "OTHERS" olarak yazılır).
+        long GetOrCreatePlatformId(string platformName)
+        {
+            if (platformIds.TryGetValue(platformName, out var cached))
+                return cached;
+
+            using (var select = connection.CreateCommand())
+            {
+                select.Transaction = transaction;
+                select.CommandText = "SELECT rowid FROM Platforms WHERE Name = $name";
+                select.Parameters.AddWithValue("$name", platformName);
+                if (select.ExecuteScalar() is long existing)
+                {
+                    platformIds[platformName] = existing;
+                    return existing;
+                }
+            }
+
+            using var insert = connection.CreateCommand();
+            insert.Transaction = transaction;
+            insert.CommandText = "INSERT INTO Platforms (Name, Category) VALUES ($name, $category)";
+            insert.Parameters.AddWithValue("$name", platformName);
+            insert.Parameters.AddWithValue("$category", PlatformCategoryMap.Resolve(platformName));
+            insert.ExecuteNonQuery();
+
+            var newId = GetLastInsertRowId();
+            platformIds[platformName] = newId;
+            return newId;
+        }
+
         foreach (var game in games)
         {
-            var platformId = GetOrCreateLookup(platformIds, "Platforms", game.PlatformName);
+            var platformId = GetOrCreatePlatformId(game.PlatformName);
             var developerId = game.Developer is { Length: > 0 } dev ? GetOrCreateLookup(developerIds, "Developers", dev) : (long?)null;
             var publisherId = game.Publisher is { Length: > 0 } pub ? GetOrCreateLookup(publisherIds, "Publishers", pub) : (long?)null;
 
@@ -176,8 +269,8 @@ public static class CatalogBuilder
             {
                 insertGame.Transaction = transaction;
                 insertGame.CommandText = """
-                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview)
-                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview)
+                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview, HiddenByDefault)
+                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview, $hiddenByDefault)
                     """;
                 insertGame.Parameters.AddWithValue("$platformId", platformId);
                 insertGame.Parameters.AddWithValue("$title", game.Title);
@@ -191,6 +284,7 @@ public static class CatalogBuilder
                 insertGame.Parameters.AddWithValue("$matchMethod", (object?)game.MatchMethod ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$matchConfidence", (object?)game.MatchConfidence ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$needsReview", game.NeedsReview ? 1 : 0);
+                insertGame.Parameters.AddWithValue("$hiddenByDefault", game.HiddenByDefault ? 1 : 0);
                 insertGame.ExecuteNonQuery();
                 gameId = GetLastInsertRowId();
             }

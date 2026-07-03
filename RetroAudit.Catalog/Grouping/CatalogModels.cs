@@ -9,6 +9,10 @@ namespace RetroAudit.Catalog.Grouping;
 public class CatalogGameVersion
 {
     public string RawDatName { get; set; } = string.Empty;
+    // Bu sürümün DatNameParser'dan çıkan kendi temiz başlığı — bölgeler arası yazım farkları
+    // (noktalama, büyük/küçük harf, alt başlık) olabileceği için CatalogGame.Title, gruptaki
+    // ilk görülen kayıttan değil, tercih edilen sürümün CleanTitle'ından atanır.
+    public string CleanTitle { get; set; } = string.Empty;
     public string SourceDat { get; set; } = string.Empty; // "no-intro", "redump", "tosec", ...
     public string[] Regions { get; set; } = Array.Empty<string>();
     public string? VersionLabel { get; set; }
@@ -43,4 +47,11 @@ public class CatalogGame
     public string? MatchMethod { get; set; }
     public double? MatchConfidence { get; set; }
     public bool NeedsReview { get; set; }
+
+    // LaunchBox'tan gelen tür (Genre) bilgisi Casino/Gambling/Mahjong/Pachinko/Pachislot/Quiz/
+    // Board Game/Tabletop/Card Game/Educational gibi "gerçek video oyunu" sayılmayan bir türe
+    // işaret ediyorsa true olur. Kullanıcı kararıyla bu oyunlar silinmiyor (veri kaybı yok),
+    // sadece varsayılan ana listede gizlenmek üzere işaretleniyor — kullanıcı isterse UI'dan
+    // açabilir.
+    public bool HiddenByDefault { get; set; }
 }

@@ -30,7 +30,7 @@ public static partial class DatNameParser
     private static readonly string[] ExcludedParenKeywords =
     {
         "Beta", "Proto", "Prototype", "Demo", "Sample", "Preview", "Kiosk",
-        "Bad Dump", "Overdump", "Alternate", "Alternative", "Cracked", "Trainer", "Fixed",
+        "Bad Dump", "Overdump", "Alternate", "Alternative", "Crack", "Cracked", "Trainer", "Fixed",
         "Pirate", "Hack", "Aftermarket", "Unl", "Unlicensed",
         "BIOS", "Utility", "Utilities", "Application", "Applications",
         "Documentation", "Docs", "Magazine", "Music", "Coverdisk", "Cover Disk",

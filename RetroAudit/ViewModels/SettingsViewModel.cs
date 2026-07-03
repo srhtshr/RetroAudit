@@ -78,7 +78,6 @@ public partial class SettingsViewModel : ObservableObject
         new() { PlatformName = "SNK Neo Geo Pocket Color", PreferredCore = "Mednafen" },
         new() { PlatformName = "Bilgisayar (MS-DOS)", PreferredCore = "DOSBox-Staging" },
         new() { PlatformName = "Bilgisayar (Windows)", PreferredCore = "Doğrudan PC Executable (.exe)" },
-        new() { PlatformName = "ZX Spectrum", PreferredCore = "Fuse" },
     };
 
     // Bölge önceliği sırası: USA > EU > JP gibi. Liste başı = en yüksek öncelik.

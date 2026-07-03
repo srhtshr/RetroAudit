@@ -105,108 +105,124 @@
             <!-- Left: Platforms -->
             <Border Grid.Column="0" Background="{StaticResource Brush.Background.Panel}">
                 <DockPanel>
-                    <Grid DockPanel.Dock="Top" Margin="10,10,10,6">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0" Text="Platforms" FontWeight="Bold"
-                                   Foreground="{StaticResource Brush.Text.Primary}" VerticalAlignment="Center" />
+                    <TextBlock DockPanel.Dock="Top" Text="Platforms" FontWeight="Bold" Margin="10,10,10,6"
+                               Foreground="{StaticResource Brush.Text.Primary}" />
 
-                        <!-- "+" butonu: hangi platformların sol panelde görüneceğini seçen popup'ı açar/kapatır. -->
-                        <Button x:Name="PlatformPickerButton" Grid.Column="1" Content="+" Width="22" Height="22"
-                                Padding="0" FontWeight="Bold" Command="{Binding TogglePlatformPickerCommand}" />
-
-                        <Popup PlacementTarget="{Binding ElementName=PlatformPickerButton}" Placement="Bottom"
-                               IsOpen="{Binding IsPlatformPickerOpen}" StaysOpen="False" AllowsTransparency="True">
-                            <Border Background="{StaticResource Brush.Background.Elevated}"
-                                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" CornerRadius="4"
-                                    Width="220" Padding="10" Margin="0,4,0,0">
-                                <StackPanel>
-                                    <TextBlock Text="Görünecek platformlar" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                    <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
-                                        <ItemsControl ItemsSource="{Binding SelectablePlatforms}">
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate DataType="{x:Type models:Platform}">
-                                                    <!-- Solda görünürlük checkbox'ı, sağda favori yıldızı: "Uygula"ya
-                                                         basılana kadar sadece bu popup içinde geçerli bir taslak durum. -->
-                                                    <Grid Margin="0,3">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <CheckBox Grid.Column="0" Content="{Binding Name}" IsChecked="{Binding IsVisible}" />
-                                                        <ToggleButton Grid.Column="1" IsChecked="{Binding IsFavorite}"
-                                                                      ToolTip="Favori platform" Cursor="Hand" Padding="4,0">
-                                                            <ToggleButton.Template>
-                                                                <ControlTemplate TargetType="ToggleButton">
-                                                                    <ContentPresenter />
-                                                                </ControlTemplate>
-                                                            </ToggleButton.Template>
-                                                            <ToggleButton.Style>
-                                                                <Style TargetType="ToggleButton">
-                                                                    <Setter Property="Content" Value="&#xE734;" />
-                                                                    <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
-                                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
-                                                                    <Style.Triggers>
-                                                                        <Trigger Property="IsChecked" Value="True">
-                                                                            <Setter Property="Content" Value="&#xE735;" />
-                                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
-                                                                        </Trigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </ToggleButton.Style>
-                                                        </ToggleButton>
-                                                    </Grid>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </ScrollViewer>
-                                    <Button Content="Uygula" Margin="0,8,0,0" HorizontalAlignment="Right" Width="80"
-                                            Style="{StaticResource LaunchButton}" Padding="0,4"
-                                            Command="{Binding ApplyPlatformVisibilityCommand}" />
-                                </StackPanel>
-                            </Border>
-                        </Popup>
-                    </Grid>
-
-                    <!-- Sol paneli ortadaki DataGrid'den ayıran çizgiye ek olarak, liste içindeki her satırın
-                         altına ince bir yatay ayırıcı ve logo/ad bloğu arasına dikey bir ayırıcı eklendi;
-                         böylece referans tasarımdaki gibi platform satırları net biçimde birbirinden ayrılıyor. -->
-                    <!-- ItemContainerStyle ile bu listeye özel, tema genelindeki ListBoxItem'dan daha dar bir
-                         dikey dolgu (Padding) veriliyor; satır aralarındaki fazla boşluk buradan geliyordu. -->
-                    <ListBox ItemsSource="{Binding VisiblePlatforms}" SelectedItem="{Binding SelectedPlatform}"
+                    <!-- Tek bir ListBox içinde hem kategori başlıkları (CONSOLES/HANDHELDS/ARCADE/
+                         COMPUTERS/CLASSIC/OTHERS) hem platform satırları var (bkz. PlatformListItem).
+                         WPF'in doğal grup desteği "bir grubu kapalı, diğerlerini açık" göstermeye uygun
+                         olmadığından, görünür satır listesi ViewModel'de (RebuildPlatformListItems)
+                         elle kuruluyor: "OTHERS" kapalıyken o kategorinin platform satırları listeye
+                         hiç eklenmiyor. ItemContainerStyle ile normal başlıklar tıklanamaz hale
+                         getiriliyor; "OTHERS" başlığı ise DataTemplate içindeki bir buton üzerinden
+                         ToggleOthersCommand'ı tetikliyor. -->
+                    <ListBox ItemsSource="{Binding PlatformListItems}" SelectedItem="{Binding SelectedListItem}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                         <ListBox.ItemContainerStyle>
                             <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
                                 <Setter Property="Padding" Value="8,3" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsNonInteractiveHeader}" Value="True">
+                                        <Setter Property="IsHitTestVisible" Value="False" />
+                                        <Setter Property="Focusable" Value="False" />
+                                    </DataTrigger>
+                                </Style.Triggers>
                             </Style>
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:Platform}">
-                                <!-- Favori durumu artık sadece sırayı belirliyor (favoriler üstte) ve "+"
-                                     popup'ında düzenleniyor; satırda ayrıca bir yıldız gösterilmiyor —
-                                     neredeyse her satır favori olduğunda yıldız fazladan gürültü yaratıyordu. -->
+                            <DataTemplate DataType="{x:Type models:PlatformListItem}">
                                 <Grid>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="26" />
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <Border Grid.Column="0" Width="22" Height="22" CornerRadius="4"
-                                            Background="{StaticResource Brush.Background.Elevated}">
-                                        <TextBlock Text="{Binding IconGlyph}" FontSize="7" FontWeight="Bold"
-                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
-                                    </Border>
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
-                                               Margin="6,0,4,0" TextTrimming="CharacterEllipsis" />
-                                    <Border Grid.Column="2" Background="{StaticResource Brush.Background.Elevated}"
-                                            BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
-                                            CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding GameCount}" FontSize="10"
-                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
-                                    </Border>
+                                    <!-- Kategori başlığı satırı -->
+                                    <Grid Margin="4,10,4,4">
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Grid.Style>
+
+                                        <!-- Sabit (tıklanamaz) başlık: CONSOLES/HANDHELDS/ARCADE/COMPUTERS/CLASSIC -->
+                                        <TextBlock Text="{Binding HeaderText}" FontWeight="Bold" FontSize="10"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCollapsibleHeader}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+
+                                        <!-- Tıklanabilir başlık: sadece OTHERS, aç/kapa oku ile -->
+                                        <Button Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
+                                                HorizontalContentAlignment="Stretch"
+                                                Command="{Binding DataContext.ToggleOthersCommand, RelativeSource={RelativeSource AncestorType=Window}}">
+                                            <Button.Style>
+                                                <Style TargetType="Button">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsCollapsibleHeader}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <Button.Template>
+                                                <ControlTemplate TargetType="Button">
+                                                    <Grid Background="Transparent">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="{Binding HeaderText}" FontWeight="Bold" FontSize="10"
+                                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding ExpandGlyph}" FontSize="9"
+                                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Button.Template>
+                                        </Button>
+                                    </Grid>
+
+                                    <!-- Platform satırı -->
+                                    <Grid>
+                                        <Grid.Style>
+                                            <Style TargetType="Grid">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsHeader}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Grid.Style>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="26" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="22" Height="22" CornerRadius="4"
+                                                Background="{StaticResource Brush.Background.Elevated}">
+                                            <TextBlock Text="{Binding Platform.IconGlyph}" FontSize="7" FontWeight="Bold"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                       Foreground="{StaticResource Brush.Text.Secondary}" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="{Binding Platform.Name}" VerticalAlignment="Center"
+                                                   Margin="6,0,4,0" TextTrimming="CharacterEllipsis" />
+                                        <Border Grid.Column="2" Background="{StaticResource Brush.Background.Elevated}"
+                                                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                                                CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Platform.GameCount}" FontSize="10"
+                                                       Foreground="{StaticResource Brush.Text.Secondary}" />
+                                        </Border>
+                                    </Grid>
                                 </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>

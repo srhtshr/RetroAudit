@@ -15,17 +15,14 @@ public partial class MainViewModel : ObservableObject
     // Filtrelenmemiş tam oyun listesi; Games koleksiyonu bunun bir alt kümesidir (bkz. ApplyFilter).
     private readonly List<Game> _allGames;
 
-    // Tam platform listesi (mock veri). Sol panelde doğrudan bu değil, IsVisible'a göre
-    // süzülmüş VisiblePlatforms gösterilir.
+    // Tam platform listesi (mock veri, kategorilere ayrılmış). Sol panelde doğrudan bu değil,
+    // kategori başlıklarıyla iç içe geçmiş PlatformListItems gösterilir.
     public ObservableCollection<Platform> Platforms { get; }
 
-    // Sol paneldeki ListBox'a bağlanan, kullanıcının "+" ile açtığı çoklu seçim listesinden
-    // seçtiği platformlarla sınırlı görünen liste (bkz. RefreshVisiblePlatforms).
-    public ObservableCollection<Platform> VisiblePlatforms { get; } = new();
-
-    // "+" popup'ında gösterilecek seçilebilir platformlar. "All Platforms" özel bir satır
-    // olduğu için (her zaman görünür kalması gerektiğinden) bu listeye dahil edilmiyor.
-    public IEnumerable<Platform> SelectablePlatforms => Platforms.Where(p => !p.IsAllPlatforms);
+    // Sol paneldeki ListBox'ın gerçek ItemsSource'u: kategori başlığı ve platform satırlarının
+    // sırayla dizilmiş hali (bkz. RebuildPlatformListItems). "OTHERS" kategorisi varsayılan kapalı
+    // geldiğinden, IsOthersExpanded=false iken o kategorinin platform satırları listede hiç yer almaz.
+    public ObservableCollection<PlatformListItem> PlatformListItems { get; } = new();
 
     // DataGrid'e bağlanan, filtreleme sonrası görünen oyun listesi.
     public ObservableCollection<Game> Games { get; } = new();
@@ -50,6 +47,12 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private Platform? selectedPlatform;
 
+    // ListBox.SelectedItem burayla bağlıdır (PlatformListItems, hem başlık hem platform satırları
+    // içerir). Başlık satırları seçilemez (bkz. MainWindow.xaml ItemContainerStyle), bu yüzden bu
+    // alan pratikte hep bir platform satırına işaret eder; değiştiğinde SelectedPlatform güncellenir.
+    [ObservableProperty]
+    private PlatformListItem? selectedListItem;
+
     // DataGrid'de seçili oyun; sağ detay panelinin tüm alanları buna bağlıdır.
     [ObservableProperty]
     private Game? selectedGame;
@@ -70,9 +73,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private double rowHeight = 30;
 
-    // "Platforms" başlığının yanındaki "+" butonuyla açılıp kapanan çoklu seçim popup'ının durumu.
+    // "OTHERS" kategorisinin açık/kapalı durumu. Varsayılan kapalı: kullanıcı ilk açılışta sadece
+    // popüler kategorileri (CONSOLES/HANDHELDS/ARCADE/COMPUTERS/CLASSIC) görür.
     [ObservableProperty]
-    private bool isPlatformPickerOpen;
+    private bool isOthersExpanded;
 
     // Stats bar'daki "Görünen / Toplam" metnini besleyen salt-okunur sayaçlar.
     public int TotalCount => _allGames.Count;
@@ -83,11 +87,15 @@ public partial class MainViewModel : ObservableObject
         _allGames = MockDataService.GetGames();
         Platforms = new ObservableCollection<Platform>(MockDataService.GetPlatforms());
 
-        RefreshVisiblePlatforms();
+        // Rozetlerdeki sayı mock/sabit bir değer değil, gerçek oyun listesinden hesaplanıyor —
+        // böylece "0 oyun var ama rozet 1406 yazıyor" gibi senkronsuzluk hiç oluşmaz; RetroAudit.db
+        // bağlandığında (Stage B) da bu hesap otomatik doğru sonuç verecek.
+        SyncPlatformGameCounts();
+        RebuildPlatformListItems();
 
         // Backing field'a doğrudan atama yapılıyor ki henüz Games/ApplyFilter hazır değilken
         // OnSelectedPlatformChanged tetiklenip erken/eksik bir filtreleme yapılmasın.
-        selectedPlatform = Platforms.FirstOrDefault(p => p.Name == "Nintendo") ?? Platforms.First();
+        selectedPlatform = Platforms.FirstOrDefault(p => p.Name == "Nintendo Entertainment System") ?? Platforms.First();
 
         ApplyFilter();
 
@@ -111,6 +119,19 @@ public partial class MainViewModel : ObservableObject
     }
 
     partial void OnSelectedPlatformChanged(Platform? value) => ApplyFilter();
+
+    // ListBox seçimi (başlık + platform satırlarının karışık olduğu liste) değiştiğinde, gerçek
+    // bir platform satırıysa SelectedPlatform'u günceller; başlık satırları zaten seçilemediği
+    // için (bkz. MainWindow.xaml) value.Platform null olan bir durumla pratikte karşılaşılmaz.
+    partial void OnSelectedListItemChanged(PlatformListItem? value)
+    {
+        if (value?.Platform is not null)
+            SelectedPlatform = value.Platform;
+    }
+
+    // "OTHERS" başlığına tıklanınca açılıp kapanır; listeyi (platform satırları dahil/hariç)
+    // yeniden kurmak gerekir.
+    partial void OnIsOthersExpandedChanged(bool value) => RebuildPlatformListItems();
 
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
@@ -141,38 +162,70 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(TotalCount));
     }
 
-    // Platforms (tam liste) içinden IsVisible=true olanları (ve her zaman "All Platforms" satırını)
-    // VisiblePlatforms'a kopyalar. Sol paneldeki ListBox bu koleksiyona bağlıdır.
-    // Sıralama: All Platforms en üstte, ardından favoriler, en altta favori olmayan görünür platformlar
-    // — kullanıcının en sık kullandığı platformlar listenin başında kalsın diye.
-    private void RefreshVisiblePlatforms()
+    // Her platformun rozetindeki sayıyı _allGames içinde o platforma ait kaç kayıt olduğuna göre
+    // hesaplar ("All Platforms" toplam sayıyı gösterir). GetPlatforms()'taki sabit GameCount
+    // değerleri sadece ilk yapım aşamasının kalıntısıydı; artık tek doğru kaynak gerçek oyun listesi.
+    private void SyncPlatformGameCounts()
     {
-        VisiblePlatforms.Clear();
-        var ordered = Platforms
-            .Where(p => p.IsAllPlatforms || p.IsVisible)
-            .OrderByDescending(p => p.IsAllPlatforms)
-            .ThenByDescending(p => p.IsFavorite);
-
-        foreach (var platform in ordered)
-            VisiblePlatforms.Add(platform);
-
-        // Seçili platform popup'tan kapatılmışsa (artık VisiblePlatforms'ta yoksa), seçimi
-        // "All Platforms"a düşürerek DataGrid'in boş bir seçime bağlı kalmasını önlüyoruz.
-        if (SelectedPlatform is not null && !VisiblePlatforms.Contains(SelectedPlatform))
-            SelectedPlatform = VisiblePlatforms.FirstOrDefault(p => p.IsAllPlatforms) ?? VisiblePlatforms.FirstOrDefault();
+        foreach (var platform in Platforms)
+        {
+            platform.GameCount = platform.IsAllPlatforms
+                ? _allGames.Count
+                : _allGames.Count(g => g.Platform == platform.Name);
+        }
     }
 
-    // "+" butonuna basılınca popup'ı açar/kapatır.
-    [RelayCommand]
-    private void TogglePlatformPicker() => IsPlatformPickerOpen = !IsPlatformPickerOpen;
-
-    // Popup içindeki checkbox'larla değiştirilen IsVisible değerlerini sol panele uygular ve popup'ı kapatır.
-    [RelayCommand]
-    private void ApplyPlatformVisibility()
+    // Kategori sırası sabit: popüler kategoriler önce, "OTHERS" en sonda ve varsayılan kapalı.
+    // Yeni bir platform eklemek ya da bir platformu "OTHERS"tan ana bir kategoriye taşımak,
+    // sadece MockDataService'teki Platform.Category alanını değiştirmekle olur — bu metod
+    // otomatik olarak doğru başlığın altına yerleştirir.
+    private static readonly string[] CategoryOrder =
     {
-        RefreshVisiblePlatforms();
-        IsPlatformPickerOpen = false;
+        MockDataService.CategoryConsoles,
+        MockDataService.CategoryHandhelds,
+        MockDataService.CategoryArcade,
+        MockDataService.CategoryComputers,
+        MockDataService.CategoryClassic,
+        MockDataService.CategoryOthers,
+    };
+
+    // Platforms (tam liste, kategorilere ayrılmış) içinden sol panelde gösterilecek satır dizisini
+    // (başlık + platform satırları) kurar. "OTHERS" kategorisinin platform satırları sadece
+    // IsOthersExpanded=true iken eklenir.
+    private void RebuildPlatformListItems()
+    {
+        PlatformListItems.Clear();
+
+        var allPlatformsEntry = Platforms.FirstOrDefault(p => p.IsAllPlatforms);
+        if (allPlatformsEntry is not null)
+            PlatformListItems.Add(new PlatformListItem { Platform = allPlatformsEntry });
+
+        foreach (var category in CategoryOrder)
+        {
+            var platformsInCategory = Platforms.Where(p => p.Category == category).ToList();
+            if (platformsInCategory.Count == 0)
+                continue;
+
+            var isOthers = category == MockDataService.CategoryOthers;
+            PlatformListItems.Add(new PlatformListItem
+            {
+                IsHeader = true,
+                HeaderText = category,
+                IsCollapsibleHeader = isOthers,
+                ExpandGlyph = isOthers ? (IsOthersExpanded ? "▾" : "▸") : string.Empty,
+            });
+
+            if (isOthers && !IsOthersExpanded)
+                continue;
+
+            foreach (var platform in platformsInCategory)
+                PlatformListItems.Add(new PlatformListItem { Platform = platform });
+        }
     }
+
+    // "OTHERS" başlığına tıklanınca açar/kapatır.
+    [RelayCommand]
+    private void ToggleOthers() => IsOthersExpanded = !IsOthersExpanded;
 
     // --- Toolbar komutları ---
     // Aşağıdaki komutların çoğu bu aşamada bilinçli olarak boş (no-op): gerçek dosya taraması,

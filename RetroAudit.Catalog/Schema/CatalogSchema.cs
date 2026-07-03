@@ -7,9 +7,13 @@ namespace RetroAudit.Catalog.Schema;
 public static class CatalogSchema
 {
     public const string CreateTablesSql = """
+        -- Category: WPF sol panelindeki taksonomiye (CONSOLES/HANDHELDS/ARCADE/COMPUTERS/CLASSIC/
+        -- OTHERS) karşılık gelir (bkz. PlatformCategoryMap). Sadece bir sunum/UI bilgisidir —
+        -- Builder bu yüzden hiçbir platformu atmaz, haritada olmayanlar OTHERS'a düşer.
         CREATE TABLE Platforms (
             PlatformId INTEGER PRIMARY KEY AUTOINCREMENT,
-            Name TEXT NOT NULL UNIQUE
+            Name TEXT NOT NULL UNIQUE,
+            Category TEXT NOT NULL DEFAULT 'OTHERS'
         );
 
         CREATE TABLE Developers (
@@ -52,7 +56,11 @@ public static class CatalogSchema
             -- kayıtların metadata'sı kullanılabilir ama kullanıcı onaylayana kadar şüpheli sayılmalı.
             MatchMethod TEXT,
             MatchConfidence REAL,
-            NeedsReview INTEGER NOT NULL DEFAULT 0
+            NeedsReview INTEGER NOT NULL DEFAULT 0,
+            -- LaunchBox türü Casino/Gambling/Mahjong/Pachinko/Pachislot/Quiz/Board Game/Tabletop/
+            -- Card Game/Educational gibi bir kategoriye işaret ediyorsa 1. Satır silinmez (veri
+            -- kaybı yok), sadece WPF'in varsayılan ana listesi bu satırları gizler.
+            HiddenByDefault INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IX_Games_Platform_CompareTitle ON Games(PlatformId, CompareTitle);
 
@@ -114,6 +122,17 @@ public static class CatalogSchema
             FilePath TEXT NOT NULL,
             VerifiedAt TEXT,
             VerificationStatus TEXT
+        );
+
+        -- Bu RetroAudit.db'nin hangi Builder/şema sürümüyle, ne zaman, hangi kaynaklardan
+        -- üretildiğini kaydeden tek satırlık bir denetim tablosu. WPF tarafı (Stage B) açılışta
+        -- SchemaVersion'ı kontrol ederek uyumsuz bir veritabanını erkenden reddedebilir.
+        CREATE TABLE BuildInfo (
+            SchemaVersion TEXT NOT NULL,
+            CatalogVersion TEXT NOT NULL,
+            BuildDate TEXT NOT NULL,
+            BuilderVersion TEXT NOT NULL,
+            SourceSummary TEXT NOT NULL
         );
         """;
 }

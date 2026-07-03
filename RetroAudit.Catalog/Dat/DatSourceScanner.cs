@@ -18,6 +18,22 @@ public static class DatSourceScanner
         "Microsoft - Xbox 360 (Digital)",
         "Microsoft - Xbox 360 (Games on Demand)",
         "Microsoft - XBOX 360 (Title Updates)",
+
+        // TOSEC'in ZX Spectrum seti, platformun 1980'ler bütçe/scene yazılım tarihinin son derece
+        // ayrıntılı kataloglanması yüzünden 17.381 oyuna şişiyor (Amiga'nın 2,5 katı) ve versiyonların
+        // %53'ü ("007 Spy H"/"007 Spy M"/"007 Spy N" gibi tarihsel-farklı-isimli varyantlar) net bir
+        // bölge etiketi taşımıyor. Kullanıcı kararıyla ZX Spectrum platformu (No-Intro'daki küçük
+        // "+3" varyantı dahil, iki dat da) programda hiç bulunmayacak şekilde tamamen dışlandı.
+        "Sinclair - ZX Spectrum",
+        "Sinclair - ZX Spectrum +3",
+
+        // Bunlar gerçek anlamda oyun platformu değil, bir konsolun müzik/video medya dağıtım
+        // biçimidir (PSP'nin UMD Music/UMD Video diskleri) — kullanıcı kararıyla, "oyun olmayan
+        // içerik tamamen hariç tutulur" kuralına göre dışlandı. (Dağıtım varyantlarını taban
+        // platforma birleştiren PlatformMergeMap'ten farklı olarak bunlar hiç oyun içermediği için
+        // birleştirilecek bir platform bile değil, doğrudan dışlanıyor.)
+        "Sony - PlayStation Portable (UMD Music)",
+        "Sony - PlayStation Portable (UMD Video)",
     };
 
     public class ScanResult
@@ -34,6 +50,11 @@ public static class DatSourceScanner
         public List<PlatformResolution> PlatformResolutions { get; } = new();
 
         public List<string> ExcludedPlatforms { get; } = new();
+
+        // Curated UI listesinde (PlatformAllowList) karşılığı olmadığı için hiç taranmayan
+        // platformlar — ExcludedPlatforms'tan farklı: bunlar "kötü/oyun değil" değil, sadece
+        // "şu an gösterilmesi planlanmıyor" oldukları için atlandı.
+        public List<string> OutOfScopePlatforms { get; } = new();
     }
 
     public class PlatformResolution
@@ -88,6 +109,16 @@ public static class DatSourceScanner
                 continue;
             }
 
+            // Dağıtım-varyantı dat'ları (ör. "(Digital)") kendi kapsam kontrolünü değil, taban
+            // platformun (PlatformMergeMap sonrası) kapsamını kullanır — 3DS'in kendisi curated
+            // listedeyse "(Digital)" varyantı da otomatik taranır.
+            var canonicalPlatformName = PlatformMergeMap.Resolve(platformName);
+            if (!PlatformAllowList.IsAllowed(canonicalPlatformName))
+            {
+                result.OutOfScopePlatforms.Add(platformName);
+                continue;
+            }
+
             var availableSourceNames = sources.Select(s => s.Source).ToList();
             string chosenSource;
             var wasOverride = false;
@@ -134,7 +165,7 @@ public static class DatSourceScanner
                 foreach (var entry in entries)
                 {
                     entry.SourceCategory = chosenSource;
-                    entry.PlatformName = platformName;
+                    entry.PlatformName = canonicalPlatformName;
                 }
 
                 result.Entries.AddRange(entries);

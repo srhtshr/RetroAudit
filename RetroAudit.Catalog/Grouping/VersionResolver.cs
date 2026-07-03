@@ -14,7 +14,14 @@ public static class VersionResolver
 {
     public static List<CatalogGame> Group(IEnumerable<DatGameEntry> entries)
     {
-        var games = new Dictionary<(string Platform, string Title), CatalogGame>();
+        // Gruplama anahtarı normalize edilmiş başlık (CompareTitle) üzerinden yapılır, ham
+        // CleanTitle üzerinden değil — aynı oyunun USA/Europe/Japan sürümleri arasında noktalama,
+        // büyük/küçük harf ya da alt başlık yazım farkı olması çok yaygın (ör. "Mega Man 2" /
+        // "Mega Man II"'nin farklı DAT'larda yazım biçimi değişebilir); ham başlık üzerinden
+        // gruplamak bu durumlarda aynı oyunu yanlışlıkla iki ayrı Games satırına bölüyordu (1G1R
+        // hedefini bozan asıl kök neden). CompareTitle zaten LaunchBox'ın kendi oyun-kimliği
+        // normalizasyonunu taklit ettiği için bu amaç için de doğru anahtar.
+        var games = new Dictionary<(string Platform, string CompareTitle), CatalogGame>();
 
         foreach (var entry in entries)
         {
@@ -22,7 +29,8 @@ public static class VersionResolver
             if (parsed.ShouldExclude)
                 continue;
 
-            var key = (entry.PlatformName, parsed.CleanTitle);
+            var compareTitle = NormalizeForCompare(parsed.CleanTitle);
+            var key = (entry.PlatformName, compareTitle);
 
             if (!games.TryGetValue(key, out var game))
             {
@@ -30,24 +38,37 @@ public static class VersionResolver
                 {
                     PlatformName = entry.PlatformName,
                     Title = parsed.CleanTitle,
-                    CompareTitle = NormalizeForCompare(parsed.CleanTitle),
+                    CompareTitle = compareTitle,
                 };
                 games[key] = game;
             }
 
             // Filtreyi geçen (yani gerçek/resmi olduğu düşünülen) ama başlığında USA/Europe/Japan/
             // World gibi net bir bölge etiketi bulunmayan kayıtlar yeni bir oyun oluşturmaz — aynı
-            // CleanTitle altında "Unknown" bölgeli bir sürüm olarak kalır, böylece ileride UI'da
+            // CompareTitle altında "Unknown" bölgeli bir sürüm olarak kalır, böylece ileride UI'da
             // filtrelenebilir. Sınıflandırılamayan kayıtlarla daha fazla uğraşılmıyor (kullanıcı isteği).
             var regions = parsed.Regions.Length > 0 ? parsed.Regions : new[] { "Unknown" };
+
+            // No-Intro aynı sürümü genelde iki ayrı game() bloğu olarak listeler: "headered" (.nes)
+            // ve "headerless" (.unh) ROM dökümü — ikisi de birebir aynı isimle (RawDatName), farklı
+            // CRC/boyutla. Bunlar gerçekte TEK sürümdür, sadece dosya formatı farklıdır; bu yüzden
+            // aynı RawDatName ikinci kez görüldüğünde yeni bir GameVersion açmak yerine mevcut
+            // sürümün Roms listesine ekleniyor (1 Game / 1 GameVersion / birden fazla Hash).
+            var existingVersion = game.Versions.FirstOrDefault(v => v.RawDatName == entry.Name);
+            if (existingVersion is not null)
+            {
+                existingVersion.Roms.AddRange(entry.Roms);
+                continue;
+            }
 
             game.Versions.Add(new CatalogGameVersion
             {
                 RawDatName = entry.Name,
+                CleanTitle = parsed.CleanTitle,
                 SourceDat = entry.SourceCategory,
                 Regions = regions,
                 VersionLabel = parsed.VersionLabel,
-                Roms = entry.Roms,
+                Roms = new List<DatRomEntry>(entry.Roms),
             });
         }
 
@@ -57,9 +78,10 @@ public static class VersionResolver
         return games.Values.ToList();
     }
 
-    // Tercih sırası: USA > World > Europe > Japan > diğer bölge; hayatta kalan tüm sürümler zaten
-    // "resmi" olduğu için (ShouldExclude filtresini geçtiler) ek bir normal/alt-sürüm ayrımına
-    // gerek yok — sadece bölge önceliği ve deterministik bir son çare (en kısa/alfabetik) yeterli.
+    // Tercih sırası (kullanıcı kararı): USA > Europe > World > Japan > diğer bölge; hayatta kalan
+    // tüm sürümler zaten "resmi" olduğu için (ShouldExclude filtresini geçtiler) ek bir normal/
+    // alt-sürüm ayrımına gerek yok — sadece bölge önceliği ve deterministik bir son çare
+    // (en kısa/alfabetik, "en temiz" sürümü seçer) yeterli.
     private static void ResolvePreferred(CatalogGame game)
     {
         var best = game.Versions
@@ -68,15 +90,20 @@ public static class VersionResolver
             .ThenBy(v => v.RawDatName, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();
 
-        if (best is not null)
-            best.IsPreferred = true;
+        if (best is null)
+            return;
+
+        best.IsPreferred = true;
+        // Ana listede gösterilecek başlık, gruptaki ilk görülen (dosya sırasına bağlı, rastgele)
+        // kaydın değil, tercih edilen (USA öncelikli) sürümün kendi CleanTitle'ı olsun.
+        game.Title = best.CleanTitle;
     }
 
     private static int RegionRank(string[] regions)
     {
         if (regions.Contains("USA", StringComparer.OrdinalIgnoreCase)) return 0;
-        if (regions.Contains("World", StringComparer.OrdinalIgnoreCase)) return 1;
-        if (regions.Contains("Europe", StringComparer.OrdinalIgnoreCase)) return 2;
+        if (regions.Contains("Europe", StringComparer.OrdinalIgnoreCase)) return 1;
+        if (regions.Contains("World", StringComparer.OrdinalIgnoreCase)) return 2;
         if (regions.Contains("Japan", StringComparer.OrdinalIgnoreCase)) return 3;
         return 4;
     }

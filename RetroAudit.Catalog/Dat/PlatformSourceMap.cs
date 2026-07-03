@@ -41,6 +41,8 @@ public static class PlatformSourceMap
         ["Atari - 2600"] = "no-intro",
         ["Atari - 5200"] = "no-intro",
         ["Atari - 7800"] = "no-intro",
+        ["Atari - Jaguar"] = "no-intro",
+        ["Atari - Lynx"] = "no-intro",
 
         // NOT: Kullanıcı "Commodore 64 -> TOSEC" bekliyordu ama bu makinedeki TOSEC seti Commodore 64
         // dat'ı içermiyor (sadece Amiga ve PET var) — tek seçenek No-Intro olduğu için burada override

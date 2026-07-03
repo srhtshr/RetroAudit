@@ -2,6 +2,54 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.12] - 2026-07-03
+
+### Added
+- **WPF platform paneli sadeleştirildi**: eski favori/görünürlük seçici kaldırıldı, yerine sabit
+  taksonomi geldi (CONSOLES/HANDHELDS/ARCADE/COMPUTERS/CLASSIC/OTHERS), OTHERS ilk açılışta kapalı.
+  `PlatformListItem` + `MainViewModel.RebuildPlatformListItems()` bu hiyerarşiyi oluşturuyor;
+  Builder/DB tarafı hiçbir platformu silmiyor, bu tamamen UI kategorileme.
+- Platform rozetlerindeki oyun sayısı artık gerçek oyun listesinden dinamik hesaplanıyor
+  (`SyncPlatformGameCounts`), önceki statik mock değerlerin yerine.
+- Mock oyun listesi boşaltıldı (`MockDataService.GetGames()`), gerçek veritabanı entegrasyonuna
+  (Stage B) hazırlık.
+- **Builder finalizasyonu**: `RetroAudit.Catalog/Dat/PlatformCategoryMap.cs` eklendi — DAT platform
+  adlarını WPF taksonomisine eşliyor; `Platforms.Category` sütunu şemaya eklendi.
+- `BuildInfo` tablosu: `SchemaVersion/CatalogVersion/BuildDate/BuilderVersion/SourceSummary` artık
+  RetroAudit.db'nin içine yazılıyor — WPF tarafı (Stage B) açılışta uyumsuz şemayı erkenden reddedebilecek.
+- Build raporu genişletildi: kaynak/platform bazlı oyun sayısı kırılımı, filtrelenen kayıt sayısı,
+  bilinmeyen bölge sayısı, build süresi, kapsam dışı bırakılan platform listesi.
+- **ZX Spectrum platformu tamamen kaldırıldı** (hem TOSEC ana seti hem No-Intro "+3" varyantı,
+  hem Builder hem WPF mock listesi hem Ayarlar panelindeki emülatör eşleşmesi) — TOSEC seti
+  17.381 oyuna şişiyordu (en yakın platformun 2,5 katı) ve versiyonlarının yarısından fazlası
+  net bölge etiketi taşımıyordu; kullanıcı kararıyla programdan tamamen çıkarıldı.
+- **Curated platform kapsamı**: `PlatformAllowList` eklendi — Builder artık sadece WPF sol
+  panelindeki 39 curated platformla eşleşen DAT dosyalarını tarıyor (65 niş platform bilinçli
+  olarak kapsam dışı, raporda şeffaf listeleniyor). Kullanıcı kararı: gösterilmeyecek platformları
+  ileride tekrar tekrar eklemeyeceğimiz için taramayı en baştan sadece ihtiyaç olana sınırladık.
+- **Dağıtım varyantı birleştirme**: `PlatformMergeMap` eklendi — 3DS (Digital)/New 3DS/New 3DS
+  (Digital), DS (Download Play), Wii (Digital), PS3/PSP/Vita (PSN) gibi aynı fiziksel platformun
+  dağıtım biçimleri artık taban platform altında tek bir Platforms satırında toplanıyor (kaynak
+  dosyaları hâlâ ayrı ayrı taranıyor, veri kaybı yok). PSP UMD Music/UMD Video (oyun değil, medya
+  diski) tamamen hariç tutuldu.
+- **1G1R (one-game-one-row) ana katalog**: `VersionResolver` gruplama anahtarı ham başlıktan
+  normalize edilmiş başlığa (`CompareTitle`) geçirildi — bölgeler arası yazım farkı yüzünden aynı
+  oyunun yanlışlıkla iki ayrı `Games` satırına bölünmesi önlendi. Tercih edilen sürüm önceliği
+  USA > Europe > World > Japan olarak düzeltildi (önceki sıralamada World, Europe'un önündeydi).
+  `Games.Title` artık gruptaki ilk görülen (rastgele) kaydın değil, tercih edilen sürümün başlığı.
+- **Headered/headerless birleştirme**: No-Intro'nun aynı sürüm için ürettiği iki ayrı ROM dökümü
+  (`.nes`/`.unh` gibi, aynı isim farklı CRC) artık iki ayrı `GameVersion` değil, tek sürümün
+  altında birden fazla `GameHashes` satırı olarak tutuluyor (1 Game / 1 GameVersion / N Hash).
+- **Tür bazlı varsayılan gizleme**: `Games.HiddenByDefault` sütunu eklendi — Casino/Gambling/
+  Mahjong/Pachinko/Pachislot/Quiz/Board Game/Tabletop/Card Game/Educational türündeki oyunlar
+  silinmiyor, sadece WPF'in varsayılan ana listesinde gizlenmek üzere işaretleniyor.
+
+### Sonuç (final tam koşu: no-intro + redump + tosec, curated 39 platform + ZX Spectrum hariç)
+43 platform (mame/fbneo kaynakları henüz taranmadığı için 3'ü boş), 67.335 oyun, 108.159 sürüm,
+124.974 hash, 10:01 build süresi. %63 LaunchBox eşleşmesi (44.722 kesin + 5.277 fuzzy, 3.893
+Needs Review), 4.151 oyun tür bazlı gizlendi (HiddenByDefault), duplicate hash çakışması 4,
+belirsiz/varsayılana düşen platform 0, her oyun tam 1 preferred sürüme sahip (0 istisna).
+
 ## [0.11] - 2026-07-03
 
 ### Added
