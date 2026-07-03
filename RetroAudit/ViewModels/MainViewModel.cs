@@ -1,6 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using RetroAudit.Catalog.Grouping;
+using RetroAudit.Catalog.Metadata;
 using RetroAudit.Models;
 using RetroAudit.Services;
 
@@ -12,6 +16,15 @@ namespace RetroAudit.ViewModels;
 // ileride buraya gerçek işlevleri eklenecek.
 public partial class MainViewModel : ObservableObject
 {
+    // Sol paneldeki kategori başlıkları. RetroAudit.Catalog/Dat/PlatformCategoryMap.cs'teki
+    // sabitlerle birebir aynı metinler — Builder bu string'leri Platforms.Category sütununa yazıyor.
+    public const string CategoryConsoles = "CONSOLES";
+    public const string CategoryHandhelds = "HANDHELDS";
+    public const string CategoryArcade = "ARCADE";
+    public const string CategoryComputers = "COMPUTERS";
+    public const string CategoryClassic = "CLASSIC";
+    public const string CategoryOthers = "OTHERS";
+
     // Filtrelenmemiş tam oyun listesi; Games koleksiyonu bunun bir alt kümesidir (bkz. ApplyFilter).
     private readonly List<Game> _allGames;
 
@@ -27,6 +40,10 @@ public partial class MainViewModel : ObservableObject
     // DataGrid'e bağlanan, filtreleme sonrası görünen oyun listesi.
     public ObservableCollection<Game> Games { get; } = new();
 
+    // Sağ paneldeki Versions listesi: SelectedGame değiştiğinde CatalogDatabaseService.GetVersions
+    // ile talep üzerine doldurulur (67 bin oyunun tamamının sürüm verisini baştan yüklemek yerine).
+    public ObservableCollection<GameVersion> SelectedGameVersions { get; } = new();
+
     // Toolbar'daki "Tools" açılır menüsünün öğeleri; seçim, gerçek bir seçili durum değil
     // bir "eylem tetikleyici" gibi davranır (bkz. OnSelectedToolActionChanged).
     public ObservableCollection<string> ToolMenuItems { get; } = new() { "Tools", "Media Provider...", "Crop Editor...", "Ayarlar..." };
@@ -36,6 +53,7 @@ public partial class MainViewModel : ObservableObject
     public event Action? RequestOpenMediaProvider;
     public event Action? RequestOpenCropEditor;
     public event Action? RequestOpenSettings;
+    public event Action<string>? RequestShowMessage;
 
     // Tools ComboBox'ının o anki seçimi; bir eylem tetiklendikten sonra otomatik olarak
     // "Tools" değerine geri döner (bkz. OnSelectedToolActionChanged), böylece kalıcı bir
@@ -78,29 +96,162 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool isOthersExpanded;
 
+    // Sağ detay panelinin açık/kapalı (sürgülü) durumu — DataGrid'e daha fazla yatay yer
+    // bırakmak için kapatılabilir (bkz. MainWindow.xaml: ColumnDefinition Width, BoolToGridLength).
+    [ObservableProperty]
+    private bool isDetailPanelExpanded = true;
+
+    [RelayCommand]
+    private void ToggleDetailPanel() => IsDetailPanelExpanded = !IsDetailPanelExpanded;
+
+    // Ana tablonun üstündeki hashtag/chip şeridi (Favorites + kullanıcı playlist'leri + Hidden +
+    // Recycle Bin). Bir chip seçiliyken ApplyFilter normal Platform/Arama/Released-Junk/sütun
+    // filtre hattını devre dışı bırakıp SADECE o chip'in üyelerini gösterir (bkz. plan).
+    public ObservableCollection<PlaylistChip> PlaylistChips { get; } = new();
+
+    [ObservableProperty]
+    private PlaylistChip? selectedChip;
+
+    // Seçili chip bir kullanıcı playlist'iyse üyelik anlık hesaplanmak yerine burada önbelleğe
+    // alınır (chip değişince/bir oyun playlist'ten çıkarılınca yenilenir).
+    private HashSet<string> _selectedChipMembership = new();
+
+    [ObservableProperty]
+    private bool isCreatingPlaylist;
+
+    [ObservableProperty]
+    private string newPlaylistName = string.Empty;
+
     // Stats bar'daki "Görünen / Toplam" metnini besleyen salt-okunur sayaçlar.
     public int TotalCount => _allGames.Count;
     public int VisibleCount => Games.Count;
 
+    // DataGrid sütun başlıklarındaki joystick ikonuyla açılan filtre dropdown'ları. Her biri
+    // _allGames üzerinden (tüm veri setinden, aktif filtrelerden bağımsız) bir kere hesaplanan
+    // sabit bir değer+sayı listesi taşır — Excel'deki gibi filtre değiştikçe diğer sütunların
+    // sayılarını yeniden hesaplamıyoruz (kapsamı sade tutmak için bilinçli bir basitleştirme).
+    public ColumnFilterViewModel PlatformFilter { get; }
+    public ColumnFilterViewModel StatusFilter { get; }
+    public ColumnFilterViewModel GenresFilter { get; }
+    public ColumnFilterViewModel DeveloperFilter { get; }
+    public ColumnFilterViewModel PublisherFilter { get; }
+    public ColumnFilterViewModel RegionFilter { get; }
+    public ColumnFilterViewModel SourceFilter { get; }
+    public ColumnFilterViewModel MatchMethodFilter { get; }
+    public ColumnFilterViewModel ReleaseYearFilter { get; }
+    public ColumnFilterViewModel MaxPlayersFilter { get; }
+    public ColumnFilterViewModel TitleFilter { get; }
+    public ColumnFilterViewModel FileFilter { get; }
+    public ColumnFilterViewModel MatchedFilter { get; }
+    public ColumnFilterViewModel FavoriteFilter { get; }
+    public ColumnFilterViewModel HasLocalFileFilter { get; }
+    public ColumnFilterViewModel BoxFilter { get; }
+    public ColumnFilterViewModel BackgroundFilter { get; }
+    public ColumnFilterViewModel ScreenshotFilter { get; }
+
+    // "Sütunlar" düğmesiyle açılan seçici — hangi DataGrid sütununun görünür olacağını belirler.
+    // MainWindow.xaml.cs, IsVisible değiştiğinde ilgili DataGridColumn'ı Key'e göre bulup
+    // Visibility'sini günceller (DataGridColumn görsel ağacın parçası olmadığı için doğrudan
+    // XAML binding ile gizlenemiyor).
+    public ObservableCollection<ColumnVisibilityOption> ColumnOptions { get; } = new()
+    {
+        new() { Key = "Developer", Header = "Geliştirici", IsVisible = false },
+        new() { Key = "Publisher", Header = "Yayıncı", IsVisible = false },
+        new() { Key = "ReleaseYear", Header = "Yıl", IsVisible = false },
+        new() { Key = "MaxPlayers", Header = "Maks. Oyuncu", IsVisible = false },
+        new() { Key = "Region", Header = "Bölge", IsVisible = false },
+        new() { Key = "Source", Header = "Kaynak", IsVisible = false },
+        new() { Key = "MatchMethod", Header = "Eşleşme Yöntemi", IsVisible = false },
+    };
+
+    // Ayarlar > Arayüz sekmesinde değiştirilen ContextMenuDisplayMode/LaunchBoxDbPath gibi
+    // tercihlerin kalıcı olması için (bkz. ConfigService.LoadDefault/SaveDefault). Bu alanlar
+    // RetroAudit.db'ye değil, kullanıcının makinesindeki ayrı bir JSON dosyasına gider.
+    private AppSettings _appSettings;
+
     public MainViewModel()
     {
-        _allGames = MockDataService.GetGames();
-        Platforms = new ObservableCollection<Platform>(MockDataService.GetPlatforms());
+        _appSettings = ConfigService.LoadDefault();
 
-        // Rozetlerdeki sayı mock/sabit bir değer değil, gerçek oyun listesinden hesaplanıyor —
-        // böylece "0 oyun var ama rozet 1406 yazıyor" gibi senkronsuzluk hiç oluşmaz; RetroAudit.db
-        // bağlandığında (Stage B) da bu hesap otomatik doğru sonuç verecek.
+        _allGames = CatalogDatabaseService.GetGames();
+        foreach (var game in _allGames)
+            game.HasLocalFile = HasLocalFile(game);
+
+        Platforms = new ObservableCollection<Platform>(CatalogDatabaseService.GetPlatforms());
+
+        // Rozetlerdeki sayı sabit bir değer değil, gerçek oyun listesinden hesaplanıyor —
+        // böylece "0 oyun var ama rozet 1406 yazıyor" gibi senkronsuzluk hiç oluşmaz.
         SyncPlatformGameCounts();
         RebuildPlatformListItems();
 
+        PlatformFilter = BuildColumnFilter("Platform", _allGames.Select(g => g.Platform));
+        StatusFilter = BuildColumnFilter("Sürüm", _allGames.Select(g => g.Version));
+        GenresFilter = BuildColumnFilter("Türler", _allGames.Select(g => g.Genres));
+        DeveloperFilter = BuildColumnFilter("Geliştirici", _allGames.Select(g => g.Developer));
+        PublisherFilter = BuildColumnFilter("Yayıncı", _allGames.Select(g => g.Publisher));
+        RegionFilter = BuildColumnFilter("Bölge", _allGames.Select(g => g.Region));
+        SourceFilter = BuildColumnFilter("Kaynak", _allGames.Select(g => g.SourceDat));
+        MatchMethodFilter = BuildColumnFilter("Eşleşme Yöntemi", _allGames.Select(g => g.MatchMethod));
+        ReleaseYearFilter = BuildColumnFilter("Yıl", _allGames.Select(g => g.ReleaseYear == 0 ? string.Empty : g.ReleaseYear.ToString()));
+        MaxPlayersFilter = BuildColumnFilter("Maks. Oyuncu", _allGames.Select(g => g.MaxPlayers == 0 ? string.Empty : g.MaxPlayers.ToString()));
+        TitleFilter = BuildColumnFilter("Başlık", _allGames.Select(g => g.Title));
+        FileFilter = BuildColumnFilter("File", _allGames.Select(g => g.File));
+        MatchedFilter = BuildColumnFilter("Durum", _allGames.Select(g => g.StatusOk ? "Eşleşti" : "Eşleşmedi"));
+        FavoriteFilter = BuildColumnFilter("Favori", _allGames.Select(g => g.IsFavorite ? "Evet" : "Hayır"));
+        HasLocalFileFilter = BuildColumnFilter("Dosya", _allGames.Select(g => g.HasLocalFile ? "Var" : "Yok"));
+        BoxFilter = BuildColumnFilter("Box", _allGames.Select(g => g.HasBox ? "Evet" : "Hayır"));
+        BackgroundFilter = BuildColumnFilter("BG", _allGames.Select(g => g.HasBackground ? "Evet" : "Hayır"));
+        ScreenshotFilter = BuildColumnFilter("SS", _allGames.Select(g => g.HasScreenshot ? "Evet" : "Hayır"));
+
+        var allColumnFilters = new[]
+        {
+            PlatformFilter, StatusFilter, GenresFilter, DeveloperFilter, PublisherFilter,
+            RegionFilter, SourceFilter, MatchMethodFilter, ReleaseYearFilter, MaxPlayersFilter,
+            TitleFilter, FileFilter, MatchedFilter, FavoriteFilter, HasLocalFileFilter,
+            BoxFilter, BackgroundFilter, ScreenshotFilter,
+        };
+        foreach (var filter in allColumnFilters)
+            filter.FilterChanged += ApplyFilter;
+
+        RebuildPlaylistChips();
+
         // Backing field'a doğrudan atama yapılıyor ki henüz Games/ApplyFilter hazır değilken
         // OnSelectedPlatformChanged tetiklenip erken/eksik bir filtreleme yapılmasın.
-        selectedPlatform = Platforms.FirstOrDefault(p => p.Name == "Nintendo Entertainment System") ?? Platforms.First();
+        selectedPlatform = Platforms.FirstOrDefault(p => p.IsAllPlatforms) ?? Platforms.First();
+        contextMenuDisplayMode = _appSettings.ContextMenuDisplayMode;
 
         ApplyFilter();
 
-        // Referans tasarımdaki gibi açılışta "A Week of Garfield" seçili gelsin.
-        selectedGame = Games.FirstOrDefault(g => g.Title == "A Week of Garfield") ?? Games.FirstOrDefault();
+        selectedGame = Games.FirstOrDefault();
+        LoadSelectedGameVersions();
+    }
+
+    // Ayarlar penceresi kapanınca MainWindow.xaml.cs bunu çağırır — ContextMenuDisplayMode gibi
+    // canlı-yansıması-gereken tercihler disk'ten yeniden okunup güncellenir (bkz. plan: Ayarlar
+    // ayrı bir pencere/ViewModel olduğu için değişiklik doğrudan burayı etkilemiyor).
+    public void ReloadAppSettings()
+    {
+        _appSettings = ConfigService.LoadDefault();
+        ContextMenuDisplayMode = _appSettings.ContextMenuDisplayMode;
+    }
+
+    // Boş değerleri "(Boş)" olarak grupluyor ki filtre listesinde görünmez bir satır olmasın;
+    // ApplyFilter'daki karşılaştırma da aynı normalizasyonu kullanıyor (bkz. NormalizeForFilter).
+    private static string NormalizeForFilter(string value) => string.IsNullOrWhiteSpace(value) ? "(Boş)" : value;
+
+    private static ColumnFilterViewModel BuildColumnFilter(string headerText, IEnumerable<string> rawValues)
+    {
+        var filter = new ColumnFilterViewModel { HeaderText = headerText };
+        var groups = rawValues
+            .Select(NormalizeForFilter)
+            .GroupBy(v => v, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in groups)
+            filter.Options.Add(new FilterOption { Value = group.Key, Count = group.Count() });
+
+        return filter;
     }
 
     // Tools menüsünden bir eylem seçildiğinde ilgili pencereyi açar, ardından seçimi
@@ -119,6 +270,436 @@ public partial class MainViewModel : ObservableObject
     }
 
     partial void OnSelectedPlatformChanged(Platform? value) => ApplyFilter();
+
+    partial void OnSelectedChipChanged(PlaylistChip? value)
+    {
+        foreach (var chip in PlaylistChips)
+            chip.IsSelected = chip == value;
+
+        _selectedChipMembership = value is { Kind: PlaylistChipKind.Playlist, PlaylistId: int id }
+            ? UserDataService.GetPlaylistGameKeys(id)
+            : new HashSet<string>();
+        ApplyFilter();
+    }
+
+    // UserDataService.Playlists (Favorites dahil) + sentetik Hidden/Recycle Bin chip'lerini
+    // sırayla kurar. Mevcut seçim korunur (aynı chip yeniden bulunup atanır) ki bir playlist
+    // yeniden adlandırıldığında/rengi değiştiğinde görünüm sıfırlanmasın.
+    private void RebuildPlaylistChips()
+    {
+        var previousSelection = SelectedChip;
+        PlaylistChips.Clear();
+
+        foreach (var playlist in UserDataService.GetPlaylists())
+        {
+            PlaylistChips.Add(new PlaylistChip
+            {
+                PlaylistId = playlist.PlaylistId,
+                Name = playlist.Name,
+                Color = playlist.Color,
+                IsBuiltIn = playlist.IsBuiltIn,
+                Kind = PlaylistChipKind.Playlist,
+            });
+        }
+
+        PlaylistChips.Add(new PlaylistChip { Name = "Hidden", Color = "#8A8D93", IsBuiltIn = true, Kind = PlaylistChipKind.Hidden });
+        PlaylistChips.Add(new PlaylistChip { Name = "Recycle Bin", Color = "#8A8D93", IsBuiltIn = true, Kind = PlaylistChipKind.RecycleBin });
+
+        if (previousSelection is not null)
+            SelectedChip = PlaylistChips.FirstOrDefault(c => c.Kind == previousSelection.Kind && c.PlaylistId == previousSelection.PlaylistId);
+    }
+
+    // Chip'e tıklama: zaten seçiliyse tekrar tıklamak seçimi kaldırır (normal görünüme döner).
+    [RelayCommand]
+    private void SelectChip(PlaylistChip chip) => SelectedChip = SelectedChip == chip ? null : chip;
+
+    [RelayCommand]
+    private void BeginCreatePlaylist() => IsCreatingPlaylist = true;
+
+    [RelayCommand]
+    private void CommitCreatePlaylist()
+    {
+        if (!string.IsNullOrWhiteSpace(NewPlaylistName))
+        {
+            UserDataService.CreatePlaylist(NewPlaylistName.Trim());
+            RebuildPlaylistChips();
+        }
+
+        NewPlaylistName = string.Empty;
+        IsCreatingPlaylist = false;
+    }
+
+    [RelayCommand]
+    private void RenamePlaylistChip((PlaylistChip Chip, string NewName) args)
+    {
+        if (args.Chip.PlaylistId is int id && !string.IsNullOrWhiteSpace(args.NewName))
+        {
+            UserDataService.RenamePlaylist(id, args.NewName.Trim());
+            args.Chip.Name = args.NewName.Trim();
+        }
+    }
+
+    [RelayCommand]
+    private void SetPlaylistChipColor((PlaylistChip Chip, string Color) args)
+    {
+        if (args.Chip.PlaylistId is int id)
+        {
+            UserDataService.SetPlaylistColor(id, args.Color);
+            args.Chip.Color = args.Color;
+        }
+    }
+
+    [RelayCommand]
+    private void DeletePlaylistChip(PlaylistChip chip)
+    {
+        if (chip.PlaylistId is not int id || chip.IsBuiltIn)
+            return;
+
+        UserDataService.DeletePlaylist(id);
+        if (SelectedChip == chip)
+            SelectedChip = null;
+        RebuildPlaylistChips();
+    }
+
+    // Sağ tık menüsünün hedefi: toplu moddaysa seçili tüm oyunlar, değilse sadece ContextMenuGame.
+    private IEnumerable<Game> GetContextMenuTargets() =>
+        IsBulkContextMenu ? ContextMenuSelection : (ContextMenuGame is null ? Enumerable.Empty<Game>() : new[] { ContextMenuGame });
+
+    // Oyun DataGrid'inde sağ tıklama menüsündeki "Playlist'e Ekle" popup'ı bu komutu kullanır —
+    // hem tekil hem toplu modda (bkz. GetContextMenuTargets).
+    [RelayCommand]
+    private void AddGameToPlaylist(PlaylistChip chip)
+    {
+        if (chip.PlaylistId is not int id)
+            return;
+
+        foreach (var game in GetContextMenuTargets())
+            UserDataService.AddToPlaylist(id, game.GameKey);
+
+        if (SelectedChip == chip)
+            RefreshSelectedChipMembership();
+
+        IsAddToPlaylistPopupOpen = false;
+        IsContextMenuOpen = false;
+        IsContextMenuOverflowOpen = false;
+    }
+
+    // "Playlist'e Ekle" popup'ının içindeki "+ Yeni Playlist" satırı — yeni playlist'i oluşturup
+    // aynı anda o anki seçimi (tekil/toplu) içine ekler, ayrı bir adım gerektirmez.
+    [RelayCommand]
+    private void CreatePlaylistAndAddSelection()
+    {
+        if (string.IsNullOrWhiteSpace(NewPlaylistName))
+            return;
+
+        var id = UserDataService.CreatePlaylist(NewPlaylistName.Trim());
+        foreach (var game in GetContextMenuTargets())
+            UserDataService.AddToPlaylist(id, game.GameKey);
+
+        NewPlaylistName = string.Empty;
+        IsCreatingPlaylist = false;
+        IsAddToPlaylistPopupOpen = false;
+        IsContextMenuOpen = false;
+        IsContextMenuOverflowOpen = false;
+        RebuildPlaylistChips();
+    }
+
+    private void RefreshSelectedChipMembership()
+    {
+        _selectedChipMembership = SelectedChip is { Kind: PlaylistChipKind.Playlist, PlaylistId: int id }
+            ? UserDataService.GetPlaylistGameKeys(id)
+            : new HashSet<string>();
+        ApplyFilter();
+    }
+
+    // DataGrid'deki yıldız sütunu — Favorites da sıradan bir playlist olduğu için (bkz.
+    // UserDataService.ToggleFavorite) tek satırlık bir toggle yeterli.
+    [RelayCommand]
+    private void ToggleFavorite(Game game)
+    {
+        game.IsFavorite = UserDataService.ToggleFavorite(game.GameKey);
+        if (SelectedChip is { Kind: PlaylistChipKind.Playlist, IsBuiltIn: true, Name: "Favorites" })
+            RefreshSelectedChipMembership();
+    }
+
+    // Grid'deki "eksik ROM'u ara" sütunu ve context menüsündeki "Open File Location"ın paylaştığı
+    // tek dosya-var-mı kontrolü — henüz gerçek bir ROM tarama/kütüphane özelliği yok, bu yüzden
+    // basit bir kural kullanılıyor: AppSettings.RetroAuditDataPath\{Platform}\{File} var mı?
+    // Ayarlar > Genel'de veri kök dizini boşsa (ilk çalıştırma) her zaman false döner.
+    public bool HasLocalFile(Game game)
+    {
+        if (string.IsNullOrWhiteSpace(game.File) || string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath))
+            return false;
+
+        return File.Exists(GetLocalFilePath(game));
+    }
+
+    private string GetLocalFilePath(Game game) => Path.Combine(_appSettings.RetroAuditDataPath, game.Platform, game.File);
+
+    [RelayCommand]
+    private void SearchWeb(Game game)
+    {
+        var region = string.IsNullOrWhiteSpace(game.Region) || game.Region == "Unknown" ? "USA" : game.Region;
+        var query = $"{game.Title} ({region}) {game.Platform} rom";
+        var url = "https://www.google.com/search?q=" + Uri.EscapeDataString(query);
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+    }
+
+    [RelayCommand]
+    private void OpenFileLocation(Game game)
+    {
+        if (!HasLocalFile(game))
+            return;
+
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{GetLocalFilePath(game)}\"") { UseShellExecute = true });
+    }
+
+    // --- Hide / Recycle Bin ---
+    // Bu dört komut da doğrudan _allGames üzerindeki Game nesnesinin IsHidden/IsDeleted alanını
+    // günceller (ObservableProperty değil ama ApplyFilter zaten satırı listeden çıkarıp/görünür
+    // yapıp tazeliyor, ayrıca bir bildirime gerek yok).
+
+    [RelayCommand]
+    private void HideGame(Game game)
+    {
+        UserDataService.SetHidden(game.GameKey, true);
+        game.IsHidden = true;
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void UnhideGame(Game game)
+    {
+        UserDataService.SetHidden(game.GameKey, false);
+        game.IsHidden = false;
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void DeleteGame(Game game)
+    {
+        UserDataService.SoftDelete(game.GameKey);
+        game.IsDeleted = true;
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void RestoreGame(Game game)
+    {
+        UserDataService.RestoreFromRecycleBin(game.GameKey);
+        game.IsDeleted = false;
+        ApplyFilter();
+    }
+
+    // Çöp kutusundan kalıcı silme — RetroAudit.db'nin kendisinden bir satır silmez (Builder zaten
+    // bir sonraki koşuda o oyunu yeniden üretir), bunun yerine kalıcı bir dışlama listesine
+    // eklenir (bkz. UserDataService/CatalogDatabaseService.ApplyUserData). Onay MainWindow
+    // code-behind'ında bir MessageBox ile alınır (bkz. context menü kablolaması).
+    [RelayCommand]
+    private void PermanentlyDeleteGame(Game game)
+    {
+        UserDataService.PermanentlyDelete(game.GameKey);
+        _allGames.Remove(game);
+        ApplyFilter();
+    }
+
+    // --- Kapsül sağ tık menüsü ---
+    // DataGrid satırına sağ tıklandığında MainWindow.xaml.cs bu metodu çağırıp Popup'ı açar
+    // (bkz. Views/MainWindow.xaml.cs OnRowPreviewMouseRightButtonDown). Menü, hangi satıra
+    // tıklandığına göre Delete/Restore, Hide/Unhide gibi eylemleri değiştirir — bkz.
+    // MainWindow.xaml'deki DataTrigger'lar (ContextMenuGame.IsHidden/IsDeleted).
+    [ObservableProperty]
+    private Game? contextMenuGame;
+
+    [ObservableProperty]
+    private bool isContextMenuOpen;
+
+    [ObservableProperty]
+    private bool isContextMenuOverflowOpen;
+
+    [ObservableProperty]
+    private bool isAddToPlaylistPopupOpen;
+
+    // Ayarlar > Arayüz sekmesinden değiştirilir (bkz. SettingsViewModel, AppSettings persistence).
+    [ObservableProperty]
+    private ContextMenuDisplayMode contextMenuDisplayMode = ContextMenuDisplayMode.IconAndText;
+
+    // Birden fazla satır seçiliyken sağ tıklanırsa menü "toplu" moda geçer: Edit/Versions/Folder/
+    // tekil Delete-Restore-Kalıcı Sil/Re-match/Search Web gibi TEK oyuna özel eylemler çakışacağı
+    // (ya da anlamsız olacağı) için gizlenir — sadece Favori/Playlist'e Ekle/Gizle/Sil kalır
+    // (bkz. MainWindow.xaml.cs GamesGrid_PreviewMouseRightButtonUp, OpenBulkContextMenuFor).
+    [ObservableProperty]
+    private bool isBulkContextMenu;
+
+    public ObservableCollection<Game> ContextMenuSelection { get; } = new();
+
+    public void OpenContextMenuFor(Game game)
+    {
+        IsBulkContextMenu = false;
+        ContextMenuGame = game;
+        SelectedGame = game;
+        IsContextMenuOverflowOpen = false;
+        IsAddToPlaylistPopupOpen = false;
+        IsContextMenuOpen = true;
+    }
+
+    public void OpenBulkContextMenuFor(IReadOnlyList<Game> games)
+    {
+        IsBulkContextMenu = true;
+        ContextMenuGame = null;
+        ContextMenuSelection.Clear();
+        foreach (var game in games)
+            ContextMenuSelection.Add(game);
+        IsContextMenuOverflowOpen = false;
+        IsAddToPlaylistPopupOpen = false;
+        IsContextMenuOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseContextMenu() => IsContextMenuOpen = false;
+
+    [RelayCommand]
+    private void ToggleContextMenuOverflow() => IsContextMenuOverflowOpen = !IsContextMenuOverflowOpen;
+
+    // --- Toplu eylemler (bkz. IsBulkContextMenu) ---
+
+    [RelayCommand]
+    private void BulkHide()
+    {
+        foreach (var game in ContextMenuSelection)
+        {
+            UserDataService.SetHidden(game.GameKey, true);
+            game.IsHidden = true;
+        }
+
+        IsContextMenuOpen = false;
+        ApplyFilter();
+    }
+
+    [RelayCommand]
+    private void BulkDelete()
+    {
+        foreach (var game in ContextMenuSelection)
+        {
+            UserDataService.SoftDelete(game.GameKey);
+            game.IsDeleted = true;
+        }
+
+        IsContextMenuOpen = false;
+        ApplyFilter();
+    }
+
+    // Toplu favorileme kasıtlı olarak "toggle" değil "hepsini ekle" — karışık durumdaki (bazısı
+    // favori bazısı değil) bir seçimde toggle mantığı tutarsız/şaşırtıcı sonuç verirdi.
+    [RelayCommand]
+    private void BulkAddToFavorites()
+    {
+        foreach (var game in ContextMenuSelection)
+            game.IsFavorite = UserDataService.AddToFavorites(game.GameKey);
+
+        IsContextMenuOpen = false;
+        if (SelectedChip is { Kind: PlaylistChipKind.Playlist, IsBuiltIn: true, Name: "Favorites" })
+            RefreshSelectedChipMembership();
+    }
+
+    [RelayCommand]
+    private void ToggleAddToPlaylistPopup() => IsAddToPlaylistPopupOpen = !IsAddToPlaylistPopupOpen;
+
+    // "Versions" menü öğesi ayrı bir pencere açmıyor — sağ paneldeki mevcut "Sürümler (Region)"
+    // listesi (bkz. Stage B) zaten bu veriyi gösteriyor; burada sadece panel kapalıysa açılıyor.
+    [RelayCommand]
+    private void FocusVersions()
+    {
+        IsDetailPanelExpanded = true;
+        IsContextMenuOpen = false;
+    }
+
+    // View katmanına (MainWindow.xaml.cs) EditMetadataWindow'u açma isteği — ViewModel doğrudan
+    // Window tiplerine bağımlı olmasın diye (bkz. RequestOpenMediaProvider ile aynı desen).
+    public event Action<Game>? RequestEditMetadata;
+
+    [RelayCommand]
+    private void EditMetadata(Game game)
+    {
+        IsContextMenuOpen = false;
+        RequestEditMetadata?.Invoke(game);
+    }
+
+    // Kalıcı silme geri alınamaz olduğu için doğrudan UserDataService'e gitmiyor — View katmanına
+    // (MessageBox onayı) bir istek gönderir. Onaylanırsa MainWindow.xaml.cs
+    // PermanentlyDeleteGameCommand'ı kendisi çalıştırır.
+    public event Action<Game>? RequestPermanentDeleteConfirmation;
+
+    [RelayCommand]
+    private void RequestPermanentDelete(Game game)
+    {
+        IsContextMenuOpen = false;
+        RequestPermanentDeleteConfirmation?.Invoke(game);
+    }
+
+    // Builder'ın CatalogBuilder.Run içinde yaptığı eşleştirmenin aynısını tek bir oyun için
+    // yeniden çalıştırır (RetroAudit.Catalog'a proje referansı, bkz. RetroAudit.csproj). Sonuç
+    // RetroAudit.db'ye değil doğrudan canlı Game nesnesine yazılır — bu bir kullanıcı override'ı
+    // değil, katalog eşleştirmesinin kendisinin yeniden çalıştırılması, bu yüzden
+    // MetadataOverrides'a gitmiyor (bir sonraki Builder koşusu zaten aynı sonucu üretecektir).
+    [RelayCommand]
+    private void ReMatchMetadata(Game game)
+    {
+        IsContextMenuOpen = false;
+
+        if (string.IsNullOrWhiteSpace(_appSettings.LaunchBoxDbPath) || !File.Exists(_appSettings.LaunchBoxDbPath))
+        {
+            RequestShowMessage?.Invoke("LaunchBox.Metadata.db yolu Ayarlar > Genel'de tanımlı değil ya da bulunamadı.");
+            return;
+        }
+
+        using var reader = new LaunchBoxMetadataReader(_appSettings.LaunchBoxDbPath);
+        if (!reader.IsPlatformKnown(game.Platform))
+            return;
+
+        var compareTitle = VersionResolver.NormalizeForCompare(game.Title);
+        var match = reader.FindMatch(game.Platform, compareTitle, game.Title);
+        if (match is null)
+            return;
+
+        game.Developer = match.Developer ?? game.Developer;
+        game.Publisher = match.Publisher ?? game.Publisher;
+        game.ReleaseYear = match.ReleaseYear ?? game.ReleaseYear;
+        game.Description = match.Overview ?? game.Description;
+        game.MaxPlayers = match.MaxPlayers ?? game.MaxPlayers;
+        if (match.Genres.Length > 0)
+            game.Genres = string.Join(", ", match.Genres);
+        game.MatchMethod = match.MatchMethod;
+        game.NeedsReview = match.Confidence < LaunchBoxMetadataReader.FuzzyAcceptThreshold;
+
+        ApplyFilter();
+    }
+
+    partial void OnSelectedGameChanged(Game? value) => LoadSelectedGameVersions();
+
+    // Sağ paneldeki Versions listesini seçili oyuna göre yeniden doldurur.
+    private void LoadSelectedGameVersions()
+    {
+        SelectedGameVersions.Clear();
+        if (SelectedGame is null)
+            return;
+
+        foreach (var version in CatalogDatabaseService.GetVersions(SelectedGame.GameId, SelectedGame.GameKey))
+            SelectedGameVersions.Add(version);
+    }
+
+    // Sağ panelin Versions listesindeki "Preferred yap" düğmesi — RetroAuditUserData.db'ye
+    // yazılır (bkz. UserDataService.SavePreferredVersionOverride), Builder'ın varsayılan
+    // USA>Europe>World>Japan seçiminin üzerine geçer ve rebuild'ler arasında kalıcıdır.
+    [RelayCommand]
+    private void SetPreferredVersion(GameVersion version)
+    {
+        if (SelectedGame is null)
+            return;
+
+        UserDataService.SavePreferredVersionOverride(SelectedGame.GameKey, version.RawDatName);
+        LoadSelectedGameVersions();
+    }
 
     // ListBox seçimi (başlık + platform satırlarının karışık olduğu liste) değiştiğinde, gerçek
     // bir platform satırıysa SelectedPlatform'u günceller; başlık satırları zaten seçilemediği
@@ -139,20 +720,62 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnShowJunkChanged(bool value) => ApplyFilter();
 
-    // Platform, arama metni ve Released/Junk anahtarlarına göre _allGames üzerinden
-    // Games koleksiyonunu yeniden oluşturur. Basitlik için tüm listeyi temizleyip
-    // yeniden dolduruyoruz; oyun sayısı mock veri boyutunda olduğu için performans sorun değil.
-    private void ApplyFilter()
+    // Platform, arama metni, Released/Junk anahtarları ve sütun başlıklarındaki joystick
+    // filtrelerine göre _allGames üzerinden Games koleksiyonunu yeniden oluşturur. Basitlik için
+    // tüm listeyi temizleyip yeniden dolduruyoruz; 67 bin oyun için bu hâlâ anlık.
+    //
+    // Bir chip seçiliyse (Favorites/kullanıcı playlist'i/Hidden/Recycle Bin) bu, normal
+    // Platform+Arama+Released-Junk+sütun-filtre hattının YERİNE geçer — chip'ler "ayrı bir görünüm"
+    // (bkz. plan), üst üste bindirilmiyor. Normal görünümde ise gizli/çöp kutusundaki oyunlar
+    // hiç gösterilmez (onları görmek için ilgili chip'e tıklanır).
+    //
+    // public: Edit Metadata penceresi kapandıktan sonra MainWindow.xaml.cs bunu çağırıp
+    // DataGrid'in güncellenen değerleri (Title/Genre/... ObservableProperty olmadığı için)
+    // göstermesini sağlıyor.
+    public void ApplyFilter()
     {
-        IEnumerable<Game> query = _allGames;
+        IEnumerable<Game> query;
 
-        if (SelectedPlatform is { IsAllPlatforms: false })
-            query = query.Where(g => g.Platform == SelectedPlatform.Name);
+        if (SelectedChip is not null)
+        {
+            query = SelectedChip.Kind switch
+            {
+                PlaylistChipKind.Hidden => _allGames.Where(g => g.IsHidden),
+                PlaylistChipKind.RecycleBin => _allGames.Where(g => g.IsDeleted),
+                _ => _allGames.Where(g => _selectedChipMembership.Contains(g.GameKey)),
+            };
+        }
+        else
+        {
+            query = _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
 
-        if (!string.IsNullOrWhiteSpace(SearchText))
-            query = query.Where(g => g.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+            if (SelectedPlatform is { IsAllPlatforms: false })
+                query = query.Where(g => g.Platform == SelectedPlatform.Name);
 
-        query = query.Where(g => (ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk"));
+            if (!string.IsNullOrWhiteSpace(SearchText))
+                query = query.Where(g => g.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+
+            query = query.Where(g => (ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk"));
+
+            query = ApplyColumnFilter(query, PlatformFilter, g => g.Platform);
+            query = ApplyColumnFilter(query, StatusFilter, g => g.Version);
+            query = ApplyColumnFilter(query, GenresFilter, g => g.Genres);
+            query = ApplyColumnFilter(query, DeveloperFilter, g => g.Developer);
+            query = ApplyColumnFilter(query, PublisherFilter, g => g.Publisher);
+            query = ApplyColumnFilter(query, RegionFilter, g => g.Region);
+            query = ApplyColumnFilter(query, SourceFilter, g => g.SourceDat);
+            query = ApplyColumnFilter(query, MatchMethodFilter, g => g.MatchMethod);
+            query = ApplyColumnFilter(query, ReleaseYearFilter, g => g.ReleaseYear == 0 ? string.Empty : g.ReleaseYear.ToString());
+            query = ApplyColumnFilter(query, MaxPlayersFilter, g => g.MaxPlayers == 0 ? string.Empty : g.MaxPlayers.ToString());
+            query = ApplyColumnFilter(query, TitleFilter, g => g.Title);
+            query = ApplyColumnFilter(query, FileFilter, g => g.File);
+            query = ApplyColumnFilter(query, MatchedFilter, g => g.StatusOk ? "Eşleşti" : "Eşleşmedi");
+            query = ApplyColumnFilter(query, FavoriteFilter, g => g.IsFavorite ? "Evet" : "Hayır");
+            query = ApplyColumnFilter(query, HasLocalFileFilter, g => g.HasLocalFile ? "Var" : "Yok");
+            query = ApplyColumnFilter(query, BoxFilter, g => g.HasBox ? "Evet" : "Hayır");
+            query = ApplyColumnFilter(query, BackgroundFilter, g => g.HasBackground ? "Evet" : "Hayır");
+            query = ApplyColumnFilter(query, ScreenshotFilter, g => g.HasScreenshot ? "Evet" : "Hayır");
+        }
 
         Games.Clear();
         foreach (var game in query)
@@ -160,6 +783,17 @@ public partial class MainViewModel : ObservableObject
 
         OnPropertyChanged(nameof(VisibleCount));
         OnPropertyChanged(nameof(TotalCount));
+    }
+
+    // Bir sütun filtresi "aktif" (en az bir değer işaretsiz) değilse hiçbir şey elemez; aktifse
+    // sadece işaretli değerlerden birine sahip oyunları geçirir.
+    private static IEnumerable<Game> ApplyColumnFilter(IEnumerable<Game> query, ColumnFilterViewModel filter, Func<Game, string> selector)
+    {
+        if (!filter.IsActive)
+            return query;
+
+        var selected = filter.SelectedValues;
+        return query.Where(g => selected.Contains(NormalizeForFilter(selector(g))));
     }
 
     // Her platformun rozetindeki sayıyı _allGames içinde o platforma ait kaç kayıt olduğuna göre
@@ -176,17 +810,17 @@ public partial class MainViewModel : ObservableObject
     }
 
     // Kategori sırası sabit: popüler kategoriler önce, "OTHERS" en sonda ve varsayılan kapalı.
-    // Yeni bir platform eklemek ya da bir platformu "OTHERS"tan ana bir kategoriye taşımak,
-    // sadece MockDataService'teki Platform.Category alanını değiştirmekle olur — bu metod
-    // otomatik olarak doğru başlığın altına yerleştirir.
+    // Bir platformu "OTHERS"tan ana bir kategoriye taşımak RetroAudit.Catalog/Dat/
+    // PlatformCategoryMap.cs'i değiştirmekle olur (Builder tarafı) — bu metod Platforms.Category
+    // sütununda ne yazıyorsa otomatik olarak doğru başlığın altına yerleştirir.
     private static readonly string[] CategoryOrder =
     {
-        MockDataService.CategoryConsoles,
-        MockDataService.CategoryHandhelds,
-        MockDataService.CategoryArcade,
-        MockDataService.CategoryComputers,
-        MockDataService.CategoryClassic,
-        MockDataService.CategoryOthers,
+        CategoryConsoles,
+        CategoryHandhelds,
+        CategoryArcade,
+        CategoryComputers,
+        CategoryClassic,
+        CategoryOthers,
     };
 
     // Platforms (tam liste, kategorilere ayrılmış) içinden sol panelde gösterilecek satır dizisini
@@ -206,7 +840,7 @@ public partial class MainViewModel : ObservableObject
             if (platformsInCategory.Count == 0)
                 continue;
 
-            var isOthers = category == MockDataService.CategoryOthers;
+            var isOthers = category == CategoryOthers;
             PlatformListItems.Add(new PlatformListItem
             {
                 IsHeader = true,

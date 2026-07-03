@@ -68,11 +68,20 @@
 
     <Style TargetType="{x:Type ScrollBar}">
         <Setter Property="Background" Value="Transparent" />
-        <Setter Property="Width" Value="10" />
+        <!-- Hem Width (dikey scrollbar'ın kalınlığı) hem Height (yatay scrollbar'ın kalınlığı)
+             ayarlanmalı — sadece Width verilmişti, bu yüzden yatay scrollbar neredeyse görünmez
+             kalıyordu (WPF, Orientation'a göre kendi ilgili boyutunu kullanıyor). -->
+        <Setter Property="Width" Value="14" />
+        <Setter Property="Height" Value="14" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ScrollBar}">
                     <Grid Background="Transparent">
+                        <!-- IsDirectionReversed="True" dikey scrollbar için doğru (aşağı kaydırma =
+                             değer artışı ama thumb aşağı gitmeli). Aynı şablon yatay scrollbar için de
+                             kullanıldığından bu ayar oraya da sızıyor ve sağa sürüklemeyi tersine
+                             çeviriyordu ("yatay scroll ters çalışıyor") — Orientation="Horizontal"
+                             olduğunda False'a döndürülüyor. -->
                         <Track Name="PART_Track" IsDirectionReversed="True">
                             <Track.Thumb>
                                 <Thumb Style="{StaticResource ScrollThumb}" />
@@ -85,6 +94,11 @@
                             </Track.IncreaseRepeatButton>
                         </Track>
                     </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Orientation" Value="Horizontal">
+                            <Setter TargetName="PART_Track" Property="IsDirectionReversed" Value="False" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
@@ -118,6 +132,28 @@
                             <Setter Property="Opacity" Value="0.5" />
                         </Trigger>
                     </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Varsayılan WPF ToolTip'i (beyaz arka plan, siyah yazı) koyu temaya hiç uymuyordu — hem
+         elle Tooltip="..." verilen düğmelerde hem DataGrid'in kısaltılmış (ellipsis) hücreler için
+         otomatik gösterdiği tooltip'lerde aynı sorun görülüyordu; tek bir global stil ikisini de
+         düzeltiyor. -->
+    <Style TargetType="{x:Type ToolTip}">
+        <Setter Property="Background" Value="{StaticResource Brush.Background.Elevated}" />
+        <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+        <Setter Property="BorderBrush" Value="{StaticResource Brush.Border}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="6,4" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ToolTip}">
+                    <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4">
+                        <ContentPresenter Margin="{TemplateBinding Padding}" />
+                    </Border>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

@@ -1,5 +1,13 @@
 namespace RetroAudit.Models;
 
+// Oyun satırına sağ tıklandığında açılan kapsül menünün görünüm modu — Ayarlar > Arayüz'den
+// değiştirilir (bkz. SettingsViewModel, GameContextMenu.xaml).
+public enum ContextMenuDisplayMode
+{
+    IconOnly,
+    IconAndText,
+}
+
 // Tek bir platform için emülatör başlatma ayarları.
 // PreferredCore/AlternativeCore, hangi emülatör(ler)in önerildiğini kaydeder (ör. "Mesen" / "Snes9x");
 // ExecutablePath ise kullanıcının kendi makinesindeki gerçek .exe yolu — core adı ile karışmasın diye
@@ -41,4 +49,11 @@ public class AppSettings
 
     // Toolbar komutlarının açıklamaları ve parametreleri (bkz. CommandSetting).
     public List<CommandSetting> Commands { get; set; } = new();
+
+    // Oyun satırı sağ tık menüsünün görünüm modu (bkz. Ayarlar > Arayüz).
+    public ContextMenuDisplayMode ContextMenuDisplayMode { get; set; } = ContextMenuDisplayMode.IconAndText;
+
+    // Re-match Metadata komutu için — Builder'ın kullandığı LaunchBox.Metadata.db yolu, WPF
+    // tarafında da bilinmesi gerekiyor (bkz. plan: RetroAudit.Catalog referansı).
+    public string LaunchBoxDbPath { get; set; } = string.Empty;
 }

@@ -54,7 +54,7 @@ public partial class MediaProviderViewModel : ObservableObject
 
     public MediaProviderViewModel()
     {
-        Platforms = new ObservableCollection<Platform>(MockDataService.GetPlatforms());
+        Platforms = new ObservableCollection<Platform>(CatalogDatabaseService.GetPlatforms());
         selectedPlatform = Platforms.FirstOrDefault(p => p.IsAllPlatforms);
 
         // Placeholder eksik-medya listesi (gerçek tarama mantığı sonraki aşamada gelecek).

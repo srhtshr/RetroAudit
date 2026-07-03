@@ -24,9 +24,55 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private string? selectedRegion;
 
+    // --- Arayüz sekmesi ---
+    // Bu ikisi diğer alanların aksine (RetroAuditDataPath/Emulators/... sadece Export/Import ile
+    // taşınır) her değiştiğinde otomatik olarak ConfigService'in sabit varsayılan dosyasına
+    // kaydedilir (bkz. SaveInterfaceSettings) — aksi halde MainWindow bu tercihi bir daha hiç
+    // okuyamazdı, çünkü Ayarlar penceresi elle "Kaydet" düğmesi olmayan, Export/Import'a dayanan
+    // bir tasarımda.
+    [ObservableProperty]
+    private ContextMenuDisplayMode contextMenuDisplayMode = ContextMenuDisplayMode.IconAndText;
+
+    [ObservableProperty]
+    private string launchBoxDbPath = string.Empty;
+
+    public SettingsViewModel()
+    {
+        var settings = ConfigService.LoadDefault();
+        contextMenuDisplayMode = settings.ContextMenuDisplayMode;
+        launchBoxDbPath = settings.LaunchBoxDbPath;
+    }
+
+    partial void OnContextMenuDisplayModeChanged(ContextMenuDisplayMode value) => SaveInterfaceSettings();
+
+    partial void OnLaunchBoxDbPathChanged(string value) => SaveInterfaceSettings();
+
+    private void SaveInterfaceSettings()
+    {
+        var settings = ConfigService.LoadDefault();
+        settings.ContextMenuDisplayMode = ContextMenuDisplayMode;
+        settings.LaunchBoxDbPath = LaunchBoxDbPath;
+        ConfigService.SaveDefault(settings);
+    }
+
+    [RelayCommand]
+    private void BrowseLaunchBoxDb()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "LaunchBox.Metadata.db Seçin",
+            Filter = "SQLite veritabanı (*.db)|*.db|Tüm dosyalar (*.*)|*.*",
+        };
+
+        if (dialog.ShowDialog() == true)
+            LaunchBoxDbPath = dialog.FileName;
+    }
+
     // Platform başına emülatör kayıtları; DataGrid'e doğrudan bağlanır.
-    // PlatformName değerleri MockDataService.GetPlatforms() ile aynı tutuldu ki ileride "seçili oyunun
-    // platformu -> bu tablodaki satır" eşlemesi doğrudan isimle yapılabilsin. ExecutablePath bilinçli
+    // NOT: PlatformName değerleri burada kısa/küratörlü isimler (ör. "Nintendo Entertainment
+    // System") — RetroAudit.db'deki Platforms.Name ise ham DAT adı (ör. "Nintendo - Nintendo
+    // Entertainment System"). "Seçili oyunun platformu -> bu tablodaki satır" eşlemesi (BAŞLAT
+    // butonu, Stage C) kurulacağı zaman bu isim farkı ele alınmalı. ExecutablePath bilinçli
     // olarak boş bırakıldı: bu, kullanıcının kendi makinesindeki kurulum yoluna bağlı, mock veri değil.
     // Arcade tarafı (CPS1-3, genel arcade) ayrı platform açılmadan MAME satırının altına, FBNeo alternatif
     // core olarak toplandı.

@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:RetroAudit.ViewModels"
         xmlns:models="clr-namespace:RetroAudit.Models"
+        xmlns:conv="clr-namespace:RetroAudit.Converters"
         Title="Ayarlar / Admin Paneli" Height="700" Width="880" WindowStartupLocation="CenterOwner">
 
     <Window.DataContext>
@@ -18,6 +19,7 @@
                 <PropertyGroupDescription PropertyName="Category" />
             </CollectionViewSource.GroupDescriptions>
         </CollectionViewSource>
+        <conv:EnumToBoolConverter x:Key="EnumToBool" />
     </Window.Resources>
 
     <Grid Background="{StaticResource Brush.Background.Base}">
@@ -50,6 +52,32 @@
                                  VerticalContentAlignment="Center" Margin="0,0,8,0" />
                         <Button Grid.Column="1" Content="Gözat..." Width="90" Command="{Binding BrowseDataPathCommand}" />
                     </Grid>
+
+                    <TextBlock Text="LaunchBox.Metadata.db" FontWeight="Bold" Margin="0,16,0,4" />
+                    <TextBlock Text="Sağ tık menüsündeki 'Re-match Metadata' komutu için — Builder'ın kullandığı aynı dosya, RetroAudit.db'ye yazılmaz, sadece burada tek bir oyunu yeniden eşleştirmek için okunur."
+                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0" Text="{Binding LaunchBoxDbPath, UpdateSourceTrigger=PropertyChanged}"
+                                 VerticalContentAlignment="Center" Margin="0,0,8,0" />
+                        <Button Grid.Column="1" Content="Gözat..." Width="90" Command="{Binding BrowseLaunchBoxDbCommand}" />
+                    </Grid>
+                </StackPanel>
+            </TabItem>
+
+            <!-- ===================== Arayüz ===================== -->
+            <TabItem Header="Arayüz">
+                <StackPanel Margin="4,16,4,4">
+                    <TextBlock Text="Sağ Tık Menüsü" FontWeight="Bold" Margin="0,0,0,4" />
+                    <TextBlock Text="Oyun satırına sağ tıklandığında açılan kapsül menünün görünüm modu."
+                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <RadioButton Content="Icon + Text (ikon altında etiket metni)" Margin="0,0,0,6"
+                                 IsChecked="{Binding ContextMenuDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=IconAndText}" />
+                    <RadioButton Content="Icon Only (sadece ikon, daha kompakt)"
+                                 IsChecked="{Binding ContextMenuDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=IconOnly}" />
                 </StackPanel>
             </TabItem>
 

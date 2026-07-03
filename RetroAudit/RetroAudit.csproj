@@ -12,6 +12,13 @@
 
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
+  </ItemGroup>
+
+  <!-- Re-match Metadata komutu (sağ tık menüsü) tek bir oyun için LaunchBoxMetadataReader'ı
+       yeniden çalıştırmak üzere Builder'ın eşleştirme mantığını doğrudan kullanıyor. -->
+  <ItemGroup>
+    <ProjectReference Include="..\RetroAudit.Catalog\RetroAudit.Catalog.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,6 +2,51 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.13] - 2026-07-04
+
+### Added
+- **Stage B: WPF gerçek RetroAudit.db okuyor.** `MockDataService` tamamen kaldırıldı; yeni
+  `CatalogDatabaseService` platformları/oyunları/sürümleri doğrudan `RetroAudit.db`'den okuyor.
+  Sol platform paneli, oyun DataGrid'i ve sağ "Sürümler (Region)" paneli artık gerçek veriyle
+  çalışıyor (43 platform, 67.335 oyun).
+- **Ayrı kullanıcı-verisi veritabanı** (`RetroAuditUserData.db`) — `RetroAudit.db` Builder'ın her
+  koşuda tamamen sildiği/yeniden ürettiği disposable bir dosya olduğu için (`GameId` kalıcı değil),
+  favori/gizli/çöp kutusu/playlist/düzenlenmiş metadata gibi kullanıcı verisi buraya, sabit bir
+  `GameKey = "{Platform}|{CompareTitle}"` anahtarıyla yazılıyor — Builder'ı tekrar çalıştırmak bu
+  veriyi silmiyor.
+- **Playlist sistemi**: ana tablonun üstünde hashtag/chip şeridi — sabit Favorites (★) + Hidden (👁)
+  + Recycle Bin (🗑) chip'leri (sağ tık menüsündekiyle aynı ikonlar) ve kullanıcının oluşturduğu
+  sınırsız sayıda playlist (renk seçilebilir, yeniden adlandırılabilir, silinebilir). Chip'e
+  tıklamak sadece o listedeki oyunları gösterir.
+- **Kapsül sağ tık menüsü**: satıra sağ tıklayınca yatay, dairesel ikonlu, animasyonlu bir menü
+  açılıyor (Icon Only / Icon + Text modu Ayarlar > Arayüz'den seçilebilir). İçeriği: Edit Metadata,
+  Versions, Hide/Unhide, Open File Location, Delete (çöp kutusuna taşır) / Restore / Kalıcı Sil
+  (onaylı), Re-match Metadata, Playlist'e Ekle (+ yeni playlist oluşturma). Birden fazla satır
+  seçiliyken menü "toplu moda" geçip sadece Favorilere Ekle/Playlist'e Ekle/Hide/Delete gösteriyor
+  — tekil eylemler çakışmasın diye.
+- DataGrid'de yeni **Favori (★)** ve **eksik ROM'u web'de ara (🔍)** sütunları; her sütuna joystick
+  yerine huni (filter funnel) ikonlu, arama kutulu, "Hepsini Seç/Temizle" tek düğmeli filtre
+  dropdown'ı eklendi (LaunchBox tarzı). Sütun seçici ile ek metadata sütunları (Geliştirici,
+  Yayıncı, Yıl, Bölge, Kaynak, Eşleşme Yöntemi) açılıp kapatılabiliyor.
+- **Edit Metadata** penceresi (Başlık/Tür/Açıklama/Notlar/Publisher/Developer) ve Versions
+  panelinde "Preferred yap" — ikisi de RetroAuditUserData.db'ye yazıyor, Builder'ın varsayılan
+  seçiminin üzerine kalıcı olarak geçiyor.
+- **Re-match Metadata**: tek bir oyun için LaunchBox eşleştirmesini yeniden çalıştırır
+  (`RetroAudit.Catalog` projesine referans eklendi; LaunchBox.Metadata.db yolu Ayarlar > Genel'de).
+- Sağ detay paneli artık sürgülü (aç/kapa tutamacıyla), DataGrid gerçek yatay kaydırma çubuğuna
+  sahip (sütun genişlikleri sabit piksele çevrildi).
+- Ayarlar penceresine **Arayüz** sekmesi eklendi; ayarlar artık otomatik diske kaydedilip
+  yükleniyor (önceden sadece Export/Import vardı).
+
+### Fixed
+- Varsayılan WPF `ToolTip`'i (beyaz arka plan) ve birkaç düğmenin `Style`'ı `BasedOn` vermediği
+  için uygulamanın koyu temasını ezip varsayılan (beyaz) hover'a düşmesi düzeltildi.
+- Yatay scrollbar'ın neredeyse görünmez olması (sadece `Width` ayarlıydı, `Height` hiç yoktu) ve
+  yatay sürüklemenin ters çalışması (`IsDirectionReversed` sadece dikey için doğruydu, aynı şablon
+  yataya da sızıyordu) düzeltildi.
+- Sütun filtre huni ikonunun dar sütunlarda kenar çizgisiyle çakışması — mutlak konumlandırma
+  yerine `Grid.ColumnDefinitions` tabanlı akış düzenine geçildi.
+
 ## [0.12] - 2026-07-03
 
 ### Added
