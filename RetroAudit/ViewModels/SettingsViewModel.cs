@@ -12,9 +12,9 @@ namespace RetroAudit.ViewModels;
 // buraya bir alan olarak eklenip Export/Import Config akışına otomatik dahil olacak.
 public partial class SettingsViewModel : ObservableObject
 {
-    // LaunchBox kurulumunun kök dizini (romlar ve medya bu dizin altında aranacak).
+    // RetroAudit'in kendi veri kök dizini (romlar, medya ve RetroAudit.db bu dizin altında olacak).
     [ObservableProperty]
-    private string launchBoxRootPath = string.Empty;
+    private string retroAuditDataPath = string.Empty;
 
     // DataGrid'de düzenlenen, seçili emülatör satırı (Sil/Gözat komutları bunu hedef alabilir).
     [ObservableProperty]
@@ -25,7 +25,61 @@ public partial class SettingsViewModel : ObservableObject
     private string? selectedRegion;
 
     // Platform başına emülatör kayıtları; DataGrid'e doğrudan bağlanır.
-    public ObservableCollection<EmulatorConfig> Emulators { get; } = new();
+    // PlatformName değerleri MockDataService.GetPlatforms() ile aynı tutuldu ki ileride "seçili oyunun
+    // platformu -> bu tablodaki satır" eşlemesi doğrudan isimle yapılabilsin. ExecutablePath bilinçli
+    // olarak boş bırakıldı: bu, kullanıcının kendi makinesindeki kurulum yoluna bağlı, mock veri değil.
+    // Arcade tarafı (CPS1-3, genel arcade) ayrı platform açılmadan MAME satırının altına, FBNeo alternatif
+    // core olarak toplandı.
+    public ObservableCollection<EmulatorConfig> Emulators { get; } = new()
+    {
+        // --- Favori platformlar ---
+        new() { PlatformName = "MAME", PreferredCore = "MAME", AlternativeCore = "FBNeo" },
+        new() { PlatformName = "NeoGeo", PreferredCore = "MAME", AlternativeCore = "RetroArch Alpha" },
+        new() { PlatformName = "Nintendo", PreferredCore = "Mesen", AlternativeCore = "Snes9x" },
+        new() { PlatformName = "Super Nintendo", PreferredCore = "bsnes", AlternativeCore = "Snes9x" },
+        new() { PlatformName = "PlayStation", PreferredCore = "SwanStation", AlternativeCore = "DuckStation" },
+        new() { PlatformName = "PlayStation 2", PreferredCore = "PCSX2" },
+        new() { PlatformName = "Sega Genesis", PreferredCore = "Genesis Plus GX" },
+        new() { PlatformName = "Master System", PreferredCore = "Genesis Plus GX" },
+        new() { PlatformName = "PSP", PreferredCore = "PPSSPP" },
+        new() { PlatformName = "PlayStation 3", PreferredCore = "RPCS3" },
+        new() { PlatformName = "Xbox", PreferredCore = "Xemu" },
+        new() { PlatformName = "Xbox 360", PreferredCore = "Xenia" },
+        new() { PlatformName = "Dreamcast", PreferredCore = "Flycast" },
+        new() { PlatformName = "Game Gear", PreferredCore = "Genesis Plus GX", AlternativeCore = "SMS Plus" },
+        new() { PlatformName = "Commodore 64", PreferredCore = "VICE x64" },
+        new() { PlatformName = "Amiga", PreferredCore = "WinUAE" },
+        new() { PlatformName = "Atari", PreferredCore = "Stella" },
+
+        // --- Ek platformlar (varsayılan gizli; "+" popup'ından açılabilir) ---
+        new() { PlatformName = "Nintendo 64", PreferredCore = "Mupen64Plus-Next", AlternativeCore = "Project64" },
+        new() { PlatformName = "Nintendo GameCube", PreferredCore = "Dolphin" },
+        new() { PlatformName = "Nintendo Wii", PreferredCore = "Dolphin" },
+        new() { PlatformName = "Nintendo Wii U", PreferredCore = "Cemu" },
+        new() { PlatformName = "Nintendo Switch", PreferredCore = "Yuzu", AlternativeCore = "Ryujinx" },
+        new() { PlatformName = "Game Boy", PreferredCore = "SameBoy", AlternativeCore = "Gambatte" },
+        new() { PlatformName = "Game Boy Color", PreferredCore = "SameBoy" },
+        new() { PlatformName = "Game Boy Advance", PreferredCore = "mGBA" },
+        new() { PlatformName = "Nintendo DS", PreferredCore = "melonDS" },
+        new() { PlatformName = "Nintendo 3DS", PreferredCore = "Citra" },
+        new() { PlatformName = "Sega CD", PreferredCore = "Genesis Plus GX" },
+        new() { PlatformName = "Sega 32X", PreferredCore = "Kega Fusion", AlternativeCore = "PicoDrive" },
+        new() { PlatformName = "Sega Saturn", PreferredCore = "Beetle Saturn", AlternativeCore = "Mednafen" },
+        new() { PlatformName = "Sony PlayStation Vita", PreferredCore = "Vita3K" },
+        new() { PlatformName = "Microsoft Xbox One", PreferredCore = "Xemu", AlternativeCore = "Bağımsız emülatör altyapısı" },
+        new() { PlatformName = "Atari 5200", PreferredCore = "Atari800" },
+        new() { PlatformName = "Atari 7800", PreferredCore = "ProSystem" },
+        new() { PlatformName = "Atari Jaguar", PreferredCore = "Virtual Jaguar" },
+        new() { PlatformName = "Atari Lynx", PreferredCore = "Beetle Lynx", AlternativeCore = "Handy" },
+        new() { PlatformName = "NEC PC Engine / TurboGrafx-16", PreferredCore = "Mednafen", AlternativeCore = "Beetle PCE" },
+        new() { PlatformName = "NEC PC Engine CD", PreferredCore = "Mednafen" },
+        new() { PlatformName = "SNK Neo Geo CD", PreferredCore = "NeoCD" },
+        new() { PlatformName = "SNK Neo Geo Pocket", PreferredCore = "Mednafen" },
+        new() { PlatformName = "SNK Neo Geo Pocket Color", PreferredCore = "Mednafen" },
+        new() { PlatformName = "Bilgisayar (MS-DOS)", PreferredCore = "DOSBox-Staging" },
+        new() { PlatformName = "Bilgisayar (Windows)", PreferredCore = "Doğrudan PC Executable (.exe)" },
+        new() { PlatformName = "ZX Spectrum", PreferredCore = "Fuse" },
+    };
 
     // Bölge önceliği sırası: USA > EU > JP gibi. Liste başı = en yüksek öncelik.
     public ObservableCollection<string> RegionPriority { get; } = new() { "USA", "EU", "JP" };
@@ -41,8 +95,8 @@ public partial class SettingsViewModel : ObservableObject
         new() { CommandName = "Rescan", Category = "Veri Yönetimi", Description = "Seçili platformun rom klasörünü yeniden tarar.", Parameter = "" },
         new() { CommandName = "Temizle", Category = "Veri Yönetimi", Description = "Arama, platform ve filtre seçimlerini varsayılana döndürür.", Parameter = "" },
         new() { CommandName = "Refresh Media", Category = "Medya", Description = "Eksik kutu/arkaplan/ekran görüntüsü medyasını yeniler.", Parameter = "Kaynak: TheGamesDB" },
-        new() { CommandName = "Metadata Yenile", Category = "Medya", Description = "Oyun bilgilerini (açıklama, geliştirici, tür vb.) günceller.", Parameter = "Kaynak: LaunchBox Metadata" },
-        new() { CommandName = "LB Taşı", Category = "Organizasyon", Description = "Seçili oyunu LaunchBox klasör yapısına taşır/kopyalar.", Parameter = "Hedef: %LaunchBoxRoot%\\Games" },
+        new() { CommandName = "Metadata Yenile", Category = "Medya", Description = "Oyun bilgilerini (açıklama, geliştirici, tür vb.) günceller.", Parameter = "Kaynak: RetroAudit Data" },
+        new() { CommandName = "Kütüphaneye Taşı", Category = "Organizasyon", Description = "Seçili oyunu RetroAudit kütüphane klasör yapısına taşır/kopyalar.", Parameter = "Hedef: %RetroAuditData%\\Games" },
         new() { CommandName = "Apply Resolver", Category = "Organizasyon", Description = "Belirsiz/çakışan girişleri kural bazlı otomatik çözümler.", Parameter = "Kural: EnYeniSürüm" },
         new() { CommandName = "BAŞLAT", Category = "Oynatma", Description = "Seçili oyunu, Emülatörler sekmesindeki ilgili kayıtla başlatır.", Parameter = "" },
     };
@@ -51,13 +105,13 @@ public partial class SettingsViewModel : ObservableObject
     // ViewModel MessageBox gibi View-katmanı tiplerine doğrudan bağımlı olmasın diye event üzerinden iletilir.
     public event Action<string>? RequestShowMessage;
 
-    // LaunchBox kök dizinini seçmek için klasör tarayıcısı açar.
+    // RetroAudit veri kök dizinini seçmek için klasör tarayıcısı açar.
     [RelayCommand]
-    private void BrowseLaunchBoxPath()
+    private void BrowseDataPath()
     {
-        var dialog = new OpenFolderDialog { Title = "LaunchBox Ana Dizinini Seçin" };
+        var dialog = new OpenFolderDialog { Title = "RetroAudit Data Dizinini Seçin" };
         if (dialog.ShowDialog() == true)
-            LaunchBoxRootPath = dialog.FolderName;
+            RetroAuditDataPath = dialog.FolderName;
     }
 
     // Boş bir emülatör satırı ekler; kullanıcı sonra platform adı/exe yolunu doldurur.
@@ -151,7 +205,7 @@ public partial class SettingsViewModel : ObservableObject
     // Ekrandaki ObservableCollection'ları JSON'a yazılabilecek sade bir AppSettings POCO'suna dönüştürür.
     private AppSettings ToAppSettings() => new()
     {
-        LaunchBoxRootPath = LaunchBoxRootPath,
+        RetroAuditDataPath = RetroAuditDataPath,
         Emulators = Emulators.ToList(),
         RegionPriority = RegionPriority.ToList(),
         Commands = Commands.ToList(),
@@ -160,7 +214,7 @@ public partial class SettingsViewModel : ObservableObject
     // İçe aktarılan AppSettings verisini ekrandaki ObservableCollection'lara ve alanlara uygular.
     private void LoadFromAppSettings(AppSettings settings)
     {
-        LaunchBoxRootPath = settings.LaunchBoxRootPath;
+        RetroAuditDataPath = settings.RetroAuditDataPath;
 
         Emulators.Clear();
         foreach (var emulator in settings.Emulators)

@@ -16,3 +16,13 @@ retroaudit.settings.json
 
 ## Claude Code local session/permission settings (machine-specific, not project source)
 .claude/
+
+## Generated catalog DB + raw third-party source data: never commit these.
+## RetroAudit.db is built by merging No-Intro/Redump DAT files with an external
+## metadata database — both the generated DB and any raw inputs contain third-party
+## data we don't have redistribution rights for, so they must never end up in this
+## (public) repo. Only the Builder *code* is source-controlled.
+RetroAudit.db
+*.dat
+/ExternalMetadata/
+/DatFiles/

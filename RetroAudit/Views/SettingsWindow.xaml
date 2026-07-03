@@ -38,17 +38,17 @@
             <!-- ===================== Genel ===================== -->
             <TabItem Header="Genel">
                 <StackPanel Margin="4,16,4,4">
-                    <TextBlock Text="LaunchBox Ana Dizini" FontWeight="Bold" Margin="0,0,0,4" />
-                    <TextBlock Text="Romlar ve medya dosyaları bu klasör altında aranacak (gerçek tarama mantığı henüz bağlı değil, bu alan ileriki aşama için hazırlık)."
+                    <TextBlock Text="RetroAudit Data Dizini" FontWeight="Bold" Margin="0,0,0,4" />
+                    <TextBlock Text="Romlar, medya dosyaları ve RetroAudit.db bu klasör altında aranacak (gerçek tarama mantığı henüz bağlı değil, bu alan ileriki aşama için hazırlık)."
                                Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" Text="{Binding LaunchBoxRootPath, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBox Grid.Column="0" Text="{Binding RetroAuditDataPath, UpdateSourceTrigger=PropertyChanged}"
                                  VerticalContentAlignment="Center" Margin="0,0,8,0" />
-                        <Button Grid.Column="1" Content="Gözat..." Width="90" Command="{Binding BrowseLaunchBoxPathCommand}" />
+                        <Button Grid.Column="1" Content="Gözat..." Width="90" Command="{Binding BrowseDataPathCommand}" />
                     </Grid>
                 </StackPanel>
             </TabItem>
@@ -57,7 +57,7 @@
             <TabItem Header="Emülatörler">
                 <StackPanel Margin="4,16,4,4">
                     <TextBlock Text="Emülatör Ayarları" FontWeight="Bold" Margin="0,0,0,4" />
-                    <TextBlock Text="Her platform için hangi emülatörün, hangi başlatma parametreleriyle çalışacağını burada tanımlayın. Sağ alttaki BAŞLAT butonu ileride bu tabloyu kullanacak; %ROM% seçili oyunun dosya yolu ile değiştirilecek yer tutucudur."
+                    <TextBlock Text="Her platform için önerilen emülatör core'u (ve varsa alternatifi), kendi makinenizdeki gerçek .exe yolu ve başlatma parametrelerini burada tanımlayın. Sağ alttaki BAŞLAT butonu ileride bu tabloyu kullanacak; %ROM% seçili oyunun dosya yolu ile değiştirilecek yer tutucudur."
                                Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
 
                     <!-- Hücre şablonlarındaki butonların DataContext'i satırdaki EmulatorConfig olduğu için,
@@ -65,11 +65,13 @@
                          Window.DataContext (SettingsViewModel) üzerinden komut aranıyor; CommandParameter
                          olarak da satırın kendisi (EmulatorConfig) veriliyor. -->
                     <DataGrid ItemsSource="{Binding Emulators}" SelectedItem="{Binding SelectedEmulator}"
-                              AutoGenerateColumns="False" CanUserAddRows="False" Height="260" Margin="0,0,0,8">
+                              AutoGenerateColumns="False" CanUserAddRows="False" Height="330" Margin="0,0,0,8">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Platform" Binding="{Binding PlatformName}" Width="1.4*" />
-                            <DataGridTextColumn Header="Emülatör Yolu" Binding="{Binding ExecutablePath}" Width="2.2*" />
-                            <DataGridTextColumn Header="Parametreler" Binding="{Binding Parameters}" Width="1.2*" />
+                            <DataGridTextColumn Header="Platform" Binding="{Binding PlatformName}" Width="1.6*" />
+                            <DataGridTextColumn Header="Tercih Edilen Core" Binding="{Binding PreferredCore}" Width="1.1*" />
+                            <DataGridTextColumn Header="Alternatif Core" Binding="{Binding AlternativeCore}" Width="1.1*" />
+                            <DataGridTextColumn Header="Emülatör Yolu (.exe)" Binding="{Binding ExecutablePath}" Width="1.8*" />
+                            <DataGridTextColumn Header="Parametreler" Binding="{Binding Parameters}" Width="1*" />
                             <DataGridTemplateColumn Header="" Width="80">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>

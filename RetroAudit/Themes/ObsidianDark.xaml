@@ -315,10 +315,9 @@
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="RowBackground" Value="{StaticResource Brush.Background.Base}" />
         <Setter Property="AlternatingRowBackground" Value="{StaticResource Brush.Background.Panel}" />
-        <!-- Satır/sütunlar arasında ince ayırıcı çizgiler: alternatif satır renklendirmesiyle birlikte
-             okunabilirliği artırmak için "None" yerine "All" — VerticalGridLinesBrush/HorizontalGridLinesBrush
-             zaten mevcut tema border rengini (Brush.Border) kullanıyor, bu yüzden görünüm sertleşmiyor. -->
-        <Setter Property="GridLinesVisibility" Value="All" />
+        <!-- Sadece satırlar arasında ince yatay ayırıcı çizgi kullanılıyor; dikey (sütunlar arası)
+             çizgiler kasıtlı olarak kapalı — tablo çok "kafesli" görünmesin diye. -->
+        <Setter Property="GridLinesVisibility" Value="Horizontal" />
         <Setter Property="HeadersVisibility" Value="Column" />
         <Setter Property="AutoGenerateColumns" Value="False" />
         <Setter Property="CanUserAddRows" Value="False" />
@@ -378,7 +377,10 @@
                     <Border x:Name="border" Background="{StaticResource Brush.Background.Panel}"
                             BorderBrush="{StaticResource Brush.Accent.SelectedBorder}" BorderThickness="0,0,0,2"
                             Padding="{TemplateBinding Padding}" Margin="0,0,2,0">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <!-- ContentSource="Header" şart: belirtilmezse ContentPresenter varsayılan olarak
+                             TabItem.Content'i (sekme sayfasının gövdesi) göstermeye çalışır, Header'ı değil —
+                             bu yüzden sekme başlıkları (Genel/Emülatörler/...) hiç görünmüyordu. -->
+                        <ContentPresenter ContentSource="Header" HorizontalAlignment="Center" VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsSelected" Value="True">

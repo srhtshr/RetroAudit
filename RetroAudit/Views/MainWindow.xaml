@@ -39,7 +39,7 @@
                     <Button Content="Temizle" Command="{Binding ClearFiltersCommand}" Margin="0,0,6,0" />
                     <Button Content="Refresh Media" Command="{Binding RefreshMediaCommand}" Margin="0,0,6,0" />
                     <Button Content="Metadata Yenile" Command="{Binding MetadataRefreshCommand}" Margin="0,0,6,0" />
-                    <Button Content="LB Taşı" Command="{Binding LbTasiCommand}" Margin="0,0,14,0" />
+                    <Button Content="Kütüphaneye Taşı" Command="{Binding MoveToLibraryCommand}" Margin="0,0,14,0" />
 
                     <!-- "Tools" menüsü bir seçim kutusu gibi görünse de aslında bir eylem tetikleyicisi:
                          seçilen öğe MainViewModel.OnSelectedToolActionChanged içinde işlenip ilgili
@@ -128,7 +128,36 @@
                                         <ItemsControl ItemsSource="{Binding SelectablePlatforms}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate DataType="{x:Type models:Platform}">
-                                                    <CheckBox Content="{Binding Name}" IsChecked="{Binding IsVisible}" Margin="0,3" />
+                                                    <!-- Solda görünürlük checkbox'ı, sağda favori yıldızı: "Uygula"ya
+                                                         basılana kadar sadece bu popup içinde geçerli bir taslak durum. -->
+                                                    <Grid Margin="0,3">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <CheckBox Grid.Column="0" Content="{Binding Name}" IsChecked="{Binding IsVisible}" />
+                                                        <ToggleButton Grid.Column="1" IsChecked="{Binding IsFavorite}"
+                                                                      ToolTip="Favori platform" Cursor="Hand" Padding="4,0">
+                                                            <ToggleButton.Template>
+                                                                <ControlTemplate TargetType="ToggleButton">
+                                                                    <ContentPresenter />
+                                                                </ControlTemplate>
+                                                            </ToggleButton.Template>
+                                                            <ToggleButton.Style>
+                                                                <Style TargetType="ToggleButton">
+                                                                    <Setter Property="Content" Value="&#xE734;" />
+                                                                    <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+                                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+                                                                    <Style.Triggers>
+                                                                        <Trigger Property="IsChecked" Value="True">
+                                                                            <Setter Property="Content" Value="&#xE735;" />
+                                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
+                                                                        </Trigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </ToggleButton.Style>
+                                                        </ToggleButton>
+                                                    </Grid>
                                                 </DataTemplate>
                                             </ItemsControl.ItemTemplate>
                                         </ItemsControl>
@@ -144,34 +173,41 @@
                     <!-- Sol paneli ortadaki DataGrid'den ayıran çizgiye ek olarak, liste içindeki her satırın
                          altına ince bir yatay ayırıcı ve logo/ad bloğu arasına dikey bir ayırıcı eklendi;
                          böylece referans tasarımdaki gibi platform satırları net biçimde birbirinden ayrılıyor. -->
+                    <!-- ItemContainerStyle ile bu listeye özel, tema genelindeki ListBoxItem'dan daha dar bir
+                         dikey dolgu (Padding) veriliyor; satır aralarındaki fazla boşluk buradan geliyordu. -->
                     <ListBox ItemsSource="{Binding VisiblePlatforms}" SelectedItem="{Binding SelectedPlatform}"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Setter Property="Padding" Value="8,3" />
+                            </Style>
+                        </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type models:Platform}">
-                                <Border BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,0,1" Padding="0,3">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="34" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <Border Grid.Column="0" Width="28" Height="28" CornerRadius="4"
-                                                Background="{StaticResource Brush.Background.Elevated}">
-                                            <TextBlock Text="{Binding IconGlyph}" FontSize="8" FontWeight="Bold"
-                                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                                       Foreground="{StaticResource Brush.Text.Secondary}" />
-                                        </Border>
-                                        <Rectangle Grid.Column="1" Width="1" Margin="8,1" Fill="{StaticResource Brush.Border}" />
-                                        <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center"
-                                                   Margin="8,0,4,0" TextTrimming="CharacterEllipsis" />
-                                        <Border Grid.Column="3" Background="{StaticResource Brush.Background.Elevated}"
-                                                CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding GameCount}" FontSize="10"
-                                                       Foreground="{StaticResource Brush.Text.Secondary}" />
-                                        </Border>
-                                    </Grid>
-                                </Border>
+                                <!-- Favori durumu artık sadece sırayı belirliyor (favoriler üstte) ve "+"
+                                     popup'ında düzenleniyor; satırda ayrıca bir yıldız gösterilmiyor —
+                                     neredeyse her satır favori olduğunda yıldız fazladan gürültü yaratıyordu. -->
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="26" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border Grid.Column="0" Width="22" Height="22" CornerRadius="4"
+                                            Background="{StaticResource Brush.Background.Elevated}">
+                                        <TextBlock Text="{Binding IconGlyph}" FontSize="7" FontWeight="Bold"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
+                                    </Border>
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" VerticalAlignment="Center"
+                                               Margin="6,0,4,0" TextTrimming="CharacterEllipsis" />
+                                    <Border Grid.Column="2" Background="{StaticResource Brush.Background.Elevated}"
+                                            BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                                            CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding GameCount}" FontSize="10"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
+                                    </Border>
+                                </Grid>
                             </DataTemplate>
                         </ListBox.ItemTemplate>
                     </ListBox>

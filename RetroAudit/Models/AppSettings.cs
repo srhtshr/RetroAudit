@@ -1,10 +1,15 @@
 namespace RetroAudit.Models;
 
-// Tek bir platform için emülatör başlatma ayarları (exe yolu + komut satırı parametreleri).
+// Tek bir platform için emülatör başlatma ayarları.
+// PreferredCore/AlternativeCore, hangi emülatör(ler)in önerildiğini kaydeder (ör. "Mesen" / "Snes9x");
+// ExecutablePath ise kullanıcının kendi makinesindeki gerçek .exe yolu — core adı ile karışmasın diye
+// ayrı tutuldu, çünkü core seçimi platform bazlı sabit bir öneri, exe yolu ise kişiye/kuruluma özel.
 // "%ROM%" gibi bir yer tutucu, gerçek başlatma mantığı yazıldığında rom dosya yolu ile değiştirilecek.
 public class EmulatorConfig
 {
     public string PlatformName { get; set; } = string.Empty;
+    public string PreferredCore { get; set; } = string.Empty;
+    public string AlternativeCore { get; set; } = string.Empty;
     public string ExecutablePath { get; set; } = string.Empty;
     public string Parameters { get; set; } = "%ROM%";
 }
@@ -24,8 +29,8 @@ public class CommandSetting
 // Export/Import Config butonları bu sınıfı doğrudan JSON'a serileştirip geri okur.
 public class AppSettings
 {
-    // LaunchBox kurulumunun kök dizini; ileride ROM/medya taraması bu yoldan başlayacak.
-    public string LaunchBoxRootPath { get; set; } = string.Empty;
+    // RetroAudit'in kendi veri kök dizini (ROM/medya taraması ve RetroAudit.db burada yaşayacak).
+    public string RetroAuditDataPath { get; set; } = string.Empty;
 
     // Platform başına bir emülatör kaydı.
     public List<EmulatorConfig> Emulators { get; set; } = new();

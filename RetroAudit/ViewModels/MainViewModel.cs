@@ -143,10 +143,17 @@ public partial class MainViewModel : ObservableObject
 
     // Platforms (tam liste) içinden IsVisible=true olanları (ve her zaman "All Platforms" satırını)
     // VisiblePlatforms'a kopyalar. Sol paneldeki ListBox bu koleksiyona bağlıdır.
+    // Sıralama: All Platforms en üstte, ardından favoriler, en altta favori olmayan görünür platformlar
+    // — kullanıcının en sık kullandığı platformlar listenin başında kalsın diye.
     private void RefreshVisiblePlatforms()
     {
         VisiblePlatforms.Clear();
-        foreach (var platform in Platforms.Where(p => p.IsAllPlatforms || p.IsVisible))
+        var ordered = Platforms
+            .Where(p => p.IsAllPlatforms || p.IsVisible)
+            .OrderByDescending(p => p.IsAllPlatforms)
+            .ThenByDescending(p => p.IsFavorite);
+
+        foreach (var platform in ordered)
             VisiblePlatforms.Add(platform);
 
         // Seçili platform popup'tan kapatılmışsa (artık VisiblePlatforms'ta yoksa), seçimi
@@ -195,7 +202,7 @@ public partial class MainViewModel : ObservableObject
     private void MetadataRefresh() { }
 
     [RelayCommand]
-    private void LbTasi() { }
+    private void MoveToLibrary() { }
 
     [RelayCommand]
     private void ApplyResolver() { }

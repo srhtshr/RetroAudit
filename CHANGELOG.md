@@ -2,6 +2,31 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.09] - 2026-07-03
+
+### Added
+- Sol panelde favori platform kavramı: mevcut 17 platform favori olarak işaretlendi, "+" popup'ında
+  görünürlük (checkbox) ve favori (yıldız) ayrı ayrı düzenlenebiliyor; favoriler listede üstte.
+- Kullanıcının verdiği geniş platform listesinden 27 yeni platform eklendi (varsayılan gizli).
+  Arcade tarafı ayrı kategori açılmadı — CPS1-3 ve genel arcade, MAME satırının Alternatif Core
+  alanına (FBNeo) toplandı.
+- Emülatörler sekmesi artık "Tercih Edilen Core" / "Alternatif Core" kolonlarıyla, tüm platformlar
+  için gerçek emülatör önerileriyle (44 satır) geliyor.
+
+### Changed
+- Platform listesi sıklaştırıldı (satır iç boşluğu azaltıldı).
+- Program genelinde "LaunchBox" adı kaldırıldı: `LaunchBoxRootPath` → `RetroAuditDataPath`,
+  "LB Taşı" → "Kütüphaneye Taşı", ilgili tüm etiket/yorum/mock veriler "RetroAudit Data" olarak
+  güncellendi (bkz. veri mimarisi kararı: artık çalışma zamanında LaunchBox'a bağımlılık yok).
+
+## [0.08] - 2026-07-03
+
+### Changed
+- Platform listesindeki satır alt çizgisi ve logo/isim arasındaki dikey ayırıcı kaldırıldı;
+  tek ayırt edici öğe artık sağdaki oyun sayısı rozeti (kendi arka planı + ince kenarlığıyla).
+- Orta paneldeki oyun `DataGrid`'inde dikey (sütunlar arası) grid çizgileri kapatıldı,
+  sadece satırlar arası yatay çizgiler kaldı (`GridLinesVisibility="Horizontal"`).
+
 ## [0.07] - 2026-07-03
 
 ### Added
@@ -24,7 +49,7 @@ Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVe
   — her kategori ayrı sekmede, kendi açıklama metniyle birlikte.
 - Her ayar alanının altına "bu alan ne işe yarar" açıklaması eklendi.
 - Yeni **Komutlar** sekmesi: ana penceredeki toolbar butonlarının (Import, Rescan, Temizle,
-  Refresh Media, Metadata Yenile, LB Taşı, Apply Resolver, BAŞLAT) açıklaması ve düzenlenebilir
+  Refresh Media, Metadata Yenile, Kütüphaneye Taşı, Apply Resolver, BAŞLAT) açıklaması ve düzenlenebilir
   parametresi; kategoriye göre gruplu gösteriliyor (Veri Yönetimi / Medya / Organizasyon / Oynatma).
 - `CommandSetting` modeli ve `AppSettings.Commands` — Export/Import Config (JSON) akışına dahil.
 - Tema: `TabControl`/`TabItem` stilleri eklendi (`ObsidianDark.xaml`).
@@ -56,7 +81,7 @@ Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVe
 
 ### Added
 - `AppSettings` / `EmulatorConfig` modelleri ve `ConfigService` (JSON export/import).
-- `SettingsWindow` (Admin/Ayarlar paneli): LaunchBox kök dizini, platform başına emülatör yolu/parametreleri,
+- `SettingsWindow` (Admin/Ayarlar paneli): RetroAudit Data kök dizini, platform başına emülatör yolu/parametreleri,
   bölge önceliği sıralaması (USA > EU > JP), Export/Import Config (JSON) butonları.
 - `SettingsViewModel` — tüm ayar alanları RelayCommand'larla (Gözat, Ekle, Sil, Taşı, Export, Import) yönetiliyor.
 - Ana penceredeki `Tools` menüsüne "Ayarlar..." seçeneği eklendi.

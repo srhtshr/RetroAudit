@@ -19,7 +19,7 @@ public class MediaSearchResult
 {
     public string ThumbnailPath { get; set; } = string.Empty;
     public string Resolution { get; set; } = string.Empty; // ör. "1280x720" — kart üzerindeki rozet metni
-    public string Source { get; set; } = string.Empty; // ör. "LaunchBox", "TheGamesDB" — kaynağı gösteren etiket
+    public string Source { get; set; } = string.Empty; // ör. "RetroAudit Data", "TheGamesDB" — kaynağı gösteren etiket
 }
 
 // Media Provider penceresinin ViewModel'i.
@@ -71,7 +71,7 @@ public partial class MediaProviderViewModel : ObservableObject
             {
                 ThumbnailPath = string.Empty,
                 Resolution = i % 3 == 0 ? "1280x720" : "512x512",
-                Source = i % 2 == 0 ? "LaunchBox" : "TheGamesDB",
+                Source = i % 2 == 0 ? "RetroAudit Data" : "TheGamesDB",
             });
         }
     }

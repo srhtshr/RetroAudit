@@ -8,31 +8,73 @@ namespace RetroAudit.Services;
 // değişiklik gerekmeyecek.
 public static class MockDataService
 {
-    // Sol paneldeki platform listesini doldurur. Sıra ve oyun sayıları referans ekran
-    // görüntüsüyle uyumlu olacak şekilde seçildi (gerçek veriler değil, placeholder).
+    // Sol paneldeki platform listesini doldurur.
+    // İlk 18 kayıt (All Platforms hariç) "favori" platformlar: kullanıcının işe başlarken
+    // kullandığı asıl set, varsayılan olarak görünür ve favori yıldızlı. Onları izleyen kayıtlar
+    // kullanıcının verdiği geniş platform listesinden gelen ek platformlar — varsayılan olarak
+    // gizli (IsVisible=false), sol paneldeki "+" popup'ından açılabilirler. Oyun sayıları bu
+    // ek platformlar için henüz mock veri girilmediğinden 0.
     public static List<Platform> GetPlatforms()
     {
-        return new List<Platform>
+        var platforms = new List<Platform>
         {
             new() { Name = "All Platforms", IconGlyph = "ALL", GameCount = 24803, IsAllPlatforms = true },
-            new() { Name = "MAME", IconGlyph = "MAME", GameCount = 1406 },
-            new() { Name = "NeoGeo", IconGlyph = "NEO", GameCount = 148 },
+            new() { Name = "MAME", IconGlyph = "MAME", GameCount = 1406, IsFavorite = true },
+            new() { Name = "NeoGeo", IconGlyph = "NEO", GameCount = 148, IsFavorite = true },
             new() { Name = "Nintendo", IconGlyph = "NES", GameCount = 1406, IsFavorite = true },
-            new() { Name = "Super Nintendo", IconGlyph = "SNES", GameCount = 2426 },
-            new() { Name = "PlayStation", IconGlyph = "PS1", GameCount = 4717 },
-            new() { Name = "PlayStation 2", IconGlyph = "PS2", GameCount = 1575 },
-            new() { Name = "Sega Genesis", IconGlyph = "GEN", GameCount = 901 },
-            new() { Name = "Master System", IconGlyph = "SMS", GameCount = 331 },
-            new() { Name = "PSP", IconGlyph = "PSP", GameCount = 1101 },
-            new() { Name = "PlayStation 3", IconGlyph = "PS3", GameCount = 2696 },
-            new() { Name = "Xbox", IconGlyph = "XB", GameCount = 987 },
-            new() { Name = "Xbox 360", IconGlyph = "X360", GameCount = 1503 },
-            new() { Name = "Dreamcast", IconGlyph = "DC", GameCount = 612 },
-            new() { Name = "Game Gear", IconGlyph = "GG", GameCount = 388 },
-            new() { Name = "Commodore 64", IconGlyph = "C64", GameCount = 2210 },
-            new() { Name = "Amiga", IconGlyph = "AMI", GameCount = 1740 },
-            new() { Name = "Atari", IconGlyph = "ATR", GameCount = 655 },
+            new() { Name = "Super Nintendo", IconGlyph = "SNES", GameCount = 2426, IsFavorite = true },
+            new() { Name = "PlayStation", IconGlyph = "PS1", GameCount = 4717, IsFavorite = true },
+            new() { Name = "PlayStation 2", IconGlyph = "PS2", GameCount = 1575, IsFavorite = true },
+            new() { Name = "Sega Genesis", IconGlyph = "GEN", GameCount = 901, IsFavorite = true },
+            new() { Name = "Master System", IconGlyph = "SMS", GameCount = 331, IsFavorite = true },
+            new() { Name = "PSP", IconGlyph = "PSP", GameCount = 1101, IsFavorite = true },
+            new() { Name = "PlayStation 3", IconGlyph = "PS3", GameCount = 2696, IsFavorite = true },
+            new() { Name = "Xbox", IconGlyph = "XB", GameCount = 987, IsFavorite = true },
+            new() { Name = "Xbox 360", IconGlyph = "X360", GameCount = 1503, IsFavorite = true },
+            new() { Name = "Dreamcast", IconGlyph = "DC", GameCount = 612, IsFavorite = true },
+            new() { Name = "Game Gear", IconGlyph = "GG", GameCount = 388, IsFavorite = true },
+            new() { Name = "Commodore 64", IconGlyph = "C64", GameCount = 2210, IsFavorite = true },
+            new() { Name = "Amiga", IconGlyph = "AMI", GameCount = 1740, IsFavorite = true },
+            new() { Name = "Atari", IconGlyph = "ATR", GameCount = 655, IsFavorite = true },
         };
+
+        // Kullanıcının verdiği geniş platform listesi (arcade tarafı MAME/FBNeo altında toplandığı,
+        // CPS1-3/Naomi ayrı kategori açılmadığı için burada tekrarlanmıyor).
+        (string Name, string Glyph)[] extraPlatforms =
+        {
+            ("Nintendo 64", "N64"),
+            ("Nintendo GameCube", "NGC"),
+            ("Nintendo Wii", "WII"),
+            ("Nintendo Wii U", "WIIU"),
+            ("Nintendo Switch", "SWCH"),
+            ("Game Boy", "GB"),
+            ("Game Boy Color", "GBC"),
+            ("Game Boy Advance", "GBA"),
+            ("Nintendo DS", "NDS"),
+            ("Nintendo 3DS", "3DS"),
+            ("Sega CD", "SCD"),
+            ("Sega 32X", "32X"),
+            ("Sega Saturn", "SAT"),
+            ("Sony PlayStation Vita", "VITA"),
+            ("Microsoft Xbox One", "XB1"),
+            ("Atari 5200", "5200"),
+            ("Atari 7800", "7800"),
+            ("Atari Jaguar", "JAG"),
+            ("Atari Lynx", "LYNX"),
+            ("NEC PC Engine / TurboGrafx-16", "PCE"),
+            ("NEC PC Engine CD", "PCECD"),
+            ("SNK Neo Geo CD", "NGCD"),
+            ("SNK Neo Geo Pocket", "NGP"),
+            ("SNK Neo Geo Pocket Color", "NGPC"),
+            ("Bilgisayar (MS-DOS)", "DOS"),
+            ("Bilgisayar (Windows)", "WIN"),
+            ("ZX Spectrum", "ZXS"),
+        };
+
+        foreach (var (name, glyph) in extraPlatforms)
+            platforms.Add(new Platform { Name = name, IconGlyph = glyph, GameCount = 0, IsVisible = false });
+
+        return platforms;
     }
 
     // Orta paneldeki DataGrid'i doldurur. Nintendo (NES) listesi referans ekran görüntüsündeki
