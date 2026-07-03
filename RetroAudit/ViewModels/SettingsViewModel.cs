@@ -30,6 +30,23 @@ public partial class SettingsViewModel : ObservableObject
     // Bölge önceliği sırası: USA > EU > JP gibi. Liste başı = en yüksek öncelik.
     public ObservableCollection<string> RegionPriority { get; } = new() { "USA", "EU", "JP" };
 
+    // Üst araç çubuğundaki komutların açıklaması + (varsa) parametresi. "Komutlar" sekmesinde
+    // Category alanına göre gruplanarak gösterilir (bkz. SettingsWindow.xaml CollectionViewSource).
+    // Komutların gerçek mantığı MainViewModel'de henüz stub olduğu için buradaki Parameter alanları
+    // şimdilik gerçek bir davranışı değiştirmiyor — ancak ileride commandlar buradan okuyacak şekilde
+    // bağlanacak, böylece davranış değişikliği için kod değil sadece bu panel yeterli olacak.
+    public ObservableCollection<CommandSetting> Commands { get; } = new()
+    {
+        new() { CommandName = "Import", Category = "Veri Yönetimi", Description = "Dışarıdan oyun/rom verisi içe aktarır.", Parameter = "" },
+        new() { CommandName = "Rescan", Category = "Veri Yönetimi", Description = "Seçili platformun rom klasörünü yeniden tarar.", Parameter = "" },
+        new() { CommandName = "Temizle", Category = "Veri Yönetimi", Description = "Arama, platform ve filtre seçimlerini varsayılana döndürür.", Parameter = "" },
+        new() { CommandName = "Refresh Media", Category = "Medya", Description = "Eksik kutu/arkaplan/ekran görüntüsü medyasını yeniler.", Parameter = "Kaynak: TheGamesDB" },
+        new() { CommandName = "Metadata Yenile", Category = "Medya", Description = "Oyun bilgilerini (açıklama, geliştirici, tür vb.) günceller.", Parameter = "Kaynak: LaunchBox Metadata" },
+        new() { CommandName = "LB Taşı", Category = "Organizasyon", Description = "Seçili oyunu LaunchBox klasör yapısına taşır/kopyalar.", Parameter = "Hedef: %LaunchBoxRoot%\\Games" },
+        new() { CommandName = "Apply Resolver", Category = "Organizasyon", Description = "Belirsiz/çakışan girişleri kural bazlı otomatik çözümler.", Parameter = "Kural: EnYeniSürüm" },
+        new() { CommandName = "BAŞLAT", Category = "Oynatma", Description = "Seçili oyunu, Emülatörler sekmesindeki ilgili kayıtla başlatır.", Parameter = "" },
+    };
+
     // Export/Import sonrası kullanıcıya kısa bir bilgi mesajı göstermek için View'a bırakılan olay.
     // ViewModel MessageBox gibi View-katmanı tiplerine doğrudan bağımlı olmasın diye event üzerinden iletilir.
     public event Action<string>? RequestShowMessage;
@@ -137,6 +154,7 @@ public partial class SettingsViewModel : ObservableObject
         LaunchBoxRootPath = LaunchBoxRootPath,
         Emulators = Emulators.ToList(),
         RegionPriority = RegionPriority.ToList(),
+        Commands = Commands.ToList(),
     };
 
     // İçe aktarılan AppSettings verisini ekrandaki ObservableCollection'lara ve alanlara uygular.
@@ -151,5 +169,14 @@ public partial class SettingsViewModel : ObservableObject
         RegionPriority.Clear();
         foreach (var region in settings.RegionPriority)
             RegionPriority.Add(region);
+
+        // Boş/eksik bir JSON'dan içe aktarılırsa (ör. eski bir export dosyası) Komutlar listesi
+        // kaybolmasın diye, dosyada hiç komut yoksa mevcut varsayılan tanımlar korunuyor.
+        if (settings.Commands.Count > 0)
+        {
+            Commands.Clear();
+            foreach (var command in settings.Commands)
+                Commands.Add(command);
+        }
     }
 }

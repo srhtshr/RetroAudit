@@ -2,6 +2,18 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.06] - 2026-07-03
+
+### Added
+- `SettingsWindow` sekmeli (TabControl) yapıya geçti: **Genel**, **Emülatörler**, **Bölge Önceliği**, **Komutlar**
+  — her kategori ayrı sekmede, kendi açıklama metniyle birlikte.
+- Her ayar alanının altına "bu alan ne işe yarar" açıklaması eklendi.
+- Yeni **Komutlar** sekmesi: ana penceredeki toolbar butonlarının (Import, Rescan, Temizle,
+  Refresh Media, Metadata Yenile, LB Taşı, Apply Resolver, BAŞLAT) açıklaması ve düzenlenebilir
+  parametresi; kategoriye göre gruplu gösteriliyor (Veri Yönetimi / Medya / Organizasyon / Oynatma).
+- `CommandSetting` modeli ve `AppSettings.Commands` — Export/Import Config (JSON) akışına dahil.
+- Tema: `TabControl`/`TabItem` stilleri eklendi (`ObsidianDark.xaml`).
+
 ## [0.05] - 2026-07-03
 
 ### Added
