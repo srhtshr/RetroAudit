@@ -2,6 +2,27 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.10] - 2026-07-03
+
+### Added
+- **RetroAudit DAT Builder** (Stage A) — yeni `RetroAudit.Catalog` (kütüphane) ve `RetroAudit.Builder`
+  (konsol aracı) projeleri. WPF uygulamasına henüz dokunmuyor; sadece offline katalog üretim
+  boru hattı: No-Intro/Redump/TOSEC/MAME/FBNeo DAT dosyalarını (ClrMamePro metin formatı) okur,
+  No-Intro parantez etiketleme kuralına göre bölge/sürüm/bayrak (Beta/Proto/Demo/Test/Pirate/
+  Hack/Aftermarket/Unl) ayrıştırır, her oyun için tek bir "tercih edilen" sürüm seçer
+  (USA > World > Europe > Japan > temiz geri kalan), LaunchBox.Metadata.db'den (Platform +
+  CompareName zorunlu, ardından tam isim ve LaunchBox'ın kendi alternatif isim tablosu ile
+  yedekli) tek seferlik açıklama/geliştirici/yayıncı/tür zenginleştirmesi yapar ve normalize
+  edilmiş bir `RetroAudit.db` (Platforms/Developers/Publishers/Genres/Regions/Games/GameGenres/
+  AlternateNames/GameVersions/GameHashes/MetadataSources/UserLibrary) üretir.
+- Builder her koşunun sonunda platform/oyun/sürüm/hash sayıları, LaunchBox eşleşen/eşleşmeyen,
+  tercih sürümü seçilemeyen ve olası hash çakışması sayılarını içeren bir rapor basar.
+- `--platform` (tek platformla hızlı doğrulama) ve `--sources` (varsayılan: sadece `no-intro`;
+  Redump/TOSEC/MAME/FBNeo mimarisi hazır ama henüz varsayılan olarak açılmadı) CLI argümanları.
+- Doğrulama: NES No-Intro seti (4083 oyun) ve tam No-Intro seti (90 platform, 58.131 oyun,
+  90.934 sürüm) ile gerçek verilerle koşuldu; çıktı `%LOCALAPPDATA%\RetroAudit\RetroAudit.db`'ye
+  yazıldı (repo'ya asla girmiyor).
+
 ## [0.09] - 2026-07-03
 
 ### Added
