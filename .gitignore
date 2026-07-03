@@ -13,3 +13,6 @@
 ## Local config exports (user machine paths, emulator paths, etc.)
 retroaudit.settings.json
 *.local.json
+
+## Claude Code local session/permission settings (machine-specific, not project source)
+.claude/
