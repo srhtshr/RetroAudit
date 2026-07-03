@@ -2,6 +2,12 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.05] - 2026-07-03
+
+### Added
+- `LICENSE` — MIT lisansı eklendi.
+- README'ye lisans bölümü ve güncel pencere listesi eklendi.
+
 ## [0.04] - 2026-07-03
 
 ### Changed

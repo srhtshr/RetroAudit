@@ -2,7 +2,7 @@
 
 Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (CommunityToolkit.Mvvm) ile geliştiriliyor.
 
-## Mevcut durum (v0.01)
+## Mevcut durum (v0.04)
 
 Bu aşama **yalnızca UI prototipi**: gerçek SQLite veritabanı veya XML tarama mantığı yok, tüm veriler `Services/MockDataService.cs` içindeki placeholder verilerden geliyor.
 
@@ -10,8 +10,9 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `Themes/ObsidianD
 
 ### Pencereler
 - **MainWindow** — Platform listesi, sanallaştırılmış oyun tablosu (DataGrid), seçili oyun detay paneli ve BAŞLAT butonu.
-- **MediaProviderWindow** — Eksik medya (kutu/arkaplan/ekran görüntüsü) için arama sonucu kartları.
+- **MediaProviderWindow** — Eksik medya (kutu/arkaplan/ekran görüntüsü) için arama sonucu kartları; kartlar sürükle-bırak ile eksik öğe listesine uygulanabiliyor.
 - **CropEditorDialog** — Görsel kırpma oranı seçim arayüzü.
+- **SettingsWindow** — Admin/Ayarlar paneli: LaunchBox kök dizini, platform başına emülatör yolu/parametreleri, bölge önceliği (USA > EU > JP), Export/Import Config (JSON).
 
 ## Gereksinimler
 
@@ -41,3 +42,7 @@ Themes/            Koyu tema (Obsidian) kaynak sözlüğü
 - [ ] Gerçek ROM tarama / XML-SQLite entegrasyonu
 - [ ] LaunchBox içe aktarma
 - [ ] Emülatör başlatma mantığı
+
+## Lisans
+
+[MIT](LICENSE)
