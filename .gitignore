@@ -1,0 +1,15 @@
+## .NET / WPF build output
+[Bb]in/
+[Oo]bj/
+*.user
+*.suo
+
+## Visual Studio / Rider
+.vs/
+.idea/
+*.userosscache
+*.sln.docstates
+
+## Local config exports (user machine paths, emulator paths, etc.)
+retroaudit.settings.json
+*.local.json
