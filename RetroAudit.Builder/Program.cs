@@ -11,9 +11,13 @@ var args2 = ParseArgs(args);
 var datRoot = args2.GetValueOrDefault("dat-folder")
     ?? @"C:\Users\srhts\Desktop\libretro-database-master\metadat";
 
-// Kullanıcı isteği: tüm kaynaklar (no-intro/redump/tosec/mame*/fbneo*) taranabilir durumda olsun,
-// ama ilk aktif/doğrulanan çıktı sadece No-Intro üzerinden gelsin — bu yüzden varsayılan tek kaynak.
-var sources = (args2.GetValueOrDefault("sources") ?? "no-intro")
+// Platform bazlı tek-kaynak sistemi: kartuş/el konsolu platformları No-Intro'dan, optik disk
+// platformları (PlayStation/PS2/GameCube/Wii/Dreamcast/Saturn/Xbox/Xbox 360/PSP) Redump'tan,
+// ev bilgisayarları (Amiga, Atari ST, ...) TOSEC'ten gelir — bkz. PlatformSourceMap. Aynı platform
+// iki kaynaktan asla birleştirilmez. MAME/FBNeo mimari olarak hazır ama varsayılan olarak henüz
+// açılmadı: arcade DAT'ları (parent/clone setleri, BIOS/device girişleri, region-etiketsiz kısa
+// isimler) No-Intro'nun varsaydığı isimlendirme kuralına uymuyor, ayrı bir değerlendirme gerekir.
+var sources = (args2.GetValueOrDefault("sources") ?? "no-intro,redump,tosec")
     .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 
 var platformFilter = args2.GetValueOrDefault("platform");

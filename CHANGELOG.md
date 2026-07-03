@@ -2,6 +2,38 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.11] - 2026-07-03
+
+### Added
+- **Platform bazlı kaynak sistemi**: her platformun RetroAudit.db'de tek bir referans kaynağı var
+  (`PlatformSourceMap`) — No-Intro/Redump/TOSEC asla aynı platform için birleştirilmez. PlayStation,
+  PS2, GameCube, Wii, Dreamcast, Saturn, Xbox, Xbox 360, PSP artık Redump üzerinden; Amiga, Atari ST
+  gibi ev bilgisayarları TOSEC üzerinden kataloğa giriyor (önceden bu platformlar hiç yoktu).
+- Xbox 360 Digital/Games on Demand/Title Updates varsayılan olarak katalog dışı (mimari ileride
+  açılabilir şekilde tasarlandı).
+- **Temiz katalog filtresi**: Beta/Prototype/Demo/Sample/Preview/Kiosk/BadDump/Overdump/Alternate/
+  Cracked/Trainer/Fixed/Pirate/Hack/Aftermarket/Unlicensed/BIOS/Utility/Application/Documentation/
+  Magazine/Music/Coverdisk/SDK/Update/TestROM ve TOSEC'in `[cr][h][t][f][b][a][o][m][p]` scene/dump
+  etiketleri artık GameVersions'a bile girmiyor (önceki "alt sürüm olarak sakla" davranışının yerini
+  tam hariç tutma aldı). Bölge/sürümü net sınıflanamayan ama filtreye takılmayan kayıtlar "Unknown"
+  olarak işaretleniyor.
+- Fuzzy (Levenshtein) eşleştirme + güven skoru: `MatchConfidence`/`MatchMethod`/`NeedsReview` alanları
+  Games tablosuna eklendi; düşük güvenli eşleşmeler otomatik onaylanmıyor, "Needs Review" ile işaretleniyor.
+- Sayı-çakışması güvenlik freni (ör. "Super Mario Bros 16" ile "Super Mario Bros. 6" gibi farklı
+  oyunların sadece rakam benzerliğiyle yanlış eşleşmesini engeller).
+- `LaunchBox.Metadata.db`'nin gerçek `CompareName` normalizasyon kuralı örneklerle doğrulanıp taklit
+  edildi (kesme işareti silinir, diğer noktalama boşluğa çevrilir) — eşleşme oranını belirgin artırdı.
+
+### Fixed
+- Çoklu tireli platform adlarının (ör. "Sega - Mega Drive - Genesis") LaunchBox'ta hiç eşleşmemesine
+  neden olan platform-isim eşleştirme hatası.
+- TOSEC'in köşeli parantez crack-grup etiketlerinin (`[cr CSL]` vb.) temizlenmemesi yüzünden aynı
+  oyunun onlarca varyantının ayrı "oyun" olarak gruplanması (performans + veri kalitesi sorunu).
+
+### Sonuç (tam No-Intro+Redump+TOSEC koşusu)
+117 platform, 106.600 oyun, 220.450 sürüm, %56,9 LaunchBox eşleşmesi (54.029 kesin + 6.659 fuzzy,
+5.059 Needs Review), duplicate hash çakışması 5.589'dan 159'a düştü.
+
 ## [0.10] - 2026-07-03
 
 ### Added

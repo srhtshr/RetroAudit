@@ -17,6 +17,9 @@ public static class CatalogBuilder
 
         var scan = DatSourceScanner.Scan(options.DatRoot, options.SourceCategories, options.PlatformFilter);
         report.SkippedDatFiles.AddRange(scan.SkippedFiles);
+        report.ExcludedPlatforms.AddRange(scan.ExcludedPlatforms);
+        foreach (var resolution in scan.PlatformResolutions.Where(r => r.WasAmbiguous && !r.WasExplicitOverride))
+            report.AmbiguousPlatformsDefaulted.Add((resolution.PlatformName, resolution.ChosenSource, resolution.AvailableSources));
 
         var games = VersionResolver.Group(scan.Entries);
 
@@ -52,7 +55,15 @@ public static class CatalogBuilder
                     game.MaxPlayers = match.MaxPlayers;
                     game.Genres.AddRange(match.Genres);
                     game.MatchedMetadata = true;
+                    game.MatchMethod = match.MatchMethod;
+                    game.MatchConfidence = match.Confidence;
+                    game.NeedsReview = match.Confidence < LaunchBoxMetadataReader.FuzzyAcceptThreshold;
                     report.MetadataMatched++;
+
+                    if (match.MatchMethod == "Fuzzy")
+                        report.FuzzyMatched++;
+                    if (game.NeedsReview)
+                        report.NeedsReview++;
                 }
                 else
                 {
@@ -165,8 +176,8 @@ public static class CatalogBuilder
             {
                 insertGame.Transaction = transaction;
                 insertGame.CommandText = """
-                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers)
-                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers)
+                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview)
+                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview)
                     """;
                 insertGame.Parameters.AddWithValue("$platformId", platformId);
                 insertGame.Parameters.AddWithValue("$title", game.Title);
@@ -176,6 +187,10 @@ public static class CatalogBuilder
                 insertGame.Parameters.AddWithValue("$releaseYear", (object?)game.ReleaseYear ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$overview", (object?)game.Overview ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$maxPlayers", (object?)game.MaxPlayers ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$matchedMetadata", game.MatchedMetadata ? 1 : 0);
+                insertGame.Parameters.AddWithValue("$matchMethod", (object?)game.MatchMethod ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$matchConfidence", (object?)game.MatchConfidence ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$needsReview", game.NeedsReview ? 1 : 0);
                 insertGame.ExecuteNonQuery();
                 gameId = GetLastInsertRowId();
             }
@@ -202,14 +217,13 @@ public static class CatalogBuilder
                 {
                     insertVersion.Transaction = transaction;
                     insertVersion.CommandText = """
-                        INSERT INTO GameVersions (GameId, RegionId, AllRegionsRaw, VersionLabel, Flags, IsPreferred, RawDatName, SourceDat)
-                        VALUES ($gameId, $regionId, $allRegionsRaw, $versionLabel, $flags, $isPreferred, $rawDatName, $sourceDat)
+                        INSERT INTO GameVersions (GameId, RegionId, AllRegionsRaw, VersionLabel, IsPreferred, RawDatName, SourceDat)
+                        VALUES ($gameId, $regionId, $allRegionsRaw, $versionLabel, $isPreferred, $rawDatName, $sourceDat)
                         """;
                     insertVersion.Parameters.AddWithValue("$gameId", gameId);
                     insertVersion.Parameters.AddWithValue("$regionId", (object?)regionId ?? DBNull.Value);
                     insertVersion.Parameters.AddWithValue("$allRegionsRaw", version.Regions.Length > 0 ? string.Join(",", version.Regions) : DBNull.Value);
                     insertVersion.Parameters.AddWithValue("$versionLabel", (object?)version.VersionLabel ?? DBNull.Value);
-                    insertVersion.Parameters.AddWithValue("$flags", version.Flags.Length > 0 ? string.Join(",", version.Flags) : DBNull.Value);
                     insertVersion.Parameters.AddWithValue("$isPreferred", version.IsPreferred ? 1 : 0);
                     insertVersion.Parameters.AddWithValue("$rawDatName", version.RawDatName);
                     insertVersion.Parameters.AddWithValue("$sourceDat", version.SourceDat);

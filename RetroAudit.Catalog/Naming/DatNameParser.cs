@@ -2,9 +2,19 @@ using System.Text.RegularExpressions;
 
 namespace RetroAudit.Catalog.Naming;
 
-// Bir DAT "name" alanından (No-Intro/TOSEC parantez etiketleme kuralına göre, ör.
-// "Super Mario World (USA) (Rev A)" veya "!Clik! (World) (Proto 1) (Aftermarket) (Unl)")
-// temiz başlığı, bölge(leri), sürüm etiketini ve "alt sürüm" bayraklarını çıkarır.
+// Bir DAT "name" alanından hem No-Intro parantez etiketleme kuralına göre (ör.
+// "Super Mario World (USA) (Rev A)") hem de TOSEC'in köşeli parantez dump/crack-grup kuralına
+// göre (ör. "'Allo 'Allo! (Alternative) (Disk 1)[cr CSL][b doscopy]") temiz başlığı, bölge(leri)
+// ve sürüm etiketini çıkarır; ayrıca bu kaydın RetroAudit.db'ye HİÇ dahil edilip edilmeyeceğine
+// karar verir (ShouldExclude).
+//
+// Kural (kullanıcı talebiyle netleşti): RetroAudit sadece gerçek, resmi, oynanabilir oyun
+// sürümlerini içerir. Beta/Prototype/Demo/Sample/Preview/Kiosk/BadDump/Overdump/Alternate/
+// Cracked/Trainer/Fixed/Pirate/Hack/BIOS/Utility/Application/Documentation/Magazine/Music/
+// Coverdisk/SDK/Update/TestROM gibi her şey — hem No-Intro'nun "(...)" hem TOSEC'in "[...]"
+// etiketleme biçiminde — GameVersions'a bile girmeden tamamen atılır (önceki "alt sürüm olarak
+// sakla ama ana listede gösterme" davranışının yerini aldı). Sadece USA/Europe/Japan/World gibi
+// bölge etiketleri ve Rev A/B/C gibi resmi revizyonlar hayatta kalır.
 public static partial class DatNameParser
 {
     private static readonly HashSet<string> KnownRegions = new(StringComparer.OrdinalIgnoreCase)
@@ -15,15 +25,31 @@ public static partial class DatNameParser
         "Switzerland", "Taiwan", "UK", "United Kingdom", "Scandinavia", "Latin America",
     };
 
-    // Bunlardan biriyle başlayan bir parantez grubu, oyunun "normal" sürümü olarak sayılmaz
-    // (VersionResolver'ın ana liste satırını şişirmeme mantığı bu listeye dayanır).
-    private static readonly string[] AltVersionFlagPrefixes =
+    // No-Intro tarzı "(...)" etiketlerinde bu kelimelerden biriyle BAŞLAYAN bir grup, kaydın
+    // tamamen dışlanmasına (ShouldExclude=true) neden olur.
+    private static readonly string[] ExcludedParenKeywords =
     {
-        "Beta", "Proto", "Prototype", "Demo", "Sample", "Test", "Pirate", "Hack", "Aftermarket", "Unl", "Unlicensed", "Alpha",
+        "Beta", "Proto", "Prototype", "Demo", "Sample", "Preview", "Kiosk",
+        "Bad Dump", "Overdump", "Alternate", "Alternative", "Cracked", "Trainer", "Fixed",
+        "Pirate", "Hack", "Aftermarket", "Unl", "Unlicensed",
+        "BIOS", "Utility", "Utilities", "Application", "Applications",
+        "Documentation", "Docs", "Magazine", "Music", "Coverdisk", "Cover Disk",
+        "SDK", "Update", "Test",
+    };
+
+    // TOSEC köşeli parantez tek-harf dump/crack-grup kodları — hepsi tam dışlama nedeni.
+    // cr=cracked, h=hack, t=trainer, f=fixed, b=bad dump, a=alternate, o=overdump, m=modified,
+    // p=pirate.
+    private static readonly HashSet<string> ExcludedBracketCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cr", "h", "t", "f", "b", "a", "o", "m", "p",
     };
 
     [GeneratedRegex(@"\(([^()]*)\)")]
-    private static partial Regex TagGroupRegex();
+    private static partial Regex ParenGroupRegex();
+
+    [GeneratedRegex(@"\[([^\[\]]*)\]")]
+    private static partial Regex BracketGroupRegex();
 
     [GeneratedRegex(@"^Rev\s*[A-Za-z0-9]+$|^v[\d.]+$", RegexOptions.IgnoreCase)]
     private static partial Regex VersionLabelRegex();
@@ -32,9 +58,9 @@ public static partial class DatNameParser
     {
         var regions = new List<string>();
         string? versionLabel = null;
-        var flags = new List<string>();
+        var shouldExclude = false;
 
-        foreach (Match match in TagGroupRegex().Matches(rawName))
+        foreach (Match match in ParenGroupRegex().Matches(rawName))
         {
             var content = match.Groups[1].Value.Trim();
             if (content.Length == 0)
@@ -54,27 +80,37 @@ public static partial class DatNameParser
                 continue;
             }
 
-            var altFlag = AltVersionFlagPrefixes.FirstOrDefault(prefix =>
-                content.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
-            if (altFlag is not null)
+            if (ExcludedParenKeywords.Any(keyword => content.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
             {
-                flags.Add(content);
+                shouldExclude = true;
             }
 
             // Diğer parantez içerikleri (disk numarası, dil kodu vb.) gruplama mantığını
             // etkilemediği için burada göz ardı ediliyor.
         }
 
-        var cleanTitle = TagGroupRegex().Replace(rawName, string.Empty);
+        // TOSEC köşeli parantez grupları: "[cr CSL]" -> kod "cr". Kod, dışlama listesindeyse
+        // (cr/h/t/f/b/a/o/m/p) bu kayıt tamamen atılır.
+        foreach (Match match in BracketGroupRegex().Matches(rawName))
+        {
+            var content = match.Groups[1].Value.Trim();
+            if (content.Length == 0)
+                continue;
+
+            var code = content.Split(' ', 2)[0];
+            if (ExcludedBracketCodes.Contains(code))
+                shouldExclude = true;
+        }
+
+        var cleanTitle = ParenGroupRegex().Replace(rawName, string.Empty);
+        cleanTitle = BracketGroupRegex().Replace(cleanTitle, string.Empty);
         cleanTitle = Regex.Replace(cleanTitle, @"\s{2,}", " ").Trim();
 
-        return new ParsedDatName(cleanTitle, regions.ToArray(), versionLabel, flags.ToArray());
+        return new ParsedDatName(cleanTitle, regions.ToArray(), versionLabel, shouldExclude);
     }
 }
 
-public record ParsedDatName(string CleanTitle, string[] Regions, string? VersionLabel, string[] Flags)
-{
-    // Beta/Proto/Demo/Test/Pirate/Hack/Aftermarket/Unlicensed gibi en az bir bayrağı varsa,
-    // bu kayıt "normal" değil "alt sürüm" sayılır (VersionResolver'ın önceliklendirmesinde kullanılır).
-    public bool IsAltVersion => Flags.Length > 0;
-}
+// ShouldExclude=true olan bir kayıt VersionResolver tarafından tamamen atlanır — GameVersions'a
+// bile girmez. Hayatta kalan her kayıt tanım gereği "resmi/temiz" sayılır: sadece bölge ve
+// (varsa) Rev etiketi taşır.
+public record ParsedDatName(string CleanTitle, string[] Regions, string? VersionLabel, bool ShouldExclude);

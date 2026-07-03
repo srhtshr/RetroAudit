@@ -5,7 +5,11 @@ namespace RetroAudit.Catalog.Grouping;
 
 // Ham DatGameEntry kayıtlarını (Platform, temiz başlık) çiftine göre CatalogGame'lere gruplar ve
 // her oyun için "tercih edilen" (Games tablosunda gösterilecek) sürümü seçer. Ana liste bu sayede
-// şişmez: Beta/Proto/Test/Rev/Europe/Japan gibi her şey aynı CatalogGame'in Versions listesinde kalır.
+// şişmez: Rev/USA/Europe/Japan/World gibi resmi sürümler aynı CatalogGame'in Versions listesinde
+// kalır. Beta/Proto/Demo/Pirate/Cracked/BIOS/Utility/... gibi resmi olmayan kayıtlar (bkz.
+// DatNameParser.ShouldExclude) burada tamamen elenir — GameVersions'a bile girmezler. Bir oyunun
+// TÜM DAT kayıtları böyle elenirse (ör. sadece proto çıkmış bir başlık), o oyun hiç Games
+// satırı oluşturmaz — RetroAudit sadece gerçekten resmi bir sürümü olan oyunları listeler.
 public static class VersionResolver
 {
     public static List<CatalogGame> Group(IEnumerable<DatGameEntry> entries)
@@ -15,6 +19,9 @@ public static class VersionResolver
         foreach (var entry in entries)
         {
             var parsed = DatNameParser.Parse(entry.Name);
+            if (parsed.ShouldExclude)
+                continue;
+
             var key = (entry.PlatformName, parsed.CleanTitle);
 
             if (!games.TryGetValue(key, out var game))
@@ -28,13 +35,18 @@ public static class VersionResolver
                 games[key] = game;
             }
 
+            // Filtreyi geçen (yani gerçek/resmi olduğu düşünülen) ama başlığında USA/Europe/Japan/
+            // World gibi net bir bölge etiketi bulunmayan kayıtlar yeni bir oyun oluşturmaz — aynı
+            // CleanTitle altında "Unknown" bölgeli bir sürüm olarak kalır, böylece ileride UI'da
+            // filtrelenebilir. Sınıflandırılamayan kayıtlarla daha fazla uğraşılmıyor (kullanıcı isteği).
+            var regions = parsed.Regions.Length > 0 ? parsed.Regions : new[] { "Unknown" };
+
             game.Versions.Add(new CatalogGameVersion
             {
                 RawDatName = entry.Name,
                 SourceDat = entry.SourceCategory,
-                Regions = parsed.Regions,
+                Regions = regions,
                 VersionLabel = parsed.VersionLabel,
-                Flags = parsed.Flags,
                 Roms = entry.Roms,
             });
         }
@@ -45,15 +57,13 @@ public static class VersionResolver
         return games.Values.ToList();
     }
 
-    // Tercih sırası: önce "normal" (alt-sürüm bayrağı olmayan) sürümler, aralarında
-    // USA > World > Europe > Japan > diğer; hiç normal sürüm yoksa (ör. sadece proto çıkmış bir
-    // oyun) aynı bölge sıralaması alt-sürümler arasında uygulanıp yine tek bir tercih seçilir —
-    // böylece her CatalogGame'in mutlaka bir Preferred sürümü olur.
+    // Tercih sırası: USA > World > Europe > Japan > diğer bölge; hayatta kalan tüm sürümler zaten
+    // "resmi" olduğu için (ShouldExclude filtresini geçtiler) ek bir normal/alt-sürüm ayrımına
+    // gerek yok — sadece bölge önceliği ve deterministik bir son çare (en kısa/alfabetik) yeterli.
     private static void ResolvePreferred(CatalogGame game)
     {
         var best = game.Versions
-            .OrderBy(v => v.IsAltVersion ? 1 : 0)
-            .ThenBy(v => RegionRank(v.Regions))
+            .OrderBy(v => RegionRank(v.Regions))
             .ThenBy(v => v.RawDatName.Length)
             .ThenBy(v => v.RawDatName, StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault();

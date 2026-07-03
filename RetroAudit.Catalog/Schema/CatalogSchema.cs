@@ -42,7 +42,17 @@ public static class CatalogSchema
             ReleaseYear INTEGER,
             Overview TEXT,
             MaxPlayers INTEGER,
-            PreferredVersionId INTEGER REFERENCES GameVersions(GameVersionId)
+            PreferredVersionId INTEGER REFERENCES GameVersions(GameVersionId),
+            -- Bu oyun LaunchBox.Metadata.db'de gerçekten bulundu mu? Developer/Publisher/Overview/
+            -- ReleaseYear/MaxPlayers'ın hepsi LaunchBox'ta da boş olabileceği için (nadir ama mümkün),
+            -- eşleşme durumunu bu alanların doluluğundan çıkarmak yerine ayrı bir bayrakla saklıyoruz.
+            MatchedMetadata INTEGER NOT NULL DEFAULT 0,
+            -- Eşleşme nasıl bulundu: "CompareName" / "ExactName" / "AlternateName" (hepsi kesin,
+            -- Confidence=1.0) veya "Fuzzy" (Confidence<1.0, benzerlik oranı). NeedsReview=1 olan
+            -- kayıtların metadata'sı kullanılabilir ama kullanıcı onaylayana kadar şüpheli sayılmalı.
+            MatchMethod TEXT,
+            MatchConfidence REAL,
+            NeedsReview INTEGER NOT NULL DEFAULT 0
         );
         CREATE INDEX IX_Games_Platform_CompareTitle ON Games(PlatformId, CompareTitle);
 
@@ -61,14 +71,16 @@ public static class CatalogSchema
 
         -- Tek bir DAT kaydı (ör. "Super Mario World (Europe) (Rev A)"). AllRegionsRaw, name
         -- etiketinde birden fazla bölge geçtiğinde ("(USA, Europe)") tam listeyi korur; RegionId
-        -- sorgu/badge kolaylığı için sadece birincil (ilk) bölgeye işaret eder.
+        -- sorgu/badge kolaylığı için sadece birincil (ilk) bölgeye işaret eder. Beta/Proto/Demo/
+        -- Pirate/Cracked/BIOS/Utility/... gibi resmi olmayan kayıtlar bu tabloya hiç girmez
+        -- (DatNameParser.ShouldExclude ile daha gruplanmadan elenir) — bu yüzden ayrı bir Flags
+        -- sütununa gerek kalmadı, hayatta kalan her satır tanım gereği resmi bir sürümdür.
         CREATE TABLE GameVersions (
             GameVersionId INTEGER PRIMARY KEY AUTOINCREMENT,
             GameId INTEGER NOT NULL REFERENCES Games(GameId),
             RegionId INTEGER REFERENCES Regions(RegionId),
             AllRegionsRaw TEXT,
             VersionLabel TEXT,
-            Flags TEXT,
             IsPreferred INTEGER NOT NULL DEFAULT 0,
             RawDatName TEXT NOT NULL,
             SourceDat TEXT NOT NULL

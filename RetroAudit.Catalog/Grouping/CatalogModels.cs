@@ -4,18 +4,16 @@ namespace RetroAudit.Catalog.Grouping;
 
 // DAT'tan gelen, henüz ayrıştırılmış tek bir sürüm kaydı (ör. "Super Mario World (Europe) (Rev A)").
 // GameHashes tablosuna 1-e-çok giden Roms listesi burada tutulur (ör. başlıklı/başlıksız ikilisi).
+// Beta/Proto/Demo/Pirate/Cracked/BIOS/Utility/... gibi resmi olmayan kayıtlar buraya hiç ulaşmaz —
+// DatNameParser.ShouldExclude bunları VersionResolver'da daha grupianmadan eler.
 public class CatalogGameVersion
 {
     public string RawDatName { get; set; } = string.Empty;
     public string SourceDat { get; set; } = string.Empty; // "no-intro", "redump", "tosec", ...
     public string[] Regions { get; set; } = Array.Empty<string>();
     public string? VersionLabel { get; set; }
-    public string[] Flags { get; set; } = Array.Empty<string>();
     public bool IsPreferred { get; set; }
     public List<DatRomEntry> Roms { get; set; } = new();
-
-    // Beta/Proto/Demo/Test/Pirate/Hack/Aftermarket/Unlicensed etiketlerinden en az biri varsa true.
-    public bool IsAltVersion => Flags.Length > 0;
 }
 
 // Ana listede gösterilecek "parent" oyun satırı — (Platform, temiz başlık) çiftine göre gruplanır.
@@ -37,4 +35,12 @@ public class CatalogGame
     public int? MaxPlayers { get; set; }
     public List<string> Genres { get; } = new();
     public bool MatchedMetadata { get; set; }
+
+    // Eşleşmenin nasıl bulunduğu (CompareName/ExactName/AlternateName/Fuzzy) ve ne kadar güvenilir
+    // olduğu (1.0 = kesin, <1.0 = fuzzy benzerlik oranı). NeedsReview, Confidence
+    // FuzzyAcceptThreshold'un altında kaldığında (ama FuzzyReviewFloor'un üstündeyse) true olur —
+    // bu oyunun metadata'sı kullanılabilir ama kullanıcı gözden geçirene kadar şüpheli sayılmalı.
+    public string? MatchMethod { get; set; }
+    public double? MatchConfidence { get; set; }
+    public bool NeedsReview { get; set; }
 }
