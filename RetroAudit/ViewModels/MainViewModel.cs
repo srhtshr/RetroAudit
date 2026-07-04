@@ -174,6 +174,7 @@ public partial class MainViewModel : ObservableObject
         _appSettings = ConfigService.LoadDefault();
 
         _allGames = CatalogDatabaseService.GetGames();
+        BuildLocalFileIndex();
         foreach (var game in _allGames)
             game.HasLocalFile = HasLocalFile(game);
 
@@ -233,6 +234,11 @@ public partial class MainViewModel : ObservableObject
     {
         _appSettings = ConfigService.LoadDefault();
         ContextMenuDisplayMode = _appSettings.ContextMenuDisplayMode;
+
+        BuildLocalFileIndex();
+        foreach (var game in _allGames)
+            game.HasLocalFile = HasLocalFile(game);
+        ApplyFilter();
     }
 
     // Boş değerleri "(Boş)" olarak grupluyor ki filtre listesinde görünmez bir satır olmasın;
@@ -241,17 +247,14 @@ public partial class MainViewModel : ObservableObject
 
     private static ColumnFilterViewModel BuildColumnFilter(string headerText, IEnumerable<string> rawValues)
     {
-        var filter = new ColumnFilterViewModel { HeaderText = headerText };
-        var groups = rawValues
+        var options = rawValues
             .Select(NormalizeForFilter)
             .GroupBy(v => v, StringComparer.OrdinalIgnoreCase)
             .OrderByDescending(g => g.Count())
-            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new FilterOption { Value = g.Key, Count = g.Count() });
 
-        foreach (var group in groups)
-            filter.Options.Add(new FilterOption { Value = group.Key, Count = group.Count() });
-
-        return filter;
+        return new ColumnFilterViewModel(options) { HeaderText = headerText };
     }
 
     // Tools menüsünden bir eylem seçildiğinde ilgili pencereyi açar, ardından seçimi
@@ -422,16 +425,41 @@ public partial class MainViewModel : ObservableObject
             RefreshSelectedChipMembership();
     }
 
+    // Platform başına bir kez Directory.EnumerateFiles yapıp dosya adlarını HashSet'e alır.
+    // Önceden her oyun için ayrı ayrı File.Exists çağrılıyordu (67 bin oyun = 67 bin disk I/O),
+    // bu da açılışı gözle görülür şekilde yavaşlatıyordu ("program geç açılıyor"); platform
+    // klasörünü tek seferde listeleyip bellekte arama yapmak aynı sonucu tek bir dizin taraması
+    // (platform sayısı kadar, ~40) ile veriyor.
+    private Dictionary<string, HashSet<string>>? _filesByPlatform;
+
+    private void BuildLocalFileIndex()
+    {
+        _filesByPlatform = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath) || !Directory.Exists(_appSettings.RetroAuditDataPath))
+            return;
+
+        foreach (var platformDir in Directory.EnumerateDirectories(_appSettings.RetroAuditDataPath))
+        {
+            var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in Directory.EnumerateFiles(platformDir))
+                files.Add(Path.GetFileName(file));
+            _filesByPlatform[Path.GetFileName(platformDir)] = files;
+        }
+    }
+
     // Grid'deki "eksik ROM'u ara" sütunu ve context menüsündeki "Open File Location"ın paylaştığı
     // tek dosya-var-mı kontrolü — henüz gerçek bir ROM tarama/kütüphane özelliği yok, bu yüzden
     // basit bir kural kullanılıyor: AppSettings.RetroAuditDataPath\{Platform}\{File} var mı?
     // Ayarlar > Genel'de veri kök dizini boşsa (ilk çalıştırma) her zaman false döner.
     public bool HasLocalFile(Game game)
     {
-        if (string.IsNullOrWhiteSpace(game.File) || string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath))
+        if (string.IsNullOrWhiteSpace(game.File))
             return false;
 
-        return File.Exists(GetLocalFilePath(game));
+        if (_filesByPlatform is not null)
+            return _filesByPlatform.TryGetValue(game.Platform, out var files) && files.Contains(game.File);
+
+        return !string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath) && File.Exists(GetLocalFilePath(game));
     }
 
     private string GetLocalFilePath(Game game) => Path.Combine(_appSettings.RetroAuditDataPath, game.Platform, game.File);

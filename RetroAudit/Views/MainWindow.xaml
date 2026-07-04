@@ -533,8 +533,13 @@
                  Sanallaştırma (virtualization) özellikleri, binlerce satırlık gerçek verilerle
                  kullanıldığında kaydırma sırasında kasmayı önlemek için bilinçli olarak açık:
                  sadece ekranda görünen satırlar için UI elemanı oluşturulur, kaydırırken
-                 elemanlar oluşturulup atılmak yerine "Recycling" moduyla yeniden kullanılır. -->
-            <DataGrid x:Name="GamesGrid" Grid.Column="2"
+                 elemanlar oluşturulup atılmak yerine "Recycling" moduyla yeniden kullanılır.
+                 Margin sağda 4px: DataGrid'in kendi dikey scrollbar'ı sütunun tam sağ kenarında
+                 render oluyor, hemen bitişiğindeki sağ panel aç/kapa tutamacı (Grid.Column="3",
+                 her zaman dikeyde ortalanmış) da aynı genişlikte — aralarında boşluk olmayınca
+                 scrollbar thumb'ı kaydırma ortasına geldiğinde tutamaçla bitişip tek bir blok gibi
+                 görünüyordu ("scrollbar ortada sıkışmış gibi duruyor"). -->
+            <DataGrid x:Name="GamesGrid" Grid.Column="2" Margin="0,0,4,0"
                       ItemsSource="{Binding Games}"
                       SelectedItem="{Binding SelectedGame}"
                       RowHeight="{Binding RowHeight}"

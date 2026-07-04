@@ -24,7 +24,7 @@ public partial class FilterOption : ObservableObject
 public partial class ColumnFilterViewModel : ObservableObject
 {
     public string HeaderText { get; init; } = string.Empty;
-    public ObservableCollection<FilterOption> Options { get; } = new();
+    public ObservableCollection<FilterOption> Options { get; }
 
     // Popup içindeki arama kutusuna bağlı — OptionsView'ı (aşağıda) anlık filtreler.
     [ObservableProperty]
@@ -52,14 +52,27 @@ public partial class ColumnFilterViewModel : ObservableObject
     // Kullanıcı kararıyla ayrı bir "hepsini seç" satırı yerine tek düğme iki işlevi de görüyor.
     public string ToggleAllLabel => Options.Count > 0 && Options.All(o => o.IsChecked) ? "Temizle" : "Hepsini Seç";
 
-    public ColumnFilterViewModel()
+    // initialOptions toplu olarak (BuildColumnFilter'ın hazırladığı tam liste) Options'ın
+    // ObservableCollection ctor'una veriliyor — tek tek Options.Add() ETMEK YERİNE. Sebep: Options
+    // aşağıda OptionsView'a (bir Filter atanmış ICollectionView) bağlanıyor; Filter atanmış bir
+    // CollectionView'a ObservableCollection.Add ile TEK TEK eklemek WPF'te her ekleme başına O(n)
+    // maliyetli (view her Add'de mevcut öğeler arasında filtrelenmiş konumu yeniden hesaplıyor) —
+    // Title/File gibi ~60 bin farklı değeri olan sütunlarda bu O(n²)'ye çıkıp açılışı ~15 saniye
+    // yavaşlatıyordu (ölçüldü: Title addLoop=6.5s, File addLoop=8.8s, LINQ'ın kendisi <150ms).
+    // ObservableCollection(IEnumerable) ctor'u ise CollectionChanged hiç tetiklemeden (henüz kimse
+    // dinlemiyorken) tek seferde dolduruyor, bu yüzden Filter atanmadan önce bitmiş oluyor.
+    public ColumnFilterViewModel(IEnumerable<FilterOption>? initialOptions = null)
     {
+        Options = initialOptions is null ? new ObservableCollection<FilterOption>() : new ObservableCollection<FilterOption>(initialOptions);
+        foreach (var option in Options)
+            WireOption(option);
+
         OptionsView = CollectionViewSource.GetDefaultView(Options);
         OptionsView.Filter = FilterPredicate;
         Options.CollectionChanged += OnOptionsCollectionChanged;
     }
 
-    // Options listesine yeni bir FilterOption eklendiğinde (BuildColumnFilter doldururken), onun
+    // Options listesine (ilk toplu doldurmadan SONRA) yeni bir FilterOption eklenirse onun
     // IsChecked değişimini dinleyip ToggleAllLabel'ı güncel tutar.
     private void OnOptionsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
@@ -67,12 +80,15 @@ public partial class ColumnFilterViewModel : ObservableObject
             return;
 
         foreach (FilterOption option in e.NewItems)
-            option.PropertyChanged += (_, args) =>
-            {
-                if (args.PropertyName == nameof(FilterOption.IsChecked))
-                    OnPropertyChanged(nameof(ToggleAllLabel));
-            };
+            WireOption(option);
     }
+
+    private void WireOption(FilterOption option) =>
+        option.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(FilterOption.IsChecked))
+                OnPropertyChanged(nameof(ToggleAllLabel));
+        };
 
     private bool FilterPredicate(object obj) =>
         string.IsNullOrWhiteSpace(SearchText) ||

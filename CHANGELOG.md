@@ -2,6 +2,38 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.14] - 2026-07-05
+
+### Fixed
+- **Açılış süresi ~17 saniyeden ~1 saniyeye indi.** Her sütun filtresi (Platform/Tür/Geliştirici/...)
+  dropdown'ı `Options` listesine değerleri tek tek `Add()` ediyordu; `Options` zaten bir `Filter`
+  atanmış `CollectionView`'a bağlı olduğundan, WPF'te bu her ekleme başına maliyeti mevcut liste
+  boyutuyla orantılı hale getiriyor (O(n) per add → toplamda O(n²)). Başlık/Dosya gibi neredeyse
+  hiç tekrarlamayan (~55-65 bin farklı değer) sütunlarda bu tek başına ~15 saniye tutuyordu.
+  `ColumnFilterViewModel` artık tüm listeyi `ObservableCollection` constructor'ına toplu veriyor,
+  `CollectionView`/`Filter` ancak liste tamamen doluyken bağlanıyor. Ayrıca "bu oyunun ROM'u diskte
+  var mı" kontrolü 67 bin oyun için ayrı ayrı `File.Exists` çağırmak yerine platform klasörünü bir
+  kez listeleyip bellekte aranıyor.
+- **Sağ tık kapsül menüsündeki ve DataGrid'deki scrollbar'lar** artık tutarlı, koyu temalı ve doğru
+  çalışıyor. Kök nedenler: `Track` kendi `Orientation`'ını `ScrollBar`'ınkine hiç bağlamıyordu (her
+  zaman dikey gibi davranıyordu), `RepeatButton`'ların görünmez (Transparent) alanları thumb dışında
+  hiçbir iz bırakmadığından scrollbar "kayıp" gibi görünüyordu, ve — asıl gizli sorun — WPF'in
+  `Track` bileşeni thumb için minimum boyutu hesaplarken `Thumb.MinHeight/MinWidth`'e ek olarak
+  `SystemParameters.VerticalScrollBarButtonHeight` (ve yatay karşılığı) değerinin yarısını da bir
+  taban olarak kullanıyor; bu sistem parametresi override edilmeden `MinHeight="60"` vermek thumb'ı
+  yerleşim (Arrange) sırasında kırpıyordu. Çözüm: `Style.Resources` içinde
+  `VerticalScrollBarButtonHeightKey`/`HorizontalScrollBarButtonWidthKey` istenen minimumun iki katına
+  (120) ayarlandı, `Track`'e `Orientation="{TemplateBinding Orientation}"` eklendi. Ayrıca DataGrid'in
+  kendi scrollbar'ı ile sağ paneldeki sürgülü tutamaç arasına görünür bir boşluk (`Margin`) eklendi —
+  ikisi bitişik durduğunda thumb ortadayken tek bir blok gibi görünüyordu.
+- `README.md` eski (v0.04, mock-veri) durumu anlatıyordu; gerçek Builder/Catalog/WPF mimarisini,
+  RetroAudit.db + RetroAuditUserData.db ayrımını ve güncel özellik listesini anlatacak şekilde
+  yeniden yazıldı.
+
+### Added
+- Kök dizine sürüm takibi için bir `VERSION` dosyası eklendi (önceden sadece CHANGELOG başlıklarında
+  tutuluyordu).
+
 ## [0.13] - 2026-07-04
 
 ### Added
