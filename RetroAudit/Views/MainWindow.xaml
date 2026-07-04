@@ -392,9 +392,11 @@
                 <ColumnDefinition Width="220" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-                <!-- Sürgülü sağ panel: IsDetailPanelExpanded false iken 0'a iner (bkz.
-                     ToggleDetailPanelCommand ve GridSplitter yanındaki tutamaç düğmesi). -->
+                <!-- Sürgülü sağ panel: IsDetailPanelExpanded false iken 0'a iner. Aç/kapa artık
+                     kenarda ayrı bir sütun/düğme değil — üst istatistik çubuğundaki tam ekran
+                     genişletme ikonu (bkz. "Görünen/Toplam" satırı) bu komutu tetikliyor; kenardaki
+                     düğme hem scrollbar'la görsel dikiş hem de (eski GridSplitter'la) Binding
+                     çakışması sorunlarına yol açıyordu. -->
                 <ColumnDefinition Width="{Binding IsDetailPanelExpanded, Converter={StaticResource BoolToGridLength}, ConverterParameter=340}" />
             </Grid.ColumnDefinitions>
 
@@ -534,12 +536,11 @@
                  kullanıldığında kaydırma sırasında kasmayı önlemek için bilinçli olarak açık:
                  sadece ekranda görünen satırlar için UI elemanı oluşturulur, kaydırırken
                  elemanlar oluşturulup atılmak yerine "Recycling" moduyla yeniden kullanılır.
-                 Margin sağda 4px: DataGrid'in kendi dikey scrollbar'ı sütunun tam sağ kenarında
-                 render oluyor, hemen bitişiğindeki sağ panel aç/kapa tutamacı (Grid.Column="3",
-                 her zaman dikeyde ortalanmış) da aynı genişlikte — aralarında boşluk olmayınca
-                 scrollbar thumb'ı kaydırma ortasına geldiğinde tutamaçla bitişip tek bir blok gibi
-                 görünüyordu ("scrollbar ortada sıkışmış gibi duruyor"). -->
-            <DataGrid x:Name="GamesGrid" Grid.Column="2" Margin="0,0,4,0"
+                 Aradaki 4px boşluk kaldırıldı: scrollbar artık kendi (Elevated) arkaplanıyla zaten
+                 net bir şekilde ayırt edilebiliyor (bkz. ObsidianDark.xaml ScrollBar Style), bu
+                 yüzden sağ paneldeki aç/kapa tutamacıyla arasına ayrıca boşluk bırakmaya gerek
+                 kalmadı — tutamaç artık scrollbar'a bitişik duruyor. -->
+            <DataGrid x:Name="GamesGrid" Grid.Column="2"
                       ItemsSource="{Binding Games}"
                       SelectedItem="{Binding SelectedGame}"
                       RowHeight="{Binding RowHeight}"
@@ -705,6 +706,48 @@
                                          Binding="{Binding MatchMethod}" Width="130" Visibility="Collapsed" />
                 </DataGrid.Columns>
             </DataGrid>
+
+            <!-- Tabloyu tam genişliğe getirme (sağ detay panelini gizleme/gösterme) ikonu.
+                 DataGrid'in kendi köşesinde, sütun başlıklarının bittiği ile dikey scrollbar'ın
+                 başladığı yerde zaten boş/kullanılmayan küçük bir alan var (klasik DataGrid köşe
+                 hücresi) — ayrı bir sütun/satır açmadan, aynı Grid hücresine (Grid.Column="2")
+                 DataGrid'den SONRA eklenip üstüne bindiriliyor, o boş köşeye tam oturuyor.
+                 Arkaplanı başlık rengiyle eşleştirme denemesi (Border + Elevated) geri alındı —
+                 gerçek başlık yüksekliğini bilmeden bir sızıntı kalmadan tam oturtmak mümkün
+                 olmadı; düğme arkaplansız (Transparent) bırakıldı. -->
+            <Button x:Name="DetailPanelToggleButton" Grid.Column="2" Command="{Binding ToggleDetailPanelCommand}"
+                    Width="14" Height="40" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Background="Transparent" Padding="0" Cursor="Hand"
+                    ToolTip="Tabloyu tam genişliğe getir / geri al">
+                <!-- Arkaplan hover'ı (rengi değişen bir kutu) bu küçük köşe hücresinde her zaman
+                     "yarım" duruyordu — hücre sınırlarıyla tam örtüşmüyor, komşu scrollbar
+                     arkaplanıyla hizası bozuk görünüyordu. Onun yerine arkaplan hiç değişmiyor,
+                     sadece ikonun kendisi (aşağıdaki TextBlock) hover'da renk değiştiriyor. -->
+                <Button.Template>
+                    <ControlTemplate TargetType="{x:Type Button}">
+                        <Border Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Button.Template>
+                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10"
+                           HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="&#xE740;" />
+                            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDetailPanelExpanded}" Value="False">
+                                    <Setter Property="Text" Value="&#xE73F;" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding IsMouseOver, ElementName=DetailPanelToggleButton}" Value="True">
+                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Button>
 
             <!-- ===================== Kapsül sağ tık menüsü ===================== -->
             <!-- MainWindow.xaml.cs GamesGrid_PreviewMouseRightButtonDown ile açılır (satırı bulup
@@ -1003,35 +1046,10 @@
                 </Border>
             </Popup>
 
-            <Grid Grid.Column="3">
-                <GridSplitter Width="1" HorizontalAlignment="Stretch"
-                              Background="{StaticResource Brush.Border}" />
-
-                <!-- Sağ paneli aç/kapa tutamacı — panel kapalıyken de görünür kalır ki tekrar
-                     açılabilsin (sürgülü davranış: bkz. ToggleDetailPanelCommand). -->
-                <Button Command="{Binding ToggleDetailPanelCommand}" Width="14" Height="40"
-                        VerticalAlignment="Center" Padding="0" Cursor="Hand"
-                        Background="{StaticResource Brush.Background.Elevated}"
-                        BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
-                        ToolTip="Detay panelini aç/kapat">
-                    <TextBlock FontSize="9" Foreground="{StaticResource Brush.Text.Secondary}">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="◀" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsDetailPanelExpanded}" Value="False">
-                                        <Setter Property="Text" Value="▶" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Button>
-            </Grid>
-
-            <!-- Right: Detail pane. Ayrı bir Visibility binding'ine gerek yok — Grid.Column="4"
-                 genişliği 0'a indiğinde (bkz. ColumnDefinition) içerik zaten tamamen kırpılıyor. -->
-            <Border Grid.Column="4" Background="{StaticResource Brush.Background.Panel}">
+            <!-- Right: Detail pane. Ayrı bir Visibility binding'ine gerek yok — Grid.Column="3"
+                 genişliği 0'a indiğinde (bkz. ColumnDefinition) içerik zaten tamamen kırpılıyor.
+                 Aç/kapa artık üst istatistik çubuğundaki tam ekran ikonuyla yapılıyor. -->
+            <Border Grid.Column="3" Background="{StaticResource Brush.Background.Panel}">
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />

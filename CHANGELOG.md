@@ -2,6 +2,23 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.15] - 2026-07-05
+
+### Fixed
+- **DataGrid'de Ctrl/Ctrl+Shift ile toplu satır seçimi çalışmıyordu.** Kök neden: `ObsidianDark.xaml`
+  içindeki global `DataGrid` stili `SelectionMode="Single"` olarak ayarlanmıştı — bu, WPF'in
+  Ctrl+tık (tekil ekle/çıkar) ve Shift+tık (aralık seç) davranışını tamamen devre dışı bırakıyordu.
+  `SelectionMode="Extended"` olarak düzeltildi. Bununla birlikte sağ tık menüsünün toplu (bulk) modu
+  (Sil/Gizle/Favorile/Playlist) da artık gerçekten birden fazla satır seçiliyken tetiklenebiliyor.
+- `DataGridRow` stilinde `IsSelected` ve `IsMouseOver` tetikleyicileri aynı `Background`'ı
+  ayarlıyordu; `IsMouseOver` sonradan tanımlı olduğundan, seçili bir satırın üzerinde fare dururken
+  hover rengi seçili (mavi) rengi eziyordu — çoklu seçimde, imlecin üzerinde durduğu satır seçili
+  değilmiş gibi görünüyordu. Tetikleyici sırası düzeltildi.
+- Sağ detay panelini aç/kapa düğmesi, kendi dar sütununda scrollbar'la sürekli görsel dikiş/hizalanma
+  sorunu çıkarıyordu (bkz. önceki sürümlerdeki elle sürükleme/GridSplitter denemeleri). Düğme o ayrı
+  sütundan tamamen kaldırıldı; DataGrid'in kendi köşesindeki (başlık satırının bittiği, scrollbar'ın
+  başladığı) zaten boş duran küçük alana ikon olarak yerleştirildi — ayrı bir sütuna gerek kalmadı.
+
 ## [0.14] - 2026-07-05
 
 ### Fixed

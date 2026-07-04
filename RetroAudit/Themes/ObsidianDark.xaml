@@ -78,7 +78,12 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ScrollBar}">
-                    <Grid Background="Transparent">
+                    <!-- Track/RepeatButton alanları (Thumb hariç) Transparent'tı, yani scrollbar'ın
+                         kendi alanı komşu elemanlarla (ör. sağ panel aç/kapa tutamacının bulunduğu
+                         sütun) aynı arkaplanı gösteriyor ve ikisi görsel olarak "tek bir alan" gibi
+                         birleşiyordu. Kök Grid'e sabit, hafif bir arkaplan vererek scrollbar'ın
+                         kapladığı alan (thumb'ın etrafındaki boşluk dahil) net bir sınırla ayrılıyor. -->
+                    <Grid Background="{StaticResource Brush.Background.Elevated}">
                         <Track Name="PART_Track"
                                Minimum="{TemplateBinding Minimum}"
                                Maximum="{TemplateBinding Maximum}"
@@ -389,7 +394,10 @@
         <Setter Property="CanUserDeleteRows" Value="False" />
         <Setter Property="CanUserReorderColumns" Value="True" />
         <Setter Property="CanUserResizeRows" Value="False" />
-        <Setter Property="SelectionMode" Value="Single" />
+        <!-- Extended: Ctrl+tık tekil satır ekler/çıkarır, Shift+tık aralık seçer (WPF'in normal
+             çoklu seçim davranışı). Daha önce yanlışlıkla "Single" idi — bu, sağ tık menüsündeki
+             toplu (bulk) mod dahil, satır bazlı hiçbir çoklu seçimi mümkün kılmıyordu. -->
+        <Setter Property="SelectionMode" Value="Extended" />
         <Setter Property="SelectionUnit" Value="FullRow" />
         <Setter Property="RowHeaderWidth" Value="0" />
         <Setter Property="VerticalGridLinesBrush" Value="{StaticResource Brush.Border}" />
@@ -408,11 +416,18 @@
     <Style TargetType="{x:Type DataGridRow}">
         <Setter Property="Background" Value="{Binding RelativeSource={RelativeSource Self}, Path=(DataGrid.RowBackground)}" />
         <Style.Triggers>
-            <Trigger Property="IsSelected" Value="True">
-                <Setter Property="Background" Value="{StaticResource Brush.Accent.Selected}" />
-            </Trigger>
+            <!-- IsMouseOver ÖNCE gelmeli: iki Trigger da aynı Background'ı set ettiğinde, ikisi de
+                 aktifken (Ctrl/Shift ile seçtiğin satırın üzerinde fare dururken) SONRA tanımlanan
+                 kazanıyordu. Sıra IsSelected->IsMouseOver iken, seçili bir satırın üstünde fare
+                 durduğu sürece hover rengi seçili (mavi) rengi eziyordu — Ctrl/Shift ile birden
+                 fazla satır seçildiğinde, üzerinde durulan satır seçilmemiş gibi görünüyor, bu da
+                 "toplu seçim çalışmıyor" izlenimi veriyordu (seçim aslında doğruydu, sadece görünmüyordu).
+                 IsSelected şimdi SONRA tanımlı, bu yüzden ikisi de aktifken her zaman kazanıyor. -->
             <Trigger Property="IsMouseOver" Value="True">
                 <Setter Property="Background" Value="{StaticResource Brush.Background.Hover}" />
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{StaticResource Brush.Accent.Selected}" />
             </Trigger>
         </Style.Triggers>
     </Style>
