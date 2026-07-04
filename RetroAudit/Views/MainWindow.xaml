@@ -21,65 +21,138 @@
              (bkz. BindingProxy.cs) — Data, Window'un DataContext'ine (MainViewModel) bağlanır. -->
         <views:BindingProxy x:Key="ViewModelProxy" Data="{Binding}" />
 
-        <!-- DataGrid sütun başlıklarında kullanılan ortak "joystick filtre" şablonu. Header'a bir
+        <!-- DataGrid sütun başlıklarında kullanılan ortak filtre şablonu. Header'a bir
              ColumnFilterViewModel atandığında (DataGridColumn.Header, ViewModelProxy üzerinden
              bağlanıyor — bkz. DataGrid.Columns) HeaderTemplate'in DataContext'i otomatik olarak bu
-             nesne olur. Başlık metni sol üstte, joystick ikonu hücrenin sağ alt köşesinde;
-             tıklanınca hemen altında değer+sayı listeli bir dropdown açılır (Temizle/OK/Cancel ile).
-             İkon emoji değil vektör şekil (Rectangle+Ellipse) — böylece font desteğine bağlı kalmaz. -->
+             nesne olur. Ayrı bir huni ikonu YOK — kullanıcı isteğiyle kaldırıldı; başlığın
+             HERHANGİ bir yerine sol tıklamak filtre dropdown'ını açar (Temizle/OK/Cancel ile).
+             Aktif filtre göstergesi artık ikon rengi değil, başlık metninin kendisi (amber). -->
         <DataTemplate x:Key="FilterableColumnHeader" DataType="{x:Type models:ColumnFilterViewModel}">
-            <!-- Grid.ColumnDefinitions kullanılıyor (mutlak konumlandırma/overlay değil): ikon
-                 kendi Auto genişlikli sütununda akış içinde yer alıyor, böylece toplam genişlik
-                 her zaman hücrenin gerçek genişliğine sığıyor ve sütun ayırıcı çizgisiyle asla
-                 çakışmıyor — önceki sağa-hizalı overlay yaklaşımı dar sütunlarda çizgiyle üst üste
-                 biniyordu. -->
             <Grid MinHeight="30">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="{Binding HeaderText}" VerticalAlignment="Center" HorizontalAlignment="Left"
-                           Margin="0,0,4,0" TextTrimming="CharacterEllipsis" />
-
-                <Button Grid.Column="1" x:Name="FilterIconButton" VerticalAlignment="Center" HorizontalAlignment="Center"
-                        Padding="4" Margin="0,0,4,0" Background="Transparent" BorderThickness="0"
-                        Cursor="Hand" Command="{Binding OpenCommand}" ToolTip="Filtrele">
-                    <Polygon Points="0,0 10,0 6.5,5 6.5,9 3.5,9 3.5,5" Stretch="Uniform" Width="10" Height="10">
-                        <Polygon.Style>
-                            <Style TargetType="Polygon">
-                                <Setter Property="Fill" Value="{StaticResource Brush.Text.Secondary}" />
+                <Button x:Name="HeaderButton" Command="{Binding OpenCommand}" Cursor="Hand"
+                        Background="Transparent" BorderThickness="0" Padding="4,0"
+                        HorizontalContentAlignment="Left" ToolTip="Filtrele">
+                    <TextBlock Text="{Binding HeaderText}" TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
                                 <Style.Triggers>
                                     <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                        <Setter Property="Fill" Value="{StaticResource Brush.Accent.Amber}" />
+                                        <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
-                        </Polygon.Style>
-                    </Polygon>
+                        </TextBlock.Style>
+                    </TextBlock>
                 </Button>
 
-                <Popup PlacementTarget="{Binding ElementName=FilterIconButton}" IsOpen="{Binding IsPopupOpen}"
-                       StaysOpen="False" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade">
+                <Popup PlacementTarget="{Binding ElementName=HeaderButton}" IsOpen="{Binding IsPopupOpen}"
+                       StaysOpen="False" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade"
+                       Opened="FilterPopup_Opened">
+                    <!-- Width sabit (Width, MinWidth değil): önceden içerik (uzun değer metinleri)
+                         genişliği büyütüyordu, bu yüzden her sütunun dropdown'ı farklı boyutta
+                         görünüyordu — artık hepsi aynı sabit genişlikte, uzun değerler kırpılıp
+                         "..." ile gösteriliyor (bkz. aşağıdaki TextTrimming). -->
                     <Border Background="{StaticResource Brush.Background.Elevated}"
                             BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
-                            CornerRadius="4" Padding="6" MinWidth="200" MaxHeight="360">
+                            CornerRadius="4" Padding="6" Width="230" MaxHeight="360">
                         <DockPanel>
-                            <!-- Alttaki tek düğme hem "Temizle" hem "Hepsini Seç" işlevini görür,
-                                 mevcut seçim durumuna göre etiketi/işlevi otomatik değişir
-                                 (bkz. ColumnFilterViewModel.ToggleAllLabel/ToggleAllCommand). -->
-                            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
-                                        HorizontalAlignment="Right" Margin="0,6,0,0">
-                                <Button Content="{Binding ToggleAllLabel}" Command="{Binding ToggleAllCommand}" FontSize="10" Margin="0,0,4,0" />
-                                <Button Content="OK" Command="{Binding ApplyFilterCommand}" FontSize="10" Margin="0,0,4,0" />
-                                <Button Content="Cancel" Command="{Binding CancelFilterCommand}" FontSize="10" />
-                            </StackPanel>
+                            <!-- Sıralama (↑A-Z / ↓Z-A) ve Temizle/OK/Cancel aynı satırda, sırasıyla
+                                 sol ve sağ hizalı — önceden sıralama üstte iki ayrı geniş düğmeydi,
+                                 kullanıcı isteğiyle bu alttaki dar butonların yanına, en sola taşındı.
+                                 IsSearchOnly sütunlarda (Title/File) hiç yok — checkbox listesi
+                                 olmadığından Temizle/OK/Cancel'ın bir işlevi kalmıyor. -->
+                            <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                <Grid.Style>
+                                    <Style TargetType="Grid">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSearchOnly}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Grid.Style>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+                                    <Button Content="↑A-Z" Click="SortAscending_Click" ToolTip="Sırala A-Z"
+                                            FontSize="10" Padding="4,2" Margin="0,0,2,0" Cursor="Hand" />
+                                    <Button Content="↓Z-A" Click="SortDescending_Click" ToolTip="Sırala Z-A"
+                                            FontSize="10" Padding="4,2" Cursor="Hand" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="{Binding ToggleAllLabel}" Command="{Binding ToggleAllCommand}" FontSize="10" Margin="0,0,4,0" />
+                                    <Button Content="OK" Command="{Binding ApplyFilterCommand}" FontSize="10" Margin="0,0,4,0" />
+                                    <Button Content="Cancel" Command="{Binding CancelFilterCommand}" FontSize="10" />
+                                </StackPanel>
+                            </Grid>
 
-                            <!-- Değer listesini daraltan arama kutusu (bkz. ColumnFilterViewModel.
-                                 SearchText/OptionsView). -->
-                            <TextBox DockPanel.Dock="Top" Margin="0,0,0,4" FontSize="11"
-                                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
+                            <!-- Normal sütunlarda değer listesini daraltan arama kutusu; IsSearchOnly
+                                 sütunlarda (Title/File) grid'i DOĞRUDAN filtreleyen tek kontrol bu.
+                                 Arama her tuş vuruşunda DEĞİL, Enter'a basılınca uygulanır (bkz.
+                                 ColumnFilterViewModel.SearchCommand) — IsSearchOnly sütunlarda her
+                                 tuş vuruşunda 66 bin oyunu yeniden filtrelemek gecikme yaratıyordu. -->
+                            <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
+                                <TextBox FontSize="11" Padding="4,2,20,2"
+                                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
+                                    <TextBox.InputBindings>
+                                        <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
+                                    </TextBox.InputBindings>
+                                </TextBox>
 
+                                <!-- Önceki aramayı Backspace/Delete ile tek tek silmek yerine tek
+                                     tıkla temizler — Enter beklemeden hemen uygulanır (bkz.
+                                     ColumnFilterViewModel.ClearSearchCommand). Sadece arama kutusunda
+                                     metin varken görünür. -->
+                                <Button Command="{Binding ClearSearchCommand}"
+                                        HorizontalAlignment="Right" VerticalAlignment="Center"
+                                        Padding="4,0" Margin="0,0,2,0" Cursor="Hand" ToolTip="Aramayı temizle">
+                                    <!-- Genel Button şablonu hover'da arkaplanı dolduruyordu (bkz.
+                                         ekran görüntüsü) — bu küçük "✕" için arkaplan hiç istenmiyor,
+                                         sadece hover'da ikonun kendi rengi değişiyor. -->
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="Transparent">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SearchText.Length}" Value="0">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <TextBlock Text="✕" FontSize="9">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </Button>
+                            </Grid>
+
+                            <!-- 67 bin neredeyse hiç tekrarlamayan değer için checkbox listesi kurmak
+                                 (67 bin CheckBox+TextBlock) popup açılışında donmaya yol açıyordu —
+                                 IsSearchOnly sütunlarda bu liste hiç render edilmiyor (Options zaten
+                                 boş, bkz. MainViewModel.BuildSearchOnlyColumnFilter). -->
                             <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="260">
+                                <ScrollViewer.Style>
+                                    <Style TargetType="ScrollViewer">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSearchOnly}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ScrollViewer.Style>
                                 <ItemsControl ItemsSource="{Binding OptionsView}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate DataType="{x:Type models:FilterOption}">
@@ -97,7 +170,8 @@
                                                     </Style>
                                                 </Border.Style>
                                                 <CheckBox IsChecked="{Binding IsChecked}" FontSize="11">
-                                                    <TextBlock FontSize="11">
+                                                    <TextBlock FontSize="11" MaxWidth="175" TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding Value, Mode=OneWay}">
                                                         <Run Text="{Binding Value, Mode=OneWay}" />
                                                         <Run Text=" (" /><Run Text="{Binding Count, Mode=OneWay}" /><Run Text=")" />
                                                     </TextBlock>
@@ -226,24 +300,28 @@
 
                     <Button Content="Apply Resolver" Command="{Binding ApplyResolverCommand}" Margin="0,0,14,0" />
 
-                    <!-- Sütun seçici: hangi ek metadata sütununun (Geliştirici/Yayıncı/Yıl/Bölge/
-                         Kaynak/...) DataGrid'de görüneceğini seçer. DataGridColumn görsel ağacın
-                         parçası olmadığından XAML binding ile doğrudan gizlenemiyor; bu yüzden
-                         her satırın IsVisible değişimi kod-arkasında (MainWindow.xaml.cs) ilgili
-                         sütunu bulup Visibility'sini günceller. -->
-                    <ToggleButton x:Name="ColumnsToggle" Content="Sütunlar ▾" />
-                    <Popup PlacementTarget="{Binding ElementName=ColumnsToggle}" IsOpen="{Binding IsChecked, ElementName=ColumnsToggle}"
-                           StaysOpen="False" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade">
+                    <!-- Sütun seçici: hangi sütunun DataGrid'de görüneceğini seçer. Ayrı bir "Sütunlar"
+                         düğmesi yok — herhangi bir sütun başlığına sağ tıklandığında bu popup açılır
+                         (bkz. MainWindow.xaml.cs GamesGrid_PreviewMouseRightButtonUp, IsColumnPickerOpen).
+                         DataGridColumn görsel ağacın parçası olmadığından XAML binding ile doğrudan
+                         gizlenemiyor; her satırın IsVisible değişimi kod-arkasında ilgili sütunu bulup
+                         Visibility'sini günceller. -->
+                    <Popup IsOpen="{Binding IsColumnPickerOpen}"
+                           StaysOpen="False" Placement="MousePoint" AllowsTransparency="True" PopupAnimation="Fade">
                         <Border Background="{StaticResource Brush.Background.Elevated}"
                                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
                                 CornerRadius="4" Padding="8" MinWidth="160">
-                            <ItemsControl ItemsSource="{Binding ColumnOptions}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate DataType="{x:Type models:ColumnVisibilityOption}">
-                                        <CheckBox Content="{Binding Header}" IsChecked="{Binding IsVisible}" Margin="2" />
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <!-- 19 sütunun hepsi listede olduğu için (bkz. MainViewModel.ColumnDefinitions)
+                                 sabit bir MaxHeight + kaydırma şart — yoksa popup ekranın altına taşabilir. -->
+                            <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                                <ItemsControl ItemsSource="{Binding ColumnOptions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type models:ColumnVisibilityOption}">
+                                            <CheckBox Content="{Binding Header}" IsChecked="{Binding IsVisible}" Margin="2" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
                         </Border>
                     </Popup>
                 </StackPanel>
@@ -512,8 +590,8 @@
                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                                        Foreground="{StaticResource Brush.Text.Secondary}" />
                                         </Border>
-                                        <TextBlock Grid.Column="1" Text="{Binding Platform.Name}" VerticalAlignment="Center"
-                                                   Margin="6,0,4,0" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Platform.DisplayName}" VerticalAlignment="Center"
+                                                   Margin="6,0,4,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Platform.Name}" />
                                         <Border Grid.Column="2" Background="{StaticResource Brush.Background.Elevated}"
                                                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
                                                 CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
@@ -544,6 +622,7 @@
                       ItemsSource="{Binding Games}"
                       SelectedItem="{Binding SelectedGame}"
                       RowHeight="{Binding RowHeight}"
+                      CanUserSortColumns="False"
                       EnableRowVirtualization="True"
                       EnableColumnVirtualization="True"
                       VirtualizingPanel.IsVirtualizing="True"
@@ -552,7 +631,7 @@
                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
                       PreviewMouseRightButtonUp="GamesGrid_PreviewMouseRightButtonUp">
                 <DataGrid.Columns>
-                    <DataGridTemplateColumn Header="{Binding Data.MatchedFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTemplateColumn x:Name="MatchedColumn" Header="{Binding Data.MatchedFilter, Source={StaticResource ViewModelProxy}}"
                                              HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="34">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
@@ -564,7 +643,7 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTemplateColumn Header="Logo" Width="44">
+                    <DataGridTemplateColumn x:Name="LogoColumn" Header="Logo" Width="44">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
                                 <Border Width="28" Height="28" CornerRadius="3" Background="{StaticResource Brush.Background.Elevated}" />
@@ -576,7 +655,7 @@
                          Düz Unicode karakter kullanılıyor (emoji değil) — sütun başlığındaki ★'ın
                          bu ortamda sorunsuz render olduğu zaten doğrulandı; ilk denemede kullanılan
                          elle çizilmiş Polygon şekli 34px'lik hücrede bozuk görünüyordu. -->
-                    <DataGridTemplateColumn Header="{Binding Data.FavoriteFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTemplateColumn x:Name="FavoriteColumn" Header="{Binding Data.FavoriteFilter, Source={StaticResource ViewModelProxy}}"
                                              HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="34">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
@@ -606,7 +685,7 @@
 
                     <!-- ROM'u bulunamayan oyunlarda görünen "web'de ara" büyüteci — ROM mevcutsa
                          (HasLocalFile) hiç gösterilmiyor, kullanıcı isteğiyle sadece eksik olanlarda. -->
-                    <DataGridTemplateColumn Header="{Binding Data.HasLocalFileFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTemplateColumn x:Name="SearchColumn" Header="{Binding Data.HasLocalFileFilter, Source={StaticResource ViewModelProxy}}"
                                              HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="34">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
@@ -640,11 +719,11 @@
                          kendi yatay kaydırma çubuğunun devreye girmesi (sütunların sıkışıp
                          küçülmesi yerine) için bu şart: "*" ile genişlik her zaman mevcut alana
                          göre yeniden dağıtılır ve taşma/scroll hiç oluşmaz. -->
-                    <DataGridTextColumn Header="{Binding Data.TitleFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTextColumn x:Name="TitleColumn" Header="{Binding Data.TitleFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Title}" Width="220" />
+                                         Binding="{Binding Title}" SortMemberPath="Title" Width="220" />
 
-                    <DataGridTemplateColumn Header="{Binding Data.BoxFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTemplateColumn x:Name="BoxColumn" Header="{Binding Data.BoxFilter, Source={StaticResource ViewModelProxy}}"
                                              HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
@@ -653,7 +732,7 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTemplateColumn Header="{Binding Data.BackgroundFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTemplateColumn x:Name="BackgroundColumn" Header="{Binding Data.BackgroundFilter, Source={StaticResource ViewModelProxy}}"
                                              HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
@@ -662,7 +741,7 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTemplateColumn Header="{Binding Data.ScreenshotFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTemplateColumn x:Name="ScreenshotColumn" Header="{Binding Data.ScreenshotFilter, Source={StaticResource ViewModelProxy}}"
                                              HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
@@ -671,39 +750,39 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTextColumn Header="{Binding Data.FileFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTextColumn x:Name="FileColumn" Header="{Binding Data.FileFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding File}" Width="200" />
-                    <DataGridTextColumn Header="{Binding Data.PlatformFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Platform}" Width="160" />
-                    <DataGridTextColumn Header="{Binding Data.StatusFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Version}" Width="90" />
-                    <DataGridTextColumn Header="{Binding Data.GenresFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Genres}" Width="150" />
+                                         Binding="{Binding File}" SortMemberPath="File" Width="200" />
+                    <DataGridTextColumn x:Name="PlatformColumn" Header="{Binding Data.PlatformFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
+                                         Binding="{Binding PlatformDisplayName}" SortMemberPath="PlatformDisplayName" Width="160" />
+                    <DataGridTextColumn x:Name="StatusColumn" Header="{Binding Data.StatusFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
+                                         Binding="{Binding Version}" SortMemberPath="Version" Width="90" />
+                    <DataGridTextColumn x:Name="GenresColumn" Header="{Binding Data.GenresFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
+                                         Binding="{Binding Genres}" SortMemberPath="Genres" Width="150" />
 
                     <!-- Aşağıdaki sütunlar varsayılan gizli (bkz. ColumnOptions) — "Sütunlar" düğmesiyle
                          açılıp kapanır, kod-arkası (MainWindow.xaml.cs) x:Name üzerinden yönetir. -->
                     <DataGridTextColumn x:Name="DeveloperColumn" Header="{Binding Data.DeveloperFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Developer}" Width="140" Visibility="Collapsed" />
+                                         Binding="{Binding Developer}" SortMemberPath="Developer" Width="140" Visibility="Collapsed" />
                     <DataGridTextColumn x:Name="PublisherColumn" Header="{Binding Data.PublisherFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Publisher}" Width="140" Visibility="Collapsed" />
+                                         Binding="{Binding Publisher}" SortMemberPath="Publisher" Width="140" Visibility="Collapsed" />
                     <DataGridTextColumn x:Name="ReleaseYearColumn" Header="{Binding Data.ReleaseYearFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding ReleaseYear}" Width="70" Visibility="Collapsed" />
+                                         Binding="{Binding ReleaseYear}" SortMemberPath="ReleaseYear" Width="70" Visibility="Collapsed" />
                     <DataGridTextColumn x:Name="MaxPlayersColumn" Header="{Binding Data.MaxPlayersFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding MaxPlayers}" Width="90" Visibility="Collapsed" />
+                                         Binding="{Binding MaxPlayers}" SortMemberPath="MaxPlayers" Width="90" Visibility="Collapsed" />
                     <DataGridTextColumn x:Name="RegionColumn" Header="{Binding Data.RegionFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Region}" Width="90" Visibility="Collapsed" />
+                                         Binding="{Binding Region}" SortMemberPath="Region" Width="90" Visibility="Collapsed" />
                     <DataGridTextColumn x:Name="SourceColumn" Header="{Binding Data.SourceFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding SourceDat}" Width="90" Visibility="Collapsed" />
+                                         Binding="{Binding SourceDat}" SortMemberPath="SourceDat" Width="90" Visibility="Collapsed" />
                     <DataGridTextColumn x:Name="MatchMethodColumn" Header="{Binding Data.MatchMethodFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding MatchMethod}" Width="130" Visibility="Collapsed" />
+                                         Binding="{Binding MatchMethod}" SortMemberPath="MatchMethod" Width="130" Visibility="Collapsed" />
                 </DataGrid.Columns>
             </DataGrid>
 

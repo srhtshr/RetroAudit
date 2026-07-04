@@ -63,7 +63,6 @@ public static class PlatformAllowList
         "SNK - Neo Geo Pocket",
         "SNK - Neo Geo Pocket Color",
         "NEC - PC Engine - TurboGrafx 16",
-        "NEC - PC Engine CD - TurboGrafx-CD",
         "NEC - PC-FX",
         "The 3DO Company - 3DO",
         "Philips - CD-i",
@@ -76,6 +75,11 @@ public static class PlatformAllowList
         // ZX Spectrum kasıtlı olarak burada YOK — kullanıcı kararıyla (17.381 oyunluk şişme,
         // %53 bilinmeyen bölge) programdan tamamen dışlandı, curated mock listede görünmesine
         // rağmen Builder'a hiç dahil edilmiyor.
+
+        // "NEC - PC Engine CD - TurboGrafx-CD" de aynı şekilde kasıtlı olarak burada YOK —
+        // kullanıcı kararıyla kaldırıldı (temel "PC Engine - TurboGrafx-16" ile karıştırılıyordu).
+        // Zaten üretilmiş RetroAudit.db'lerdeki karşılığı ayrıca CatalogDatabaseService.
+        // RemovedPlatformName ile okuma sırasında filtreleniyor.
     };
 
     public static bool IsAllowed(string canonicalPlatformName) => Allowed.Contains(canonicalPlatformName);

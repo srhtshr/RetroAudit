@@ -2,6 +2,31 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.16] - 2026-07-05
+
+### Added
+- Sol paneldeki platform listesi artık sade isimler gösteriyor (ör. "Nintendo - Nintendo 64" yerine
+  "Nintendo 64"); DataGrid'in Platform sütunu ve filtresi de aynı sade isimlere geçti. Ham DAT adı
+  hâlâ filtreleme/eşleştirme/dosya yolu için kullanılıyor, sadece görünen metin değişti (bkz.
+  `PlatformDisplayNameMap`).
+- "PC Engine CD - TurboGrafx-CD" platformu tamamen kaldırıldı (temel "PC Engine - TurboGrafx-16"
+  yeterli kabul edildi, ikisi kafa karıştırıyordu) — hem Builder'ın taşıma listesinden hem de
+  önceden üretilmiş RetroAudit.db'den okuma sırasında filtreleniyor.
+- Sütun görünürlüğü artık tüm 19 sütun için ayarlanabiliyor (önceden sadece 7 ek metadata sütunu
+  açılıp kapanabiliyordu) ve tercih diske kaydedilip bir sonraki açılışta hatırlanıyor. Ayrı bir
+  "Sütunlar" düğmesi kaldırıldı — herhangi bir sütun başlığına **sağ tık** bu seçiciyi açıyor.
+- Sütun filtreleri yeniden tasarlandı: huni ikonu kaldırıldı, başlığın herhangi bir yerine **sol
+  tık** filtre/arama açılır menüsünü açıyor. Menüye "↑ Sırala A-Z" / "↓ Sırala Z-A" eklendi
+  (DataGrid'in kendi tık-ile-sırala davranışının yerini aldı). Tüm sütunların filtre menüsü artık
+  aynı sabit genişlikte (önceden içerik uzunluğuna göre değişiyordu); uzun değerler "..." ile
+  kırpılıp tam metin tooltip'te gösteriliyor.
+- Başlık ve File sütunları için filtre menüsü artık sadece bir arama kutusu (checkbox listesi
+  yok) — bu iki sütunda ~67 bin neredeyse hiç tekrarlamayan değer olduğundan tam liste kurmak
+  popup'ı açarken donmaya yol açıyordu. Arama artık her tuş vuruşunda değil **Enter**'a basılınca
+  uygulanıyor (66 bin satırı her harfte yeniden filtrelemek gecikme yaratıyordu); arama kutusunun
+  içindeki "✕" önceki aramayı Enter'a gerek kalmadan anında temizliyor. Menü her açıldığında arama
+  kutusu otomatik odaklanıp mevcut metni seçili getiriyor.
+
 ## [0.15] - 2026-07-05
 
 ### Fixed

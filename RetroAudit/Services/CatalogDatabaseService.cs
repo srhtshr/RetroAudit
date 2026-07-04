@@ -18,6 +18,13 @@ public static class CatalogDatabaseService
 
     public static bool DatabaseExists => File.Exists(DbPath);
 
+    // "PC Engine CD - TurboGrafx-CD" kullanıcı kararıyla programdan tamamen çıkarıldı (temel
+    // "PC Engine - TurboGrafx-16" yeterli kabul edildi, ikisi kafa karıştırıyordu). RetroAudit.db
+    // önceden üretilmiş bir dosya olduğu için (bkz. sınıf yorumu) Builder'ı yeniden çalıştırmadan
+    // bu platformu veritabanından gerçekten silemeyiz — burada, okuma sırasında filtreleniyor.
+    // Builder tarafındaki karşılığı: RetroAudit.Catalog/Dat/PlatformAllowList.cs.
+    private const string RemovedPlatformName = "NEC - PC Engine CD - TurboGrafx-CD";
+
     private static SqliteConnection OpenConnection()
     {
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = DbPath }.ConnectionString);
@@ -40,7 +47,7 @@ public static class CatalogDatabaseService
 
     public static List<Platform> GetPlatforms()
     {
-        var platforms = new List<Platform> { new() { Name = "All Platforms", IconGlyph = "ALL", IsAllPlatforms = true } };
+        var platforms = new List<Platform> { new() { Name = "All Platforms", DisplayName = "All Platforms", IconGlyph = "ALL", IsAllPlatforms = true } };
 
         if (!DatabaseExists)
             return platforms;
@@ -52,9 +59,13 @@ public static class CatalogDatabaseService
         while (reader.Read())
         {
             var name = reader.GetString(0);
+            if (name == RemovedPlatformName)
+                continue;
+
             platforms.Add(new Platform
             {
                 Name = name,
+                DisplayName = PlatformDisplayNameMap.Resolve(name),
                 IconGlyph = DeriveGlyph(name),
                 Category = reader.GetString(1),
             });
@@ -120,7 +131,9 @@ public static class CatalogDatabaseService
             JOIN Platforms p ON p.PlatformId = g.PlatformId
             LEFT JOIN Developers d ON d.DeveloperId = g.DeveloperId
             LEFT JOIN Publishers pub ON pub.PublisherId = g.PublisherId
+            WHERE p.Name <> $removedPlatform
             """;
+        cmd.Parameters.AddWithValue("$removedPlatform", RemovedPlatformName);
         using var gameReader = cmd.ExecuteReader();
         while (gameReader.Read())
         {
@@ -136,6 +149,7 @@ public static class CatalogDatabaseService
                 GameKey = GameKeyHelper.Compute(platformName, compareTitle),
                 Title = gameReader.GetString(1),
                 Platform = platformName,
+                PlatformDisplayName = PlatformDisplayNameMap.Resolve(platformName),
                 ReleaseYear = gameReader.IsDBNull(4) ? 0 : gameReader.GetInt32(4),
                 Developer = gameReader.IsDBNull(5) ? string.Empty : gameReader.GetString(5),
                 Publisher = gameReader.IsDBNull(6) ? string.Empty : gameReader.GetString(6),

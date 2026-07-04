@@ -152,17 +152,11 @@ public partial class MainViewModel : ObservableObject
     // "Sütunlar" düğmesiyle açılan seçici — hangi DataGrid sütununun görünür olacağını belirler.
     // MainWindow.xaml.cs, IsVisible değiştiğinde ilgili DataGridColumn'ı Key'e göre bulup
     // Visibility'sini günceller (DataGridColumn görsel ağacın parçası olmadığı için doğrudan
-    // XAML binding ile gizlenemiyor).
-    public ObservableCollection<ColumnVisibilityOption> ColumnOptions { get; } = new()
-    {
-        new() { Key = "Developer", Header = "Geliştirici", IsVisible = false },
-        new() { Key = "Publisher", Header = "Yayıncı", IsVisible = false },
-        new() { Key = "ReleaseYear", Header = "Yıl", IsVisible = false },
-        new() { Key = "MaxPlayers", Header = "Maks. Oyuncu", IsVisible = false },
-        new() { Key = "Region", Header = "Bölge", IsVisible = false },
-        new() { Key = "Source", Header = "Kaynak", IsVisible = false },
-        new() { Key = "MatchMethod", Header = "Eşleşme Yöntemi", IsVisible = false },
-    };
+    // XAML binding ile gizlenemiyor). Tüm 19 sütun da burada — artık hiçbiri "hep görünür/asla
+    // kapatılamaz" değil. Varsayılan IsVisible değerleri BuildColumnOptions'da kuruluyor
+    // (constructor'da, _appSettings.ColumnVisibility'deki kayıtlı tercihler bunun üzerine
+    // uygulanıyor ki daha önce kapatılmış bir sütun açılışta tekrar açık gelmesin).
+    public ObservableCollection<ColumnVisibilityOption> ColumnOptions { get; } = new();
 
     // Ayarlar > Arayüz sekmesinde değiştirilen ContextMenuDisplayMode/LaunchBoxDbPath gibi
     // tercihlerin kalıcı olması için (bkz. ConfigService.LoadDefault/SaveDefault). Bu alanlar
@@ -172,6 +166,7 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel()
     {
         _appSettings = ConfigService.LoadDefault();
+        BuildColumnOptions();
 
         _allGames = CatalogDatabaseService.GetGames();
         BuildLocalFileIndex();
@@ -185,7 +180,7 @@ public partial class MainViewModel : ObservableObject
         SyncPlatformGameCounts();
         RebuildPlatformListItems();
 
-        PlatformFilter = BuildColumnFilter("Platform", _allGames.Select(g => g.Platform));
+        PlatformFilter = BuildColumnFilter("Platform", _allGames.Select(g => g.PlatformDisplayName));
         StatusFilter = BuildColumnFilter("Sürüm", _allGames.Select(g => g.Version));
         GenresFilter = BuildColumnFilter("Türler", _allGames.Select(g => g.Genres));
         DeveloperFilter = BuildColumnFilter("Geliştirici", _allGames.Select(g => g.Developer));
@@ -195,8 +190,11 @@ public partial class MainViewModel : ObservableObject
         MatchMethodFilter = BuildColumnFilter("Eşleşme Yöntemi", _allGames.Select(g => g.MatchMethod));
         ReleaseYearFilter = BuildColumnFilter("Yıl", _allGames.Select(g => g.ReleaseYear == 0 ? string.Empty : g.ReleaseYear.ToString()));
         MaxPlayersFilter = BuildColumnFilter("Maks. Oyuncu", _allGames.Select(g => g.MaxPlayers == 0 ? string.Empty : g.MaxPlayers.ToString()));
-        TitleFilter = BuildColumnFilter("Başlık", _allGames.Select(g => g.Title));
-        FileFilter = BuildColumnFilter("File", _allGames.Select(g => g.File));
+        // Title/File: ~67 bin neredeyse hiç tekrarlamayan değer var — bunlar için tam checkbox
+        // listesi kurmak (BuildColumnFilter) hem gereksiz (kimse 67 bin satırlık bir onay
+        // listesinde gezinmez) hem de popup'ı açarken donmaya yol açıyordu. Sadece arama kutusu.
+        TitleFilter = BuildSearchOnlyColumnFilter("Başlık");
+        FileFilter = BuildSearchOnlyColumnFilter("File");
         MatchedFilter = BuildColumnFilter("Durum", _allGames.Select(g => g.StatusOk ? "Eşleşti" : "Eşleşmedi"));
         FavoriteFilter = BuildColumnFilter("Favori", _allGames.Select(g => g.IsFavorite ? "Evet" : "Hayır"));
         HasLocalFileFilter = BuildColumnFilter("Dosya", _allGames.Select(g => g.HasLocalFile ? "Var" : "Yok"));
@@ -241,6 +239,51 @@ public partial class MainViewModel : ObservableObject
         ApplyFilter();
     }
 
+    // Sütun anahtarı -> varsayılan (kayıtlı tercih yoksa kullanılacak) görünürlük ve başlık.
+    // Sıra, DataGrid'deki sütun sırasıyla aynı — sadece okunabilirlik için, işlevsel bir önemi yok.
+    private static readonly (string Key, string Header, bool DefaultVisible)[] ColumnDefinitions =
+    {
+        ("Matched", "Durum", true),
+        ("Logo", "Logo", true),
+        ("Favorite", "Favori", true),
+        ("Search", "Ara (Eksik ROM)", true),
+        ("Title", "Başlık", true),
+        ("Box", "Box", true),
+        ("Background", "BG", true),
+        ("Screenshot", "SS", true),
+        ("File", "File", true),
+        ("Platform", "Platform", true),
+        ("Status", "Sürüm", true),
+        ("Genres", "Türler", true),
+        ("Developer", "Geliştirici", false),
+        ("Publisher", "Yayıncı", false),
+        ("ReleaseYear", "Yıl", false),
+        ("MaxPlayers", "Maks. Oyuncu", false),
+        ("Region", "Bölge", false),
+        ("Source", "Kaynak", false),
+        ("MatchMethod", "Eşleşme Yöntemi", false),
+    };
+
+    // ColumnOptions'ı sabit varsayılanlarla kurar, ardından _appSettings.ColumnVisibility'de
+    // kayıtlı bir tercih varsa (kullanıcı daha önce bu sütunu açıp/kapattıysa) onu üzerine uygular.
+    private void BuildColumnOptions()
+    {
+        ColumnOptions.Clear();
+        foreach (var (key, header, defaultVisible) in ColumnDefinitions)
+        {
+            var isVisible = _appSettings.ColumnVisibility.GetValueOrDefault(key, defaultVisible);
+            ColumnOptions.Add(new ColumnVisibilityOption { Key = key, Header = header, IsVisible = isVisible });
+        }
+    }
+
+    // MainWindow.xaml.cs, bir sütunun IsVisible'ı değiştiğinde (kullanıcı "Sütunlar" listesinden
+    // tikini açıp/kapattığında) bunu çağırır — o anki tüm sütun durumlarını tek seferde diske yazar.
+    public void SaveColumnVisibility()
+    {
+        _appSettings.ColumnVisibility = ColumnOptions.ToDictionary(o => o.Key, o => o.IsVisible);
+        ConfigService.SaveDefault(_appSettings);
+    }
+
     // Boş değerleri "(Boş)" olarak grupluyor ki filtre listesinde görünmez bir satır olmasın;
     // ApplyFilter'daki karşılaştırma da aynı normalizasyonu kullanıyor (bkz. NormalizeForFilter).
     private static string NormalizeForFilter(string value) => string.IsNullOrWhiteSpace(value) ? "(Boş)" : value;
@@ -256,6 +299,11 @@ public partial class MainViewModel : ObservableObject
 
         return new ColumnFilterViewModel(options) { HeaderText = headerText };
     }
+
+    // Title/File gibi neredeyse hiç tekrarlamayan sütunlar için: Options listesi hiç kurulmuyor
+    // (GroupBy'ı bile çalıştırmıyor) — bkz. ColumnFilterViewModel.IsSearchOnly.
+    private static ColumnFilterViewModel BuildSearchOnlyColumnFilter(string headerText) =>
+        new() { HeaderText = headerText, IsSearchOnly = true };
 
     // Tools menüsünden bir eylem seçildiğinde ilgili pencereyi açar, ardından seçimi
     // "Tools" placeholder'ına geri döndürür (aksi halde ComboBox hep son seçili eylemi gösterirdi).
@@ -548,6 +596,11 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool isAddToPlaylistPopupOpen;
 
+    // Sütun görünürlüğü seçici popup'ı — artık ayrı bir "Sütunlar" düğmesi yok, herhangi bir
+    // sütun başlığına sağ tıklandığında açılır (bkz. MainWindow.xaml.cs, GamesGrid_PreviewMouseRightButtonUp).
+    [ObservableProperty]
+    private bool isColumnPickerOpen;
+
     // Ayarlar > Arayüz sekmesinden değiştirilir (bkz. SettingsViewModel, AppSettings persistence).
     [ObservableProperty]
     private ContextMenuDisplayMode contextMenuDisplayMode = ContextMenuDisplayMode.IconAndText;
@@ -785,7 +838,7 @@ public partial class MainViewModel : ObservableObject
 
             query = query.Where(g => (ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk"));
 
-            query = ApplyColumnFilter(query, PlatformFilter, g => g.Platform);
+            query = ApplyColumnFilter(query, PlatformFilter, g => g.PlatformDisplayName);
             query = ApplyColumnFilter(query, StatusFilter, g => g.Version);
             query = ApplyColumnFilter(query, GenresFilter, g => g.Genres);
             query = ApplyColumnFilter(query, DeveloperFilter, g => g.Developer);
@@ -814,11 +867,15 @@ public partial class MainViewModel : ObservableObject
     }
 
     // Bir sütun filtresi "aktif" (en az bir değer işaretsiz) değilse hiçbir şey elemez; aktifse
-    // sadece işaretli değerlerden birine sahip oyunları geçirir.
+    // sadece işaretli değerlerden birine sahip oyunları geçirir. IsSearchOnly sütunlarda (Title/
+    // File) checkbox listesi hiç yok — SearchText içeriğe göre doğrudan alt-dize eşleşmesi yapar.
     private static IEnumerable<Game> ApplyColumnFilter(IEnumerable<Game> query, ColumnFilterViewModel filter, Func<Game, string> selector)
     {
         if (!filter.IsActive)
             return query;
+
+        if (filter.IsSearchOnly)
+            return query.Where(g => selector(g).Contains(filter.SearchText, StringComparison.OrdinalIgnoreCase));
 
         var selected = filter.SelectedValues;
         return query.Where(g => selected.Contains(NormalizeForFilter(selector(g))));

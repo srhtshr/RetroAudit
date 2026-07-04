@@ -56,4 +56,9 @@ public class AppSettings
     // Re-match Metadata komutu için — Builder'ın kullandığı LaunchBox.Metadata.db yolu, WPF
     // tarafında da bilinmesi gerekiyor (bkz. plan: RetroAudit.Catalog referansı).
     public string LaunchBoxDbPath { get; set; } = string.Empty;
+
+    // "Sütunlar" seçicisindeki her sütunun son görünürlük durumu (Key -> IsVisible). Kullanıcı
+    // bir sütunu açıp/kapatınca MainViewModel.SaveColumnVisibility burayı güncelleyip diske yazar;
+    // uygulama açılışında bu değerler ColumnOptions'ın sabit varsayılanlarının üzerine uygulanır.
+    public Dictionary<string, bool> ColumnVisibility { get; set; } = new();
 }

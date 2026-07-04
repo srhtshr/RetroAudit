@@ -26,6 +26,13 @@ public partial class ColumnFilterViewModel : ObservableObject
     public string HeaderText { get; init; } = string.Empty;
     public ObservableCollection<FilterOption> Options { get; }
 
+    // Başlık/File gibi ~67 bin neredeyse hiç tekrarlamayan değere sahip sütunlarda checkbox
+    // listesi kurmak (67 bin CheckBox+TextBlock oluşturup render etmek) popup'ı açarken UI'ı
+    // donduruyordu. Bu sütunlarda Options hiç doldurulmuyor (bkz. MainViewModel.
+    // BuildSearchOnlyColumnFilter); bunun yerine SearchText grid'i doğrudan (Contains) filtreliyor
+    // — checkbox/Temizle/OK/Cancel hiç gösterilmiyor (bkz. MainWindow.xaml).
+    public bool IsSearchOnly { get; init; }
+
     // Popup içindeki arama kutusuna bağlı — OptionsView'ı (aşağıda) anlık filtreler.
     [ObservableProperty]
     private string searchText = string.Empty;
@@ -94,13 +101,40 @@ public partial class ColumnFilterViewModel : ObservableObject
         string.IsNullOrWhiteSpace(SearchText) ||
         (obj is FilterOption option && option.Value.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
 
-    partial void OnSearchTextChanged(string value) => OptionsView.Refresh();
+    // Kullanıcı isteğiyle: arama artık her tuş vuruşunda DEĞİL, Enter'a basılınca uygulanıyor
+    // (bkz. MainWindow.xaml TextBox.InputBindings). IsSearchOnly sütunlarda (Title/File) her
+    // tuş vuruşunda tüm grid'i (66 bin oyun) yeniden filtreleyip Games koleksiyonunu baştan
+    // doldurmak hızlı yazarken gözle görülür bir gecikme/donma hissi yaratıyordu; normal
+    // sütunlarda da (checkbox listesini daraltan arama) aynı Enter-ile-ara davranışı için
+    // tutarlılık adına uygulanıyor.
+    [RelayCommand]
+    private void Search()
+    {
+        if (IsSearchOnly)
+        {
+            IsActive = !string.IsNullOrWhiteSpace(SearchText);
+            FilterChanged?.Invoke();
+            return;
+        }
+
+        OptionsView.Refresh();
+    }
+
+    // Arama kutusunun içindeki "✕" düğmesi — Search'ün aksine Enter beklemeden hemen temizler
+    // (kullanıcı isteği: önceki aramayı Backspace/Delete ile tek tek silmek yerine tek tıkla).
+    [RelayCommand]
+    private void ClearSearch()
+    {
+        SearchText = string.Empty;
+        Search();
+    }
 
     [RelayCommand]
     private void Open()
     {
         _snapshotChecked = Options.Where(o => o.IsChecked).Select(o => o.Value).ToHashSet();
-        SearchText = string.Empty;
+        if (!IsSearchOnly)
+            SearchText = string.Empty;
         IsPopupOpen = true;
     }
 

@@ -17,7 +17,12 @@ public partial class Game : ObservableObject
     public string GameKey { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;
+
+    // Ham DAT platform adı ("Atari - Jaguar" gibi) — filtreleme/GameKey/dosya yolu hep bunu kullanır.
     public string Platform { get; set; } = string.Empty;
+
+    // DataGrid'in Platform sütununda gösterilen sade isim ("Jaguar") — bkz. PlatformDisplayNameMap.
+    public string PlatformDisplayName { get; set; } = string.Empty;
 
     // "Released" / "Junk" — toolbar'daki filtre butonlarıyla eşleşir. Gerçek veride
     // Games.HiddenByDefault'a karşılık gelir (Casino/Board Game/Educational gibi türler "Junk").

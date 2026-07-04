@@ -1,6 +1,8 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using RetroAudit.Models;
@@ -71,8 +73,21 @@ public partial class MainWindow : Window
     // durumunu ortadan kaldırıyor çünkü o an itibariyle tıklama jesti zaten tamamlanmış oluyor.
     private void GamesGrid_PreviewMouseRightButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
-        if (FindVisualParent<DataGridRow>(e.OriginalSource as DependencyObject) is { Item: Game game } &&
-            DataContext is MainViewModel vm)
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        // Herhangi bir sütun başlığına sağ tıklamak, ayrı bir "Sütunlar" düğmesine gerek
+        // kalmadan sütun görünürlüğü seçicisini açar (bkz. kullanıcı isteği: "fazladan gereksiz
+        // buton olmaz"). Satır kontrolünden ÖNCE kontrol edilmeli — başlık, satırların üstünde
+        // ayrı bir öğe.
+        if (FindVisualParent<DataGridColumnHeader>(e.OriginalSource as DependencyObject) is not null)
+        {
+            e.Handled = true;
+            vm.IsColumnPickerOpen = true;
+            return;
+        }
+
+        if (FindVisualParent<DataGridRow>(e.OriginalSource as DependencyObject) is { Item: Game game })
         {
             e.Handled = true;
 
@@ -94,6 +109,67 @@ public partial class MainWindow : Window
         return element as T;
     }
 
+    private static T? FindVisualChild<T>(DependencyObject? element) where T : DependencyObject
+    {
+        if (element is null)
+            return null;
+
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(element); i++)
+        {
+            var child = VisualTreeHelper.GetChild(element, i);
+            if (child is T match)
+                return match;
+
+            if (FindVisualChild<T>(child) is T found)
+                return found;
+        }
+
+        return null;
+    }
+
+    // Sütun filtresi popup'ı açıldığında arama kutusuna otomatik odaklanır ve içindeki (varsa
+    // önceki) metni seçili getirir — önceden kullanıcı popup'ı açtıktan sonra kutuya ayrıca
+    // tıklaması gerekiyordu.
+    private void FilterPopup_Opened(object sender, EventArgs e)
+    {
+        if (sender is not Popup { Child: DependencyObject child } || FindVisualChild<TextBox>(child) is not { } textBox)
+            return;
+
+        textBox.Focus();
+        textBox.SelectAll();
+    }
+
+    // Sıralama artık DataGridColumnHeader'a tıklamakla değil (o artık filtre dropdown'ını açıyor —
+    // bkz. FilterableColumnHeader, CanUserSortColumns="False"), bu dropdown'ın en üstündeki
+    // "Sırala A-Z"/"Sırala Z-A" düğmeleriyle yapılıyor. Düğme, filtre şablonunun içinde olduğu için
+    // görsel ağaçta yukarı çıkıp hangi DataGridColumnHeader'a (dolayısıyla hangi DataGridColumn'a)
+    // ait olduğunu buluyoruz — WPF'in kendi otomatik sıralamasının kullandığı SortMemberPath +
+    // ICollectionView.SortDescriptions mekanizmasının aynısı, sadece manuel tetikleniyor.
+    private void SortAscending_Click(object sender, RoutedEventArgs e) => ApplyHeaderSort(sender, ListSortDirection.Ascending);
+
+    private void SortDescending_Click(object sender, RoutedEventArgs e) => ApplyHeaderSort(sender, ListSortDirection.Descending);
+
+    private void ApplyHeaderSort(object sender, ListSortDirection direction)
+    {
+        if (sender is not DependencyObject element)
+            return;
+
+        if (FindVisualParent<DataGridColumnHeader>(element)?.Column is not { } column ||
+            string.IsNullOrEmpty(column.SortMemberPath))
+            return;
+
+        var view = CollectionViewSource.GetDefaultView(GamesGrid.ItemsSource);
+        view.SortDescriptions.Clear();
+        view.SortDescriptions.Add(new SortDescription(column.SortMemberPath, direction));
+
+        foreach (var col in GamesGrid.Columns)
+            col.SortDirection = null;
+        column.SortDirection = direction;
+
+        if (element is FrameworkElement { DataContext: ColumnFilterViewModel filterVm })
+            filterVm.IsPopupOpen = false;
+    }
+
     // "Sütunlar" seçicisindeki her satır bir DataGridColumn'a karşılık gelir (Key ile eşleşir).
     // DataGridColumn görsel ağacın parçası olmadığı için Visibility'si XAML'de doğrudan
     // bağlanamıyor — bu yüzden ColumnVisibilityOption.IsVisible değiştiğinde ilgili sütunu burada,
@@ -102,6 +178,18 @@ public partial class MainWindow : Window
     {
         var columnsByKey = new Dictionary<string, DataGridColumn>
         {
+            ["Matched"] = MatchedColumn,
+            ["Logo"] = LogoColumn,
+            ["Favorite"] = FavoriteColumn,
+            ["Search"] = SearchColumn,
+            ["Title"] = TitleColumn,
+            ["Box"] = BoxColumn,
+            ["Background"] = BackgroundColumn,
+            ["Screenshot"] = ScreenshotColumn,
+            ["File"] = FileColumn,
+            ["Platform"] = PlatformColumn,
+            ["Status"] = StatusColumn,
+            ["Genres"] = GenresColumn,
             ["Developer"] = DeveloperColumn,
             ["Publisher"] = PublisherColumn,
             ["ReleaseYear"] = ReleaseYearColumn,
@@ -119,8 +207,11 @@ public partial class MainWindow : Window
             column.Visibility = option.IsVisible ? Visibility.Visible : Visibility.Collapsed;
             option.PropertyChanged += (_, e) =>
             {
-                if (e.PropertyName == nameof(option.IsVisible))
-                    column.Visibility = option.IsVisible ? Visibility.Visible : Visibility.Collapsed;
+                if (e.PropertyName != nameof(option.IsVisible))
+                    return;
+
+                column.Visibility = option.IsVisible ? Visibility.Visible : Visibility.Collapsed;
+                vm.SaveColumnVisibility();
             };
         }
     }

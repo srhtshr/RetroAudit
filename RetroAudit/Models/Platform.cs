@@ -5,7 +5,13 @@ namespace RetroAudit.Models;
 // IsAllPlatforms bayrağıyla ayırt edilir.
 public class Platform
 {
+    // RetroAudit.db'deki gerçek (DAT kaynaklı) platform adı — "Nintendo - Nintendo 64" gibi.
+    // Games.Platform ile eşleştirme/filtreleme burada, ASLA DisplayName ile yapılmaz.
     public string Name { get; set; } = string.Empty;
+
+    // Sol panelde gösterilen sade isim (ör. "Nintendo 64") — bkz. PlatformDisplayNameMap.
+    // Eşlemede yoksa Name'e düşer (CatalogDatabaseService.GetPlatforms bunu ayarlar).
+    public string DisplayName { get; set; } = string.Empty;
 
     // Gerçek logo görseli yerine kullanılan kısa metin placeholder'ı (ör. "NES", "PS2").
     // İleride gerçek platform logosu eklendiğinde bu alanın yerini bir ImageSource alacak.
