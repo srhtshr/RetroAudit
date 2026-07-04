@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.13)
+## Mevcut durum (v0.17)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
@@ -14,8 +14,8 @@ Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Servic
 Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Themes/ObsidianDark.xaml`).
 
 ### Özellikler
-- Sol panelde kategoriye göre gruplanmış ~40 platform, sanallaştırılmış oyun tablosu (67 binin üzerinde oyun).
-- Her sütunda arama kutulu, "Hepsini Seç/Temizle" filtre dropdown'ı + gösterilecek sütunları seçme paneli.
+- Sol panelde kategoriye göre gruplanmış ~40 platform (sade isimlerle, ör. "Nintendo 64"), sanallaştırılmış oyun tablosu (67 binin üzerinde oyun).
+- Sütun başlığına **sol tık**: arama kutulu filtre + "Sırala A-Z/Z-A" dropdown'ı açılır (Title/File gibi neredeyse hiç tekrarlamayan sütunlarda sadece arama, Enter'a basınca uygulanır). **Sağ tık**: tüm 19 sütunun görünürlüğünü aç/kapa (tercih diske kaydedilip hatırlanır).
 - Yıldız sütunuyla tek tıkla favoriye ekleme; ROM'u eksik oyunlarda tabloda doğrudan görünen "web'de ara" butonu.
 - Sağ tık ile açılan kapsül biçimli komut menüsü (Ayarlar > Arayüz'den İkon / İkon+Metin seçilebilir): Sil (önce çöp kutusuna taşır), Gizle, Metadata Düzenle, Dosya Konumunu Aç, Web'de Ara, Sürüm listesinden "Preferred yap", Metadata'yı Yeniden Eşleştir. Çoklu seçimde sadece çakışmayan toplu eylemler (favori/gizle/sil/playlist) gösterilir.
 - Kullanıcının oluşturduğu sınırsız playlist + sabit Favorites/Hidden/Recycle Bin, tümü tablonun üstünde tıklanabilir chip/etiket olarak.

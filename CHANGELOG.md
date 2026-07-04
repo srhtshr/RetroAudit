@@ -2,6 +2,13 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.18] - 2026-07-05
+
+### Fixed
+- README'deki "Mevcut durum" başlığı hâlâ v0.13'ü gösteriyordu ve özellik listesi Stage B
+  sonrasında eklenen sütun filtre/sıralama/görünürlük yeniden tasarımını yansıtmıyordu — v0.17'ye
+  ve güncel etkileşim modeline (sol tık: filtre+sırala, sağ tık: sütun görünürlüğü) güncellendi.
+
 ## [0.17] - 2026-07-05
 
 ### Added
