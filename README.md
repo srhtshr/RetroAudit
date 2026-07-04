@@ -2,6 +2,8 @@
 
 Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (CommunityToolkit.Mvvm) ile geliştiriliyor.
 
+📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
+
 ## Mevcut durum (v0.13)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
@@ -36,7 +38,7 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 
 Önce katalogu üret (bir kere, veya DAT/LaunchBox verisi güncellendiğinde tekrar):
 
-```
+```bash
 dotnet run --project RetroAudit.Builder -- --dat-folder "<DAT klasörü yolu>" --launchbox-db "<LaunchBox.Metadata.db yolu>"
 ```
 
@@ -44,14 +46,14 @@ Argümanlar verilmezse Builder bu makinedeki varsayılan yolları dener; `--plat
 
 Sonra WPF uygulamasını çalıştır (aynı `%LOCALAPPDATA%\RetroAudit\RetroAudit.db`'yi okur):
 
-```
+```bash
 dotnet build
 dotnet run --project RetroAudit
 ```
 
 ## Proje yapısı
 
-```
+```text
 RetroAudit.Catalog/    DAT ayrıştırma, 1G1R gruplama, LaunchBox eşleştirme, SQLite şeması (Builder ve WPF'nin ortak referansı)
 RetroAudit.Builder/    RetroAudit.db'yi üreten komut satırı aracı (yukarıdaki "Çalıştırma" bölümüne bkz.)
 RetroAudit/            WPF uygulaması
@@ -59,7 +61,7 @@ RetroAudit/            WPF uygulaması
   Services/            CatalogDatabaseService (RetroAudit.db okuma), UserDataService (RetroAuditUserData.db), config servisi
   ViewModels/          MVVM ViewModel'ler (CommunityToolkit.Mvvm ObservableObject/RelayCommand)
   Views/               XAML pencereleri
-  Converters/           Value converter'lar
+  Converters/          Value converter'lar
   Themes/              Koyu tema (Obsidian) kaynak sözlüğü
 ```
 

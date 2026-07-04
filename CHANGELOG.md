@@ -2,6 +2,17 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.17] - 2026-07-05
+
+### Added
+- `AGENTS.md` eklendi — bu depoda çalışan AI ajanları için mimari özeti, iki-veritabanı
+  invaryantı, ham/görünen platform adı ayrımı ve bu oturumda tekrar keşfedilmiş WPF tuzakları.
+- README'nin en üstüne kısa bir gezinme satırı eklendi (Changelog / AI Guide / License).
+
+### Fixed
+- README'deki "Proje yapısı" kod bloğunda `Converters/` satırının hizası düzeltildi; kabuk
+  komutu bloklarına `bash`/`text` dil etiketleri eklendi.
+
 ## [0.16] - 2026-07-05
 
 ### Added
