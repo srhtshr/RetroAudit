@@ -69,7 +69,10 @@ public static class CatalogSchema
             -- LaunchBox türü Casino/Gambling/Mahjong/Pachinko/Pachislot/Quiz/Board Game/Tabletop/
             -- Card Game/Educational gibi bir kategoriye işaret ediyorsa 1. Satır silinmez (veri
             -- kaybı yok), sadece WPF'in varsayılan ana listesi bu satırları gizler.
-            HiddenByDefault INTEGER NOT NULL DEFAULT 0
+            HiddenByDefault INTEGER NOT NULL DEFAULT 0,
+            -- Zenginleştirme kaynağındaki bu oyunun sayısal kimliği (bkz. ArtworkAssets) — eşleşme
+            -- yoksa NULL.
+            MetadataSourceId INTEGER
         );
         CREATE INDEX IX_Games_Platform_CompareTitle ON Games(PlatformId, CompareTitle);
 
@@ -77,6 +80,17 @@ public static class CatalogSchema
             GameId INTEGER NOT NULL REFERENCES Games(GameId),
             GenreId INTEGER NOT NULL REFERENCES Genres(GenreId),
             PRIMARY KEY (GameId, GenreId)
+        );
+
+        -- Bu oyun için önceden çözülmüş (bölge önceliğine göre tek satıra indirgenmiş, bkz.
+        -- LaunchBoxMetadataReader.GetArtwork) görsel varlık dosya adları. WPF tarafı bunu okuyup
+        -- FileName'i bir CDN URL'sine çevirip isteğe bağlı olarak indiriyor — RetroAudit.db sadece
+        -- "hangi görsel mevcut" bilgisini taşır, gerçek görsel verisini asla içermez.
+        CREATE TABLE ArtworkAssets (
+            GameId INTEGER NOT NULL REFERENCES Games(GameId),
+            Type TEXT NOT NULL, -- 'Box' | 'Background' | 'Screenshot' | 'ClearLogo'
+            FileName TEXT NOT NULL,
+            PRIMARY KEY (GameId, Type)
         );
 
         CREATE TABLE AlternateNames (

@@ -1061,7 +1061,35 @@
                     <DataGridTemplateColumn x:Name="LogoColumn" Header="Logo" Width="44">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <Border Width="28" Height="28" CornerRadius="3" Background="{StaticResource Brush.Background.Elevated}" />
+                                <!-- ClearLogoPath doluysa (bkz. "Görsel Getir") gerçek küçük resim,
+                                     yoksa eski gri yer tutucu — WPF'in string->ImageSource örtük
+                                     TypeConverter'ı sayesinde ekstra bir converter gerekmiyor. -->
+                                <Grid Width="28" Height="28">
+                                    <Border CornerRadius="3" Background="{StaticResource Brush.Background.Elevated}">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasClearLogo}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                    </Border>
+                                    <Image Stretch="Uniform" Source="{Binding ClearLogoPath}">
+                                        <Image.Style>
+                                            <Style TargetType="Image">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasClearLogo}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Image.Style>
+                                    </Image>
+                                </Grid>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -1114,7 +1142,7 @@
                          Models/ActionsColumnFilterViewModel). -->
                     <DataGridTemplateColumn x:Name="ActionsColumn" Header="{Binding Data.ActionsFilter, Source={StaticResource ViewModelProxy}}"
                                              HeaderTemplate="{StaticResource ActionsColumnFilterHeader}"
-                                             HeaderStyle="{StaticResource CenteredColumnHeaderStyle}" Width="70">
+                                             HeaderStyle="{StaticResource CenteredColumnHeaderStyle}" Width="95">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
@@ -1140,6 +1168,18 @@
                                                 </Style>
                                             </TextBlock.Style>
                                         </TextBlock>
+                                    </Button>
+
+                                    <!-- Görsel Getir: Box/Background/Screenshot/Logo görsellerini arayıp
+                                         indirir (bkz. MainViewModel.FetchArtworkCommand). Eşleşmiş bir
+                                         metadata kaydı yoksa (HasArtworkSource=False) aranacak bir şey
+                                         olmadığı için devre dışı. -->
+                                    <Button Style="{StaticResource ActionsIconButton}"
+                                            Command="{Binding DataContext.FetchArtworkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" Margin="0,0,10,0"
+                                            IsEnabled="{Binding HasArtworkSource}" ToolTip="Görsel getir">
+                                        <TextBlock Text="&#xE91B;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                   Foreground="{StaticResource Brush.Text.Secondary}" />
                                     </Button>
 
                                     <!-- Ara (eksik ROM) / Başlat (ROM mevcut) — ikisi de aynı hücrede,
@@ -1357,36 +1397,6 @@
                             </StackPanel>
                         </Button>
 
-                        <!-- Hide/Unhide: aynı ikon, IsHidden'a göre komut ve etiket değişir. -->
-                        <Button ToolTip="Hide/Unhide">
-                            <StackPanel>
-                                <TextBlock Text="&#xE7B3;" Style="{StaticResource ContextMenuGlyphText}" />
-                                <TextBlock>
-                                    <TextBlock.Style>
-                                        <Style TargetType="TextBlock" BasedOn="{StaticResource ContextMenuLabelText}">
-                                            <Setter Property="Text" Value="Hide" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsHidden}" Value="True">
-                                                    <Setter Property="Text" Value="Unhide" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </TextBlock.Style>
-                                </TextBlock>
-                            </StackPanel>
-                            <Button.Style>
-                                <Style TargetType="Button" BasedOn="{StaticResource ContextMenuIconButton}">
-                                    <Setter Property="Command" Value="{Binding DataContext.HideGameCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                    <Setter Property="CommandParameter" Value="{Binding}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsHidden}" Value="True">
-                                            <Setter Property="Command" Value="{Binding DataContext.UnhideGameCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </Button.Style>
-                        </Button>
-
                         <Button Style="{StaticResource ContextMenuIconButton}"
                                 Command="{Binding DataContext.OpenFileLocationCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding}" IsEnabled="{Binding HasLocalFile}" ToolTip="Open File Location">
@@ -1447,11 +1457,34 @@
                         </Button>
 
                         <!-- Overflow (>): Re-match Metadata + Add to Playlist gibi daha az kullanılan
-                             eylemleri ikinci bir satırda gösterir, kapsülü kompakt tutar. -->
+                             eylemleri artık ayrı bir overflow popup'ında değil, doğrudan ana
+                             satırda gösteriliyor (kullanıcı isteği: "o listeyi kaldır direk
+                             gözüksün menüde"). -->
                         <Button Style="{StaticResource ContextMenuIconButton}"
-                                Command="{Binding DataContext.ToggleContextMenuOverflowCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                ToolTip="Daha fazla">
-                            <TextBlock Text="&#xE76C;" Style="{StaticResource ContextMenuGlyphText}" />
+                                Command="{Binding DataContext.ReMatchMetadataCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}" ToolTip="Re-match Metadata">
+                            <StackPanel>
+                                <TextBlock Text="&#xE72C;" Style="{StaticResource ContextMenuGlyphText}" />
+                                <TextBlock Text="Re-match" Style="{StaticResource ContextMenuLabelText}" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Style="{StaticResource ContextMenuIconButton}"
+                                Command="{Binding DataContext.FetchArtworkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}" IsEnabled="{Binding HasArtworkSource}" ToolTip="Görsel getir">
+                            <StackPanel>
+                                <TextBlock Text="&#xE91B;" Style="{StaticResource ContextMenuGlyphText}" />
+                                <TextBlock Text="Artwork" Style="{StaticResource ContextMenuLabelText}" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Style="{StaticResource ContextMenuIconButton}"
+                                Command="{Binding DataContext.ToggleAddToPlaylistPopupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                ToolTip="Add to Playlist">
+                            <StackPanel>
+                                <TextBlock Text="&#xE710;" Style="{StaticResource ContextMenuGlyphText}" />
+                                <TextBlock Text="Playlist" Style="{StaticResource ContextMenuLabelText}" />
+                            </StackPanel>
                         </Button>
 
                         <Separator Width="1" Margin="4,6" Background="{StaticResource Brush.Border}" />
@@ -1503,6 +1536,23 @@
                         </Button>
 
                         <Button Style="{StaticResource ContextMenuIconButton}"
+                                Command="{Binding BulkReMatchMetadataCommand}" ToolTip="Re-match Metadata">
+                            <StackPanel>
+                                <TextBlock Text="&#xE72C;" Style="{StaticResource ContextMenuGlyphText}" />
+                                <TextBlock Text="Re-match" Style="{StaticResource ContextMenuLabelText}" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Style="{StaticResource ContextMenuIconButton}"
+                                Command="{Binding BulkFetchArtworkCommand}" IsEnabled="{Binding CanBulkFetchArtwork}"
+                                ToolTip="Görsel getir">
+                            <StackPanel>
+                                <TextBlock Text="&#xE91B;" Style="{StaticResource ContextMenuGlyphText}" />
+                                <TextBlock Text="Artwork" Style="{StaticResource ContextMenuLabelText}" />
+                            </StackPanel>
+                        </Button>
+
+                        <Button Style="{StaticResource ContextMenuIconButton}"
                                 Command="{Binding BulkDeleteCommand}" ToolTip="Delete">
                             <StackPanel>
                                 <TextBlock Text="&#xE74D;" Style="{StaticResource ContextMenuGlyphText}" />
@@ -1511,36 +1561,6 @@
                         </Button>
                     </StackPanel>
                     </Grid>
-                </Border>
-            </Popup>
-
-            <!-- İkinci satır (overflow): Re-match Metadata + Playlist'e Ekle. Ayrı bir Popup —
-                 birinci kapsülün altına, aynı fare noktasına göre açılır. -->
-            <Popup Placement="MousePoint" IsOpen="{Binding IsContextMenuOverflowOpen}"
-                   StaysOpen="False" AllowsTransparency="True" VerticalOffset="52">
-                <Border CornerRadius="24" Padding="8,6" Background="{StaticResource Brush.Background.Elevated}"
-                        BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
-                    <Border.Effect>
-                        <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.4" Color="Black" />
-                    </Border.Effect>
-                    <StackPanel Orientation="Horizontal" DataContext="{Binding ContextMenuGame}">
-                        <Button Style="{StaticResource ContextMenuIconButton}"
-                                Command="{Binding DataContext.ReMatchMetadataCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                CommandParameter="{Binding}" ToolTip="Re-match Metadata">
-                            <StackPanel>
-                                <TextBlock Text="&#xE72C;" Style="{StaticResource ContextMenuGlyphText}" />
-                                <TextBlock Text="Re-match" Style="{StaticResource ContextMenuLabelText}" />
-                            </StackPanel>
-                        </Button>
-                        <Button Style="{StaticResource ContextMenuIconButton}"
-                                Command="{Binding DataContext.ToggleAddToPlaylistPopupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                ToolTip="Add to Playlist">
-                            <StackPanel>
-                                <TextBlock Text="&#xE710;" Style="{StaticResource ContextMenuGlyphText}" />
-                                <TextBlock Text="Playlist" Style="{StaticResource ContextMenuLabelText}" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
                 </Border>
             </Popup>
 

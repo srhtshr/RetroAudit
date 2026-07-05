@@ -19,7 +19,12 @@ public record MetadataMatch(
     string? WikipediaUrl,
     long? SteamAppId,
     bool? Cooperative,
-    string[] AlternateNames);
+    string[] AlternateNames,
+    int MetadataSourceId,
+    string? BoxImageFileName,
+    string? BackgroundImageFileName,
+    string? ScreenshotImageFileName,
+    string? ClearLogoImageFileName);
 
 // LaunchBox.Metadata.db'ye salt-okunur (Mode=ReadOnly) erişir. Bu, RetroAudit'in tek seferlik
 // zenginleştirme kaynağıdır — Builder bu dosyayı asla değiştirmez ve çalışma zamanındaki RetroAudit
@@ -262,6 +267,8 @@ public class LaunchBoxMetadataReader : IDisposable
             ? parsedDate
             : (DateTime?)null;
 
+        var artwork = GetArtwork(databaseId);
+
         return new MetadataMatch(
             Title: reader.GetString(1),
             Developer: reader.IsDBNull(2) ? null : reader.GetString(2),
@@ -278,7 +285,60 @@ public class LaunchBoxMetadataReader : IDisposable
             WikipediaUrl: reader.IsDBNull(11) ? null : reader.GetString(11),
             SteamAppId: reader.IsDBNull(12) ? null : reader.GetInt64(12),
             Cooperative: reader.IsDBNull(13) ? null : reader.GetInt32(13) != 0,
-            AlternateNames: GetAlternateNames(databaseId));
+            AlternateNames: GetAlternateNames(databaseId),
+            MetadataSourceId: databaseId,
+            BoxImageFileName: artwork.Box,
+            BackgroundImageFileName: artwork.Background,
+            ScreenshotImageFileName: artwork.Screenshot,
+            ClearLogoImageFileName: artwork.ClearLogo);
+    }
+
+    // Görsel türü başına (Box/Background/Screenshot/ClearLogo) en fazla bir dosya adı döner —
+    // bölge önceliği ROM sürüm seçiminde kullanılanla birebir aynı (bkz. VersionResolver.RegionRank:
+    // USA > Europe > World > Japan > diğer). Hiç bölge bilgisi olmayan bir görsel de kabul edilir
+    // (kişisel koleksiyon aracı için "hiç yok"tan iyi). Sonuç doğrudan RetroAudit.db'ye yazılıyor,
+    // çalışma zamanında bu kaynağa bir daha hiç erişilmiyor.
+    private (string? Box, string? Background, string? Screenshot, string? ClearLogo) GetArtwork(int databaseId)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "SELECT FileName, Type, Region FROM GameImages WHERE DatabaseId = $databaseId " +
+                           "AND Type IN ('Box - Front', 'Fanart - Background', 'Screenshot - Gameplay', 'Clear Logo')";
+        cmd.Parameters.AddWithValue("$databaseId", databaseId);
+
+        string? box = null, background = null, screenshot = null, clearLogo = null;
+        var bestRank = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var fileName = reader.GetString(0);
+            var type = reader.GetString(1);
+            var region = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+            var rank = RegionRank(region);
+
+            if (bestRank.TryGetValue(type, out var currentRank) && currentRank <= rank)
+                continue;
+            bestRank[type] = rank;
+
+            switch (type)
+            {
+                case "Box - Front": box = fileName; break;
+                case "Fanart - Background": background = fileName; break;
+                case "Screenshot - Gameplay": screenshot = fileName; break;
+                case "Clear Logo": clearLogo = fileName; break;
+            }
+        }
+
+        return (box, background, screenshot, clearLogo);
+    }
+
+    private static int RegionRank(string region)
+    {
+        if (region.Equals("USA", StringComparison.OrdinalIgnoreCase)) return 0;
+        if (region.Equals("Europe", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (region.Equals("World", StringComparison.OrdinalIgnoreCase)) return 2;
+        if (region.Equals("Japan", StringComparison.OrdinalIgnoreCase)) return 3;
+        return 4;
     }
 
     private string[] GetAlternateNames(int databaseId)

@@ -221,7 +221,10 @@ public partial class MainViewModel : ObservableObject
         _allGames = CatalogDatabaseService.GetGames();
         BuildLocalFileIndex();
         foreach (var game in _allGames)
+        {
             game.HasLocalFile = HasLocalFile(game);
+            NotifyArtworkDownloaded(game);
+        }
 
         Platforms = new ObservableCollection<Platform>(CatalogDatabaseService.GetPlatforms());
 
@@ -292,7 +295,10 @@ public partial class MainViewModel : ObservableObject
 
         BuildLocalFileIndex();
         foreach (var game in _allGames)
+        {
             game.HasLocalFile = HasLocalFile(game);
+            NotifyArtworkDownloaded(game);
+        }
         ApplyFilter();
     }
 
@@ -524,7 +530,6 @@ public partial class MainViewModel : ObservableObject
         IsAddToPlaylistPopupOpen = false;
         IsVersionsPopupOpen = false;
         IsContextMenuOpen = false;
-        IsContextMenuOverflowOpen = false;
     }
 
     // "Playlist'e Ekle" popup'ının içindeki "+ Yeni Playlist" satırı — yeni playlist'i oluşturup
@@ -544,7 +549,6 @@ public partial class MainViewModel : ObservableObject
         IsAddToPlaylistPopupOpen = false;
         IsVersionsPopupOpen = false;
         IsContextMenuOpen = false;
-        IsContextMenuOverflowOpen = false;
         RebuildPlaylistChips();
     }
 
@@ -578,11 +582,28 @@ public partial class MainViewModel : ObservableObject
     // kullanılır (bkz. RomImportService/RomImportViewModel). GameKey -> tam dosya yolu.
     private Dictionary<string, string> _filePathOverrides = new();
 
+    // Box/Background/Screenshot/ClearLogo için ayrı ayrı (platform -> uzantısız dosya adı -> tam
+    // yol) dizinleri — "Görsel Getir" ile indirilen dosyaların koyduğu yer (bkz. ArtworkService.
+    // BuildLocalPath: {RetroAuditDataPath}\{Platform}\Media\{Type}\). Uzantısız anahtar kullanılıyor
+    // çünkü indirilen dosyanın uzantısı (jpg/png) kaynağa göre değişir, ROM dosya adıyla (uzantısız)
+    // birebir eşleşmesi gereken tek şey isim gövdesi. ClearLogo için TAM YOL gerekiyor (Logo
+    // sütununda gerçek bir küçük resim gösteriliyor); diğer üçü sadece var/yok kontrolü için
+    // kullanılıyor ama aynı yapıyı paylaşmak kodu tekilleştiriyor.
+    private Dictionary<string, Dictionary<string, string>> _boxByPlatform = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, Dictionary<string, string>> _backgroundByPlatform = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, Dictionary<string, string>> _screenshotByPlatform = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, Dictionary<string, string>> _clearLogoByPlatform = new(StringComparer.OrdinalIgnoreCase);
+
     private void BuildLocalFileIndex()
     {
         _filePathOverrides = UserDataService.GetAllFilePathOverrides();
 
         _filesByPlatform = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        _boxByPlatform = BuildMediaTypeIndex("Box");
+        _backgroundByPlatform = BuildMediaTypeIndex("Background");
+        _screenshotByPlatform = BuildMediaTypeIndex("Screenshot");
+        _clearLogoByPlatform = BuildMediaTypeIndex("ClearLogo");
+
         if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath) || !Directory.Exists(_appSettings.RetroAuditDataPath))
             return;
 
@@ -593,6 +614,52 @@ public partial class MainViewModel : ObservableObject
                 files.Add(Path.GetFileName(file));
             _filesByPlatform[Path.GetFileName(platformDir)] = files;
         }
+    }
+
+    private Dictionary<string, Dictionary<string, string>> BuildMediaTypeIndex(string typeFolder)
+    {
+        var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath) || !Directory.Exists(_appSettings.RetroAuditDataPath))
+            return result;
+
+        foreach (var platformDir in Directory.EnumerateDirectories(_appSettings.RetroAuditDataPath))
+        {
+            var mediaTypeDir = Path.Combine(platformDir, "Media", typeFolder);
+            if (!Directory.Exists(mediaTypeDir))
+                continue;
+
+            var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var file in Directory.EnumerateFiles(mediaTypeDir))
+                files[Path.GetFileNameWithoutExtension(file)] = file;
+            result[Path.GetFileName(platformDir)] = files;
+        }
+        return result;
+    }
+
+    private static string? TryGetMediaPath(Dictionary<string, Dictionary<string, string>> byPlatform, Game game)
+    {
+        if (string.IsNullOrWhiteSpace(game.File))
+            return null;
+
+        var baseName = Path.GetFileNameWithoutExtension(game.File);
+        return byPlatform.TryGetValue(game.Platform, out var files) && files.TryGetValue(baseName, out var path)
+            ? path
+            : null;
+    }
+
+    private bool HasBoxFile(Game game) => TryGetMediaPath(_boxByPlatform, game) is not null;
+    private bool HasBackgroundFile(Game game) => TryGetMediaPath(_backgroundByPlatform, game) is not null;
+    private bool HasScreenshotFile(Game game) => TryGetMediaPath(_screenshotByPlatform, game) is not null;
+    private string GetClearLogoPath(Game game) => TryGetMediaPath(_clearLogoByPlatform, game) ?? string.Empty;
+
+    // NotifyRomDownloaded ile aynı desen (bkz. aşağıda) — tek bir oyun için "Görsel Getir"
+    // tamamlandığında uygulama yeniden başlatılmadan grid/Logo sütunu güncellensin diye.
+    public void NotifyArtworkDownloaded(Game game)
+    {
+        game.HasBox = HasBoxFile(game);
+        game.HasBackground = HasBackgroundFile(game);
+        game.HasScreenshot = HasScreenshotFile(game);
+        game.ClearLogoPath = GetClearLogoPath(game);
     }
 
     // Grid'deki "eksik ROM'u ara" sütunu ve context menüsündeki "Open File Location"ın paylaştığı
@@ -726,9 +793,6 @@ public partial class MainViewModel : ObservableObject
     private bool isContextMenuOpen;
 
     [ObservableProperty]
-    private bool isContextMenuOverflowOpen;
-
-    [ObservableProperty]
     private bool isAddToPlaylistPopupOpen;
 
     // Kapsüldeki "Versions" düğmesiyle açılan/kapanan alt popup (bkz. FocusVersions).
@@ -758,7 +822,6 @@ public partial class MainViewModel : ObservableObject
         IsBulkContextMenu = false;
         ContextMenuGame = game;
         SelectedGame = game;
-        IsContextMenuOverflowOpen = false;
         IsAddToPlaylistPopupOpen = false;
         IsVersionsPopupOpen = false;
         IsContextMenuOpen = true;
@@ -771,7 +834,6 @@ public partial class MainViewModel : ObservableObject
         ContextMenuSelection.Clear();
         foreach (var game in games)
             ContextMenuSelection.Add(game);
-        IsContextMenuOverflowOpen = false;
         IsAddToPlaylistPopupOpen = false;
         IsVersionsPopupOpen = false;
         IsContextMenuOpen = true;
@@ -779,9 +841,6 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void CloseContextMenu() => IsContextMenuOpen = false;
-
-    [RelayCommand]
-    private void ToggleContextMenuOverflow() => IsContextMenuOverflowOpen = !IsContextMenuOverflowOpen;
 
     // --- Toplu eylemler (bkz. IsBulkContextMenu) ---
 
@@ -882,6 +941,15 @@ public partial class MainViewModel : ObservableObject
         if (match is null)
             return;
 
+        ApplyMetadataMatch(game, match);
+        ApplyFilter();
+    }
+
+    // ReMatchMetadata (tekil) ve BulkReMatchMetadata'nın paylaştığı asıl alan atama mantığı — ikisi
+    // de aynı eşleştirme sonucunu aynı şekilde canlı Game nesnesine yazıyor, sadece reader'ı açma/
+    // döngü kurma tarzları farklı (bulk, tek bir reader'ı tüm seçim için yeniden kullanıyor).
+    private static void ApplyMetadataMatch(Game game, MetadataMatch match)
+    {
         game.Developer = match.Developer ?? game.Developer;
         game.Publisher = match.Publisher ?? game.Publisher;
         // ReleaseYear ve ReleaseDate LaunchBox'ta birbirinden bağımsız nullable alanlar (bkz.
@@ -905,8 +973,138 @@ public partial class MainViewModel : ObservableObject
             false => "Kooperatif Değil",
             null => game.GameMode,
         };
+        game.MetadataSourceId = match.MetadataSourceId;
+    }
+
+    // Toplu seçimdeki her oyun için ReMatchMetadata'nın aynısını çalıştırır — TEK bir reader
+    // açılıp tüm döngü boyunca yeniden kullanılıyor (LaunchBoxMetadataReader kendi içinde fuzzy
+    // eşleştirme kovalarını önbelleğe alıyor, bkz. _platformGameNameBuckets — bulk'ta reader'ı N
+    // kere açıp kapatmak yerine bu, aynı platformdaki oyunlar için gerçek bir performans kazancı).
+    [RelayCommand]
+    private void BulkReMatchMetadata()
+    {
+        IsContextMenuOpen = false;
+
+        if (string.IsNullOrWhiteSpace(_appSettings.LaunchBoxDbPath) || !File.Exists(_appSettings.LaunchBoxDbPath))
+        {
+            RequestShowMessage?.Invoke("Metadata veritabanı yolu Ayarlar > Genel'de tanımlı değil ya da bulunamadı.");
+            return;
+        }
+
+        using var reader = new LaunchBoxMetadataReader(_appSettings.LaunchBoxDbPath);
+        foreach (var game in ContextMenuSelection)
+        {
+            if (!reader.IsPlatformKnown(game.Platform))
+                continue;
+
+            var compareTitle = VersionResolver.NormalizeForCompare(game.Title);
+            var match = reader.FindMatch(game.Platform, compareTitle, game.Title);
+            if (match is not null)
+                ApplyMetadataMatch(game, match);
+        }
 
         ApplyFilter();
+    }
+
+    // Toplu "Görsel Getir" sırasında yeniden giriş engeller (bkz. BulkFetchArtwork) — bulk
+    // capsül düğmesi bunun üzerinden devre dışı bırakılıyor.
+    [ObservableProperty]
+    private bool isBulkArtworkFetching;
+
+    public bool CanBulkFetchArtwork => !IsBulkArtworkFetching;
+
+    partial void OnIsBulkArtworkFetchingChanged(bool value) => OnPropertyChanged(nameof(CanBulkFetchArtwork));
+
+    [RelayCommand]
+    private async Task FetchArtwork(Game game)
+    {
+        IsContextMenuOpen = false;
+
+        if (!game.HasArtworkSource)
+        {
+            RequestShowMessage?.Invoke("Bu oyun için eşleşmiş bir metadata kaydı yok, görsel aranamadı.");
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath))
+        {
+            RequestShowMessage?.Invoke("Önce Ayarlar > Genel'den RetroAudit veri dizinini ayarlayın.");
+            return;
+        }
+
+        var downloaded = await DownloadArtworkAsync(game);
+        NotifyArtworkDownloaded(game);
+        ApplyFilter();
+        RequestShowMessage?.Invoke($"{downloaded} / 4 görsel indirildi.");
+    }
+
+    [RelayCommand]
+    private async Task BulkFetchArtwork()
+    {
+        IsContextMenuOpen = false;
+
+        if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath))
+        {
+            RequestShowMessage?.Invoke("Önce Ayarlar > Genel'den RetroAudit veri dizinini ayarlayın.");
+            return;
+        }
+
+        var targets = ContextMenuSelection.Where(g => g.HasArtworkSource).ToList();
+        if (targets.Count == 0)
+        {
+            RequestShowMessage?.Invoke("Seçilen oyunların hiçbirinde eşleşmiş bir metadata kaydı yok.");
+            return;
+        }
+
+        IsBulkArtworkFetching = true;
+        var totalDownloaded = 0;
+        try
+        {
+            foreach (var game in targets)
+            {
+                totalDownloaded += await DownloadArtworkAsync(game);
+                NotifyArtworkDownloaded(game);
+            }
+        }
+        finally
+        {
+            IsBulkArtworkFetching = false;
+        }
+
+        ApplyFilter();
+        RequestShowMessage?.Invoke($"{targets.Count} oyun için toplam {totalDownloaded} görsel indirildi.");
+    }
+
+    // FetchArtwork ve BulkFetchArtwork'ün paylaştığı asıl indirme mantığı — bir oyun için mevcut
+    // olan (en fazla 4: Box/Background/Screenshot/ClearLogo) görsel varlığı indirip diske yazar,
+    // kaç tanesinin başarılı olduğunu döner. Sıralı (paralel değil) — hem basit hem de kaynak
+    // sunucuyu yormamak için (bkz. ArtworkService yorumu).
+    private async Task<int> DownloadArtworkAsync(Game game)
+    {
+        var assets = CatalogDatabaseService.GetArtworkAssets(game.GameId);
+        if (assets.Count == 0)
+            return 0;
+
+        var baseFileName = GetMediaBaseFileName(game);
+        var succeeded = 0;
+        foreach (var (type, fileName) in assets)
+        {
+            var destination = ArtworkService.BuildLocalPath(_appSettings.RetroAuditDataPath, game.Platform, type, baseFileName, fileName);
+            if (await ArtworkService.DownloadAsync(fileName, destination))
+                succeeded++;
+        }
+        return succeeded;
+    }
+
+    // Görsel dosya adı normalde ROM dosyasıyla aynı kimliği kullanır (uzantısız) — ama bir oyunun
+    // henüz ROM'u olmayabilir (kullanıcı sadece kapak/görsel arşivliyor olabilir), bu durumda
+    // başlıktan, dosya sisteminde geçersiz karakterler temizlenerek türetilir.
+    private static string GetMediaBaseFileName(Game game)
+    {
+        if (!string.IsNullOrWhiteSpace(game.File))
+            return Path.GetFileNameWithoutExtension(game.File);
+
+        var invalid = Path.GetInvalidFileNameChars();
+        return new string(game.Title.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
     }
 
     partial void OnSelectedGameChanged(Game? value) => LoadSelectedGameVersions();

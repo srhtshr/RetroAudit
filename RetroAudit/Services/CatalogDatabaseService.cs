@@ -127,7 +127,7 @@ public static class CatalogDatabaseService
             SELECT g.GameId, g.Title, g.CompareTitle, p.Name, g.ReleaseYear, d.Name, pub.Name,
                    g.Overview, g.MaxPlayers, g.MatchedMetadata, g.HiddenByDefault,
                    g.MatchMethod, g.NeedsReview, g.ReleaseDate, g.CommunityRating, g.VideoUrl,
-                   g.WikipediaUrl, g.SteamAppId, g.Cooperative
+                   g.WikipediaUrl, g.SteamAppId, g.Cooperative, g.MetadataSourceId
             FROM Games g
             JOIN Platforms p ON p.PlatformId = g.PlatformId
             LEFT JOIN Developers d ON d.DeveloperId = g.DeveloperId
@@ -178,6 +178,7 @@ public static class CatalogDatabaseService
                 WikipediaUrl = gameReader.IsDBNull(16) ? string.Empty : gameReader.GetString(16),
                 SteamAppId = gameReader.IsDBNull(17) ? null : gameReader.GetInt64(17),
                 Cooperative = cooperative,
+                MetadataSourceId = gameReader.IsDBNull(19) ? null : gameReader.GetInt32(19),
                 // GameMode: LaunchBox'ın kesin bir "oyun modu" alanı yok, sadece Cooperative
                 // (co-op) bilgisi var — bu yüzden burada tam bir mod adı değil, sadece bu tek
                 // boyutu yansıtıyoruz. Bilinmiyorsa (null) uydurma bir varsayılan göstermiyoruz.
@@ -228,6 +229,25 @@ public static class CatalogDatabaseService
                 if (ov.Developer is { Length: > 0 }) game.Developer = ov.Developer;
             }
         }
+    }
+
+    // "Görsel Getir" komutu için: bir oyunun Builder'da önceden çözülmüş görsel varlık dosya
+    // adları (bkz. ArtworkAssets, LaunchBoxMetadataReader.GetArtwork). Type -> FileName;
+    // MainViewModel bu FileName'i bir indirme URL'sine çevirip diske kaydeder.
+    public static Dictionary<string, string> GetArtworkAssets(int gameId)
+    {
+        var result = new Dictionary<string, string>();
+        if (!DatabaseExists)
+            return result;
+
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Type, FileName FROM ArtworkAssets WHERE GameId = $gameId";
+        cmd.Parameters.AddWithValue("$gameId", gameId);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            result[reader.GetString(0)] = reader.GetString(1);
+        return result;
     }
 
     // Sağ paneldeki Versions listesi için: bir oyunun tüm GameVersions + her sürümün tüm

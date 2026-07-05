@@ -50,6 +50,15 @@ public class CatalogGame
     public long? SteamAppId { get; set; }
     public bool? Cooperative { get; set; }
 
+    // Zenginleştirme kaynağındaki bu oyunun sayısal kimliği — eşleşme bulunduysa dolu, görsel
+    // varlıklarını (bkz. aşağıdaki 4 alan) bulmak için kullanılan tek anahtar. Çalışma zamanında
+    // bu kaynağa bir daha erişilmiyor; sadece Builder'ın kendi görsel araması için gerekli.
+    public int? MetadataSourceId { get; set; }
+    public string? BoxImageFileName { get; set; }
+    public string? BackgroundImageFileName { get; set; }
+    public string? ScreenshotImageFileName { get; set; }
+    public string? ClearLogoImageFileName { get; set; }
+
     // Eşleştirmede kullanılan AltNameCompareValue'dan farklı olarak burada GÖRÜNTÜLENEBİLİR
     // isimler tutulur (bkz. AlternateNames tablosu, CatalogSchema.cs) — şu an için sadece
     // saklanıyor, henüz bir UI ekranı yok.

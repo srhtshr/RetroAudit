@@ -36,13 +36,25 @@ public partial class Game : ObservableObject
     // Orta paneldeki DataGrid'de mor tik / kırmızı çarpı ikonunu belirleyen genel durum bayrağı.
     public bool StatusOk { get; set; }
 
-    // Box/BG/SS kolonlarındaki nokta göstergelerini besleyen medya varlık bayrakları.
+    // Box/BG/SS kolonlarındaki nokta göstergelerini besleyen medya varlık bayrakları —
+    // MainViewModel.BuildLocalFileIndex tarafından yükleme sırasında bir kere hesaplanır
+    // (HasLocalFile ile aynı desen), gerçek zamanlı binding değildir.
     public bool HasBox { get; set; }
     public bool HasBackground { get; set; }
     public bool HasScreenshot { get; set; }
 
     public string CoverImagePath { get; set; } = string.Empty;
     public string ScreenshotImagePath { get; set; } = string.Empty;
+
+    // Logo sütunundaki gerçek görsel (Clear Logo) — diğer üçünden farklı olarak sadece bir nokta
+    // değil, doğrudan bir küçük resim gösteriyor, bu yüzden bool değil tam yol tutuluyor.
+    public string ClearLogoPath { get; set; } = string.Empty;
+    public bool HasClearLogo => !string.IsNullOrWhiteSpace(ClearLogoPath);
+
+    // Zenginleştirme kaynağındaki bu oyunun sayısal kimliği — eşleşme yoksa null. "Görsel Getir"
+    // butonunun etkin olup olmadığını belirler (bkz. MainViewModel.FetchArtwork).
+    public int? MetadataSourceId { get; set; }
+    public bool HasArtworkSource => MetadataSourceId.HasValue;
 
     // Sağ detay panelinde gösterilen ek bilgiler.
     public int ReleaseYear { get; set; }

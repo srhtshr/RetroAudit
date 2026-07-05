@@ -14,8 +14,8 @@ public static class CatalogBuilder
     // BuildInfo tablosuna yazılan sabitler. SchemaVersion, Games/GameVersions/Platforms tablo
     // yapısı değiştikçe (ör. bu turda Games.HiddenByDefault eklendi) artırılır; WPF tarafı
     // (Stage B) ileride uyumsuz bir RetroAudit.db'yi bu alana bakarak erkenden reddedebilir.
-    public const string SchemaVersion = "1.3";
-    public const string BuilderVersion = "1.3.0";
+    public const string SchemaVersion = "1.4";
+    public const string BuilderVersion = "1.4.0";
 
     // Ana listede varsayılan olarak gizlenecek (ama SİLİNMEYECEK) LaunchBox tür etiketleri —
     // kullanıcı kararı: gerçek video oyunu sayılmayan Casino/Gambling/Mahjong/Pachinko/Pachislot/
@@ -86,6 +86,11 @@ public static class CatalogBuilder
                     game.SteamAppId = match.SteamAppId;
                     game.Cooperative = match.Cooperative;
                     game.AlternateNames.AddRange(match.AlternateNames);
+                    game.MetadataSourceId = match.MetadataSourceId;
+                    game.BoxImageFileName = match.BoxImageFileName;
+                    game.BackgroundImageFileName = match.BackgroundImageFileName;
+                    game.ScreenshotImageFileName = match.ScreenshotImageFileName;
+                    game.ClearLogoImageFileName = match.ClearLogoImageFileName;
                     game.MatchedMetadata = true;
                     game.MatchMethod = match.MatchMethod;
                     game.MatchConfidence = match.Confidence;
@@ -276,8 +281,8 @@ public static class CatalogBuilder
             {
                 insertGame.Transaction = transaction;
                 insertGame.CommandText = """
-                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, ReleaseDate, CommunityRating, VideoUrl, WikipediaUrl, SteamAppId, Cooperative, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview, HiddenByDefault)
-                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $releaseDate, $communityRating, $videoUrl, $wikipediaUrl, $steamAppId, $cooperative, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview, $hiddenByDefault)
+                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, ReleaseDate, CommunityRating, VideoUrl, WikipediaUrl, SteamAppId, Cooperative, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview, HiddenByDefault, MetadataSourceId)
+                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $releaseDate, $communityRating, $videoUrl, $wikipediaUrl, $steamAppId, $cooperative, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview, $hiddenByDefault, $metadataSourceId)
                     """;
                 insertGame.Parameters.AddWithValue("$platformId", platformId);
                 insertGame.Parameters.AddWithValue("$title", game.Title);
@@ -298,6 +303,7 @@ public static class CatalogBuilder
                 insertGame.Parameters.AddWithValue("$matchConfidence", (object?)game.MatchConfidence ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$needsReview", game.NeedsReview ? 1 : 0);
                 insertGame.Parameters.AddWithValue("$hiddenByDefault", game.HiddenByDefault ? 1 : 0);
+                insertGame.Parameters.AddWithValue("$metadataSourceId", (object?)game.MetadataSourceId ?? DBNull.Value);
                 insertGame.ExecuteNonQuery();
                 gameId = GetLastInsertRowId();
             }
@@ -310,6 +316,27 @@ public static class CatalogBuilder
                 insertAlternateName.Parameters.AddWithValue("$gameId", gameId);
                 insertAlternateName.Parameters.AddWithValue("$name", alternateName);
                 insertAlternateName.ExecuteNonQuery();
+            }
+
+            var artworkByType = new (string Type, string? FileName)[]
+            {
+                ("Box", game.BoxImageFileName),
+                ("Background", game.BackgroundImageFileName),
+                ("Screenshot", game.ScreenshotImageFileName),
+                ("ClearLogo", game.ClearLogoImageFileName),
+            };
+            foreach (var (type, fileName) in artworkByType)
+            {
+                if (string.IsNullOrEmpty(fileName))
+                    continue;
+
+                using var insertArtwork = connection.CreateCommand();
+                insertArtwork.Transaction = transaction;
+                insertArtwork.CommandText = "INSERT INTO ArtworkAssets (GameId, Type, FileName) VALUES ($gameId, $type, $fileName)";
+                insertArtwork.Parameters.AddWithValue("$gameId", gameId);
+                insertArtwork.Parameters.AddWithValue("$type", type);
+                insertArtwork.Parameters.AddWithValue("$fileName", fileName);
+                insertArtwork.ExecuteNonQuery();
             }
 
             foreach (var genreName in game.Genres)
