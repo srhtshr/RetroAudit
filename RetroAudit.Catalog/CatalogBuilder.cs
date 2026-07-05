@@ -14,8 +14,8 @@ public static class CatalogBuilder
     // BuildInfo tablosuna yazılan sabitler. SchemaVersion, Games/GameVersions/Platforms tablo
     // yapısı değiştikçe (ör. bu turda Games.HiddenByDefault eklendi) artırılır; WPF tarafı
     // (Stage B) ileride uyumsuz bir RetroAudit.db'yi bu alana bakarak erkenden reddedebilir.
-    public const string SchemaVersion = "1.4";
-    public const string BuilderVersion = "1.4.0";
+    public const string SchemaVersion = "1.5";
+    public const string BuilderVersion = "1.5.0";
 
     // Ana listede varsayılan olarak gizlenecek (ama SİLİNMEYECEK) LaunchBox tür etiketleri —
     // kullanıcı kararı: gerçek video oyunu sayılmayan Casino/Gambling/Mahjong/Pachinko/Pachislot/
@@ -81,6 +81,7 @@ public static class CatalogBuilder
                     game.Genres.AddRange(match.Genres);
                     game.ReleaseDate = match.ReleaseDate;
                     game.CommunityRating = match.CommunityRating;
+                    game.CommunityRatingCount = match.CommunityRatingCount;
                     game.VideoUrl = match.VideoUrl;
                     game.WikipediaUrl = match.WikipediaUrl;
                     game.SteamAppId = match.SteamAppId;
@@ -281,8 +282,8 @@ public static class CatalogBuilder
             {
                 insertGame.Transaction = transaction;
                 insertGame.CommandText = """
-                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, ReleaseDate, CommunityRating, VideoUrl, WikipediaUrl, SteamAppId, Cooperative, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview, HiddenByDefault, MetadataSourceId)
-                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $releaseDate, $communityRating, $videoUrl, $wikipediaUrl, $steamAppId, $cooperative, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview, $hiddenByDefault, $metadataSourceId)
+                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, ReleaseDate, CommunityRating, CommunityRatingCount, VideoUrl, WikipediaUrl, SteamAppId, Cooperative, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview, HiddenByDefault, MetadataSourceId)
+                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $releaseDate, $communityRating, $communityRatingCount, $videoUrl, $wikipediaUrl, $steamAppId, $cooperative, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview, $hiddenByDefault, $metadataSourceId)
                     """;
                 insertGame.Parameters.AddWithValue("$platformId", platformId);
                 insertGame.Parameters.AddWithValue("$title", game.Title);
@@ -294,6 +295,7 @@ public static class CatalogBuilder
                 insertGame.Parameters.AddWithValue("$maxPlayers", (object?)game.MaxPlayers ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$releaseDate", (object?)game.ReleaseDate?.ToString("O") ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$communityRating", (object?)game.CommunityRating ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$communityRatingCount", (object?)game.CommunityRatingCount ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$videoUrl", (object?)game.VideoUrl ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$wikipediaUrl", (object?)game.WikipediaUrl ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$steamAppId", (object?)game.SteamAppId ?? DBNull.Value);
@@ -318,12 +320,15 @@ public static class CatalogBuilder
                 insertAlternateName.ExecuteNonQuery();
             }
 
+            // Tür adları grid'in kendi sütun etiketleriyle (Box/BG/Logo/SS) birebir aynı — bu
+            // değer aynı zamanda WPF tarafında klasör adı olarak da kullanılıyor (bkz.
+            // ArtworkService.BuildLocalPath), tek bir isim her yerde geçerli.
             var artworkByType = new (string Type, string? FileName)[]
             {
                 ("Box", game.BoxImageFileName),
-                ("Background", game.BackgroundImageFileName),
-                ("Screenshot", game.ScreenshotImageFileName),
-                ("ClearLogo", game.ClearLogoImageFileName),
+                ("BG", game.BackgroundImageFileName),
+                ("SS", game.ScreenshotImageFileName),
+                ("Logo", game.ClearLogoImageFileName),
             };
             foreach (var (type, fileName) in artworkByType)
             {

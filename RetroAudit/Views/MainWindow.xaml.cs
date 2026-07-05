@@ -158,15 +158,6 @@ public partial class MainWindow : Window
             border.Bottom + frame.Bottom);
     }
 
-    // Sağ detay panelinin kenarındaki GridSplitter bırakıldığında (DragCompleted) — sürükleme
-    // sırasında ViewModel'e hiç dokunulmuyor, sadece burada tek seferlik son genişlik kaydediliyor
-    // (bkz. MainWindow.xaml GridSplitter yorumu, MainViewModel.SaveDetailPanelWidth).
-    private void DetailPanelSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
-    {
-        if (DataContext is MainViewModel vm)
-            vm.SaveDetailPanelWidth(DetailPanelColumnDef.ActualWidth);
-    }
-
     // Sol paneldeki platform listesinde tut-sürükle ile manuel sıralama. Kullanıcı isteği:
     // sürüklerken CANLI konumlansın, sadece bırakınca değil — bu yüzden her DragOver'da
     // vm.MoveInPlatformListItems ile görünür liste anında güncelleniyor (bkz. o metodun yorumu).
@@ -269,6 +260,35 @@ public partial class MainWindow : Window
             vm.LaunchVersionCommand.Execute(version);
     }
 
+    // Detay panelindeki platform logosu rozetine tıklanınca o platformun ROM klasörünü açar
+    // (bkz. MainWindow.xaml Border.MouseLeftButtonDown, MainViewModel.OpenPlatformFolderCommand).
+    private void PlatformLogoBadge_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (DataContext is MainViewModel { SelectedGame: { } game } vm)
+            vm.OpenPlatformFolderCommand.Execute(game);
+    }
+
+    // VersionsList'in kendi iç kaydırması bilinçli olarak kapalı (bkz. MainWindow.xaml
+    // ScrollViewer.VerticalScrollBarVisibility="Disabled" — dıştaki tek ScrollViewer'a bırakılıyor),
+    // ama WPF'in ListBox'ı yine de fare tekerleği olayını kendi içinde "handled" işaretleyip
+    // yutuyor, dıştaki ScrollViewer'a hiç ulaşmıyordu (kullanıcı geri bildirimi: üstüne gelince
+    // kaydırma çalışmıyor). Olayı burada durdurup aynı tekerlek verisiyle üst elemana yeniden
+    // fırlatmak (bubbling routed event) standart WPF çözümü — üstteki ScrollViewer onu normal
+    // şekilde yakalayıp kaydırıyor.
+    private void VersionsList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (e.Handled || sender is not FrameworkElement element)
+            return;
+
+        e.Handled = true;
+        var forwarded = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+        {
+            RoutedEvent = MouseWheelEvent,
+            Source = sender,
+        };
+        (element.Parent as UIElement)?.RaiseEvent(forwarded);
+    }
+
     private static T? FindVisualParent<T>(DependencyObject? element) where T : DependencyObject
     {
         while (element is not null && element is not T)
@@ -350,16 +370,19 @@ public partial class MainWindow : Window
         // (EnableColumnVirtualization) genişlik/scroll hesaplarını hemen tazelemiyor — dikey
         // scrollbar bir önceki (dar) genişliğe göre konumlanmış kalıp pencere dışına taşıyordu.
         // Senkron UpdateLayout, DataGrid'i bu sıçramadan hemen sonra zorla yeniden ölçüp diziyor.
+        // SelectedGame null iken (platform listesinde gezinirken, henüz bir oyun seçilmemişken)
+        // panel her zaman gizli — kullanıcı geri bildirimi: "boş detaylar paneli gözüküyor".
         void ApplyDetailPanelWidth()
         {
-            DetailPanelColumnDef.Width = new GridLength(vm.IsDetailPanelExpanded ? vm.DetailPanelWidth : 0);
+            var shouldShow = vm.IsDetailPanelExpanded && vm.SelectedGame is not null;
+            DetailPanelColumnDef.Width = new GridLength(shouldShow ? vm.DetailPanelWidth : 0);
             GamesGrid.UpdateLayout();
         }
 
         ApplyDetailPanelWidth();
         vm.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName is nameof(MainViewModel.IsDetailPanelExpanded) or nameof(MainViewModel.DetailPanelWidth))
+            if (e.PropertyName is nameof(MainViewModel.IsDetailPanelExpanded) or nameof(MainViewModel.DetailPanelWidth) or nameof(MainViewModel.SelectedGame))
                 ApplyDetailPanelWidth();
         };
     }

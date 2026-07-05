@@ -1,4 +1,6 @@
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
+using RetroAudit.Services;
 
 namespace RetroAudit.Models;
 
@@ -22,7 +24,14 @@ public partial class Game : ObservableObject
     public string Platform { get; set; } = string.Empty;
 
     // DataGrid'in Platform sütununda gösterilen sade isim ("Jaguar") — bkz. PlatformDisplayNameMap.
+    // Sütun hücresinde artık bu metin değil PlatformLogoPath gösteriliyor (bkz. MainWindow.xaml
+    // PlatformColumn) — arama/filtre/sıralama hâlâ bu alanı kullanmaya devam ediyor.
     public string PlatformDisplayName { get; set; } = string.Empty;
+
+    // Images/Platforms/{PlatformDisplayName}.png varsa tam yolu (bkz. CatalogDatabaseService.
+    // GetGames/ResolveLogoPath) — yoksa boş, bu durumda DataGrid hücresi metne geri düşer.
+    public string PlatformLogoPath { get; set; } = string.Empty;
+    public bool HasPlatformLogo => !string.IsNullOrWhiteSpace(PlatformLogoPath);
 
     // "Released" / "Junk" — toolbar'daki filtre butonlarıyla eşleşir. Gerçek veride
     // Games.HiddenByDefault'a karşılık gelir (Casino/Board Game/Educational gibi türler "Junk").
@@ -36,25 +45,56 @@ public partial class Game : ObservableObject
     // Orta paneldeki DataGrid'de mor tik / kırmızı çarpı ikonunu belirleyen genel durum bayrağı.
     public bool StatusOk { get; set; }
 
-    // Box/BG/SS kolonlarındaki nokta göstergelerini besleyen medya varlık bayrakları —
-    // MainViewModel.BuildLocalFileIndex tarafından yükleme sırasında bir kere hesaplanır
-    // (HasLocalFile ile aynı desen), gerçek zamanlı binding değildir.
-    public bool HasBox { get; set; }
-    public bool HasBackground { get; set; }
-    public bool HasScreenshot { get; set; }
+    // Box/BG/SS/Logo görsellerinin tam yolu — MainViewModel.BuildLocalFileIndex tarafından
+    // yükleme sırasında hesaplanır (bkz. o metodun yorumu), Box/BG/SS kolonlarındaki nokta
+    // göstergeleri VE sağ detay panelindeki gerçek küçük resimler hepsi buradan besleniyor.
+    // ObservableProperty: "Görsel Getir" tamamlandığında MainViewModel.NotifyArtworkDownloaded
+    // bunları YENİDEN set ediyor — restart olmadan grid/detay paneli anında güncellensin diye
+    // (eskiden düz get/set'ti, bu yüzden değişiklik uygulama kapatılıp açılana kadar görünmüyordu).
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBox))]
+    [NotifyPropertyChangedFor(nameof(BoxDisplayPath))]
+    private string boxPath = string.Empty;
 
-    public string CoverImagePath { get; set; } = string.Empty;
-    public string ScreenshotImagePath { get; set; } = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasBackground))]
+    [NotifyPropertyChangedFor(nameof(BackgroundDisplayPath))]
+    private string backgroundPath = string.Empty;
 
-    // Logo sütunundaki gerçek görsel (Clear Logo) — diğer üçünden farklı olarak sadece bir nokta
-    // değil, doğrudan bir küçük resim gösteriyor, bu yüzden bool değil tam yol tutuluyor.
-    public string ClearLogoPath { get; set; } = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasScreenshot))]
+    [NotifyPropertyChangedFor(nameof(ScreenshotDisplayPath))]
+    private string screenshotPath = string.Empty;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasClearLogo))]
+    private string clearLogoPath = string.Empty;
+
+    public bool HasBox => !string.IsNullOrWhiteSpace(BoxPath);
+    public bool HasBackground => !string.IsNullOrWhiteSpace(BackgroundPath);
+    public bool HasScreenshot => !string.IsNullOrWhiteSpace(ScreenshotPath);
     public bool HasClearLogo => !string.IsNullOrWhiteSpace(ClearLogoPath);
+
+    // Detay panelinde gösterilecek gerçek yol — Has* bayrakları (yukarıda) gerçek görselin var
+    // olup olmadığını (grid noktaları, "Görsel Getir" gibi yerlerde) yansıtmaya devam eder, bu
+    // alanlar SADECE görüntüleme amaçlı: görsel yoksa Images/NoImage altındaki sabit yer
+    // tutucuya düşer (bkz. AppPaths.NoImageCover/NoImageBackground).
+    public string BoxDisplayPath => HasBox ? BoxPath : AppPaths.NoImageCover;
+    public string BackgroundDisplayPath => HasBackground ? BackgroundPath : AppPaths.NoImageBackground;
+    public string ScreenshotDisplayPath => HasScreenshot ? ScreenshotPath : AppPaths.NoImageBackground;
 
     // Zenginleştirme kaynağındaki bu oyunun sayısal kimliği — eşleşme yoksa null. "Görsel Getir"
     // butonunun etkin olup olmadığını belirler (bkz. MainViewModel.FetchArtwork).
     public int? MetadataSourceId { get; set; }
     public bool HasArtworkSource => MetadataSourceId.HasValue;
+
+    // Bu oyunun KENDİ platformu içindeki ağırlıklı Topluluk Puanı sıralamasına göre en yüksek
+    // rozeti — "Top 25" / "Top 100" / "Top 250" ya da hiçbiri (bkz. MainViewModel.
+    // ComputeTopRankBadges, uygulama açılışında bir kez hesaplanır). Değer, Images/Badges/
+    // altındaki dosya adıyla birebir aynı ("Top 25.png" gibi) — ayrı bir eşleme tablosuna gerek yok.
+    public string TopRankBadge { get; set; } = string.Empty;
+    public bool HasTopRankBadge => !string.IsNullOrEmpty(TopRankBadge);
+    public string TopRankBadgePath => HasTopRankBadge ? Path.Combine(AppPaths.Images, "Badges", $"{TopRankBadge}.png") : string.Empty;
 
     // Sağ detay panelinde gösterilen ek bilgiler.
     public int ReleaseYear { get; set; }
@@ -69,6 +109,11 @@ public partial class Game : ObservableObject
     // varsa tam tarih, yoksa yıl gösterilir (bkz. ReleaseDateDisplay).
     public DateTime? ReleaseDate { get; set; }
     public double? CommunityRating { get; set; }
+
+    // Top 250 için ağırlıklı sıralamada kullanılıyor (bkz. MainViewModel.ComputeTopRated) — kaç
+    // kişinin oyladığını bilmeden ham CommunityRating'e göre sıralamak yanıltıcı olurdu (2 oyla
+    // 5.0 alan bir oyun, 5000 oyla 4.6 alandan "daha iyi" görünürdü).
+    public int? CommunityRatingCount { get; set; }
     public string VideoUrl { get; set; } = string.Empty;
     public string WikipediaUrl { get; set; } = string.Empty;
     public long? SteamAppId { get; set; }

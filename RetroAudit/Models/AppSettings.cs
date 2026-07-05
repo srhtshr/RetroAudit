@@ -16,6 +16,16 @@ public enum PlatformListDisplayMode
     Logo,
 }
 
+// "Görsel Getir" ile indirilen Box/BG/SS görsellerinin en uzun kenarının küçültüleceği maksimum
+// piksel boyutu (bkz. ArtworkService.ResizeAndEncode) — Ayarlar > Genel'den değiştirilir.
+// Original: hiç küçültme yapılmaz, kaynak dosya boyutu aynen korunur.
+public enum ArtworkMaxDimension
+{
+    Px600,
+    Px800,
+    Original,
+}
+
 // Tek bir platform için emülatör başlatma ayarları.
 // PreferredCore/AlternativeCore, hangi emülatör(ler)in önerildiğini kaydeder (ör. "Mesen" / "Snes9x");
 // ExecutablePath ise kullanıcının kendi makinesindeki gerçek .exe yolu — core adı ile karışmasın diye
@@ -45,9 +55,6 @@ public class CommandSetting
 // Export/Import Config butonları bu sınıfı doğrudan JSON'a serileştirip geri okur.
 public class AppSettings
 {
-    // RetroAudit'in kendi veri kök dizini (ROM/medya taraması ve RetroAudit.db burada yaşayacak).
-    public string RetroAuditDataPath { get; set; } = string.Empty;
-
     // Platform başına bir emülatör kaydı.
     public List<EmulatorConfig> Emulators { get; set; } = new();
 
@@ -105,6 +112,9 @@ public class AppSettings
 
     // Platform satırlarının Yazı mı Logo mu gösterileceği (bkz. PlatformListDisplayMode).
     public PlatformListDisplayMode PlatformListDisplayMode { get; set; } = PlatformListDisplayMode.Text;
+
+    // "Görsel Getir" indirmelerinin küçültüleceği maksimum boyut (bkz. Ayarlar > Genel).
+    public ArtworkMaxDimension ArtworkMaxDimension { get; set; } = ArtworkMaxDimension.Px600;
 
     // Hangi kategorilerin sol panelde görünür olduğu (Key -> IsVisible). Kayıtlı değeri olmayan
     // bir kategori varsayılan olarak görünür sayılır.

@@ -40,18 +40,43 @@
             <!-- ===================== Genel ===================== -->
             <TabItem Header="Genel">
                 <StackPanel Margin="4,16,4,4">
-                    <TextBlock Text="RetroAudit Data Dizini" FontWeight="Bold" Margin="0,0,0,4" />
-                    <TextBlock Text="ROM İçe Aktar ve Arayıp İndir ile eklenen dosyalar bu klasör altında ({Platform}\{Dosya} olarak) saklanır. İlk açılışta otomatik bir varsayılan atanır; büyük arşivler için farklı bir sürücü/klasör seçebilirsiniz."
+                    <TextBlock Text="Veri Klasörü" FontWeight="Bold" Margin="0,0,0,4" />
+                    <TextBlock Text="Games (romlar), Images (görseller) ve Metadata (veritabanları) her zaman uygulamanın kendi klasörünün yanında saklanır — taşınabilirlik için bu konum değiştirilemez."
                                Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" Text="{Binding RetroAuditDataPath, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBox Grid.Column="0" Text="{Binding DataRootPath, Mode=OneWay}" IsReadOnly="True"
                                  VerticalContentAlignment="Center" Margin="0,0,8,0" />
-                        <Button Grid.Column="1" Content="Gözat..." Width="90" Command="{Binding BrowseDataPathCommand}" />
+                        <Button Grid.Column="1" Content="Klasörü Aç" Width="90" Command="{Binding OpenDataFolderCommand}" />
                     </Grid>
+
+                    <TextBlock Text="Görsel İndirme Boyutu" FontWeight="Bold" Margin="0,16,0,4" />
+                    <TextBlock Text="'Görsel Getir' ile indirilen Box/BG/Screenshot görsellerinin en uzun kenarı bu boyuta küçültülür — uygulama hiçbir yerde bundan büyük göstermediği için netlik kaybı gözle görülmez, sadece dosya boyutu azalır."
+                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <RadioButton Margin="0,0,0,8" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Px600}">
+                        <StackPanel Margin="4,0,0,0">
+                            <TextBlock Text="600px (Önerilen)" />
+                            <TextBlock Text="En küçük dosya boyutu — uygulamadaki gösterim alanları için fazlasıyla yeterli netlik."
+                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="10" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Margin="0,0,0,8" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Px800}">
+                        <StackPanel Margin="4,0,0,0">
+                            <TextBlock Text="800px" />
+                            <TextBlock Text="Biraz daha büyük dosyalar, pencere büyütülüp yakınlaştırılırsa fazladan netlik payı bırakır."
+                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="10" />
+                        </StackPanel>
+                    </RadioButton>
+                    <RadioButton Margin="0,0,0,8" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Original}">
+                        <StackPanel Margin="4,0,0,0">
+                            <TextBlock Text="Original Size (küçültme yok)" />
+                            <TextBlock Text="Kaynak dosya boyutu aynen korunur — çok daha büyük dosyalar kaplar."
+                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="10" />
+                        </StackPanel>
+                    </RadioButton>
 
                     <TextBlock Text="LaunchBox.Metadata.db" FontWeight="Bold" Margin="0,16,0,4" />
                     <TextBlock Text="Sağ tık menüsündeki 'Re-match Metadata' komutu için — Builder'ın kullandığı aynı dosya, RetroAudit.db'ye yazılmaz, sadece burada tek bir oyunu yeniden eşleştirmek için okunur."
@@ -253,13 +278,16 @@
 
         </TabControl>
 
-        <!-- Export / Import Config: tüm sekmelerdeki ayarları kapsadığı için sekmelerin dışında,
-             pencerenin altında sabit duruyor. -->
+        <!-- Kaydet / Export / Import Config: tüm sekmelerdeki ayarları kapsadığı için sekmelerin
+             dışında, pencerenin altında sabit duruyor. Kaydet: kullanıcı kararıyla eklendi — ayarlar
+             artık her değişiklikte sessizce değil, sadece bu düğmeye (veya Export'a) basıldığında
+             diske yazılıyor (bkz. SettingsViewModel.SaveSettings). -->
         <Border Grid.Row="2" Background="{StaticResource Brush.Background.Panel}"
                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0" Padding="16,10">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Import Config (JSON)" Width="150" Margin="0,0,8,0" Command="{Binding ImportConfigCommand}" />
-                <Button Content="Export Config (JSON)" Width="150" Style="{StaticResource LaunchButton}" Command="{Binding ExportConfigCommand}" />
+                <Button Content="Export Config (JSON)" Width="150" Margin="0,0,8,0" Command="{Binding ExportConfigCommand}" />
+                <Button Content="Kaydet" Width="110" Style="{StaticResource LaunchButton}" Command="{Binding SaveSettingsCommand}" />
             </StackPanel>
         </Border>
     </Grid>

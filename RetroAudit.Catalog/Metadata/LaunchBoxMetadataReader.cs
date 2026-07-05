@@ -15,6 +15,7 @@ public record MetadataMatch(
     string MatchMethod,
     DateTime? ReleaseDate,
     double? CommunityRating,
+    int? CommunityRatingCount,
     string? VideoUrl,
     string? WikipediaUrl,
     long? SteamAppId,
@@ -82,7 +83,7 @@ public class LaunchBoxMetadataReader : IDisposable
         {
             byCompareName.CommandText =
                 "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
-                "ReleaseDate, CommunityRating, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
+                "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
                 "FROM Games WHERE Platform = $platform AND CompareName = $compareName LIMIT 1";
             byCompareName.Parameters.AddWithValue("$platform", resolvedPlatform);
             byCompareName.Parameters.AddWithValue("$compareName", compareTitle);
@@ -98,7 +99,7 @@ public class LaunchBoxMetadataReader : IDisposable
         {
             byExactName.CommandText =
                 "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
-                "ReleaseDate, CommunityRating, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
+                "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
                 "FROM Games WHERE Platform = $platform AND Name = $name LIMIT 1";
             byExactName.Parameters.AddWithValue("$platform", resolvedPlatform);
             byExactName.Parameters.AddWithValue("$name", exactTitle);
@@ -114,7 +115,7 @@ public class LaunchBoxMetadataReader : IDisposable
         {
             byAlternateName.CommandText = """
                 SELECT g.DatabaseID, g.Name, g.Developer, g.Publisher, g.ReleaseYear, g.Overview, g.MaxPlayers, g.Genres,
-                       g.ReleaseDate, g.CommunityRating, g.VideoURL, g.WikipediaURL, g.SteamAppId, g.Cooperative
+                       g.ReleaseDate, g.CommunityRating, g.CommunityRatingCount, g.VideoURL, g.WikipediaURL, g.SteamAppId, g.Cooperative
                 FROM GameAlternateTitles a
                 JOIN Games g ON g.DatabaseID = a.DatabaseID
                 WHERE g.Platform = $platform AND a.AltNameCompareValue = $compareName
@@ -199,7 +200,7 @@ public class LaunchBoxMetadataReader : IDisposable
         using var detail = _connection.CreateCommand();
         detail.CommandText =
             "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
-            "ReleaseDate, CommunityRating, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
+            "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
             "FROM Games WHERE Platform = $platform AND Name = $name LIMIT 1";
         detail.Parameters.AddWithValue("$platform", resolvedPlatform);
         detail.Parameters.AddWithValue("$name", bestName);
@@ -281,10 +282,11 @@ public class LaunchBoxMetadataReader : IDisposable
             MatchMethod: matchMethod,
             ReleaseDate: releaseDate,
             CommunityRating: reader.IsDBNull(9) ? null : reader.GetDouble(9),
-            VideoUrl: reader.IsDBNull(10) ? null : reader.GetString(10),
-            WikipediaUrl: reader.IsDBNull(11) ? null : reader.GetString(11),
-            SteamAppId: reader.IsDBNull(12) ? null : reader.GetInt64(12),
-            Cooperative: reader.IsDBNull(13) ? null : reader.GetInt32(13) != 0,
+            CommunityRatingCount: reader.IsDBNull(10) ? null : reader.GetInt32(10),
+            VideoUrl: reader.IsDBNull(11) ? null : reader.GetString(11),
+            WikipediaUrl: reader.IsDBNull(12) ? null : reader.GetString(12),
+            SteamAppId: reader.IsDBNull(13) ? null : reader.GetInt64(13),
+            Cooperative: reader.IsDBNull(14) ? null : reader.GetInt32(14) != 0,
             AlternateNames: GetAlternateNames(databaseId),
             MetadataSourceId: databaseId,
             BoxImageFileName: artwork.Box,

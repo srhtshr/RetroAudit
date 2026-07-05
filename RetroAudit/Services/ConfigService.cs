@@ -20,15 +20,6 @@ public static class ConfigService
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "RetroAudit", "settings.json");
 
-    // RetroAuditDataPath hiç ayarlanmamışsa (ilk çalıştırma) kullanıcıyı Ayarlar'a gitmeye
-    // zorlamak yerine otomatik oluşturulan varsayılan konum — RetroAuditUserData.db ile aynı
-    // %LocalAppData%\RetroAudit kökü altında. Kullanıcı büyük arşivler için (PS2/PS3/Wii vb.)
-    // dilerse Ayarlar > Genel'den başka bir sürücü/klasör seçebilir; bu sadece "hiç seçilmemiş"
-    // durumundaki başlangıç değeri.
-    private static readonly string DefaultDataPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RetroAudit", "Data");
-
     // Verilen ayarları belirtilen dosya yoluna biçimlendirilmiş JSON olarak yazar.
     public static void Export(AppSettings settings, string filePath)
     {
@@ -52,24 +43,14 @@ public static class ConfigService
     // bozuksa varsayılan AppSettings döner — hiçbir zaman istisna fırlatmaz.
     public static AppSettings LoadDefault()
     {
-        AppSettings settings;
         try
         {
-            settings = File.Exists(DefaultSettingsPath) ? Import(DefaultSettingsPath) : new AppSettings();
+            return File.Exists(DefaultSettingsPath) ? Import(DefaultSettingsPath) : new AppSettings();
         }
         catch
         {
-            settings = new AppSettings();
+            return new AppSettings();
         }
-
-        if (string.IsNullOrWhiteSpace(settings.RetroAuditDataPath))
-        {
-            Directory.CreateDirectory(DefaultDataPath);
-            settings.RetroAuditDataPath = DefaultDataPath;
-            SaveDefault(settings);
-        }
-
-        return settings;
     }
 
     public static void SaveDefault(AppSettings settings) => Export(settings, DefaultSettingsPath);

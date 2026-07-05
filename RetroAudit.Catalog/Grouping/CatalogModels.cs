@@ -45,6 +45,11 @@ public class CatalogGame
     // panelinde gösteriliyor (bkz. CatalogDatabaseService.GetGames, Game.cs).
     public DateTime? ReleaseDate { get; set; }
     public double? CommunityRating { get; set; }
+
+    // Top 250 gibi ağırlıklı sıralamalarda az oylanmış oyunların ortalamaya çekilmesi için gereken
+    // oy sayısı (bkz. RetroAudit/ViewModels/MainViewModel.cs ComputeTopRated) — LaunchBox'ta var
+    // ama önceden içe aktarılmıyordu.
+    public int? CommunityRatingCount { get; set; }
     public string? VideoUrl { get; set; }
     public string? WikipediaUrl { get; set; }
     public long? SteamAppId { get; set; }

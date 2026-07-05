@@ -9,6 +9,13 @@ public enum PlaylistChipKind
     RecycleBin,
     ReadyToPlay,
     NeedsSearch,
+
+    // Seçili platforma göre ağırlıklı Topluluk Puanı sıralamasının ilk 250/100/25'i (bkz.
+    // MainViewModel.ComputeTopRated) — "All Platforms" seçiliyken tüm kütüphane genelinde hesaplanır.
+    // Game.TopRankBadge bu üçünün en yükseğini (Top25 > Top100 > Top250) rozet olarak gösterir.
+    Top250,
+    Top100,
+    Top25,
 }
 
 // Ana tablonun üstündeki hashtag/chip şeridindeki tek bir satır. Favorites dahil gerçek

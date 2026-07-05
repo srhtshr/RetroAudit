@@ -2,6 +2,57 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.20] - 2026-07-05
+
+### Added
+- **Taşınabilir veri düzeni**: Games/Images/Metadata/Emulation klasörleri artık her zaman
+  uygulamanın kendi .exe'sinin yanında — kullanıcı tarafından seçilebilen `RetroAuditDataPath`
+  ayarı kaldırıldı. `RetroAuditUserData.db` eski `%LocalAppData%\RetroAudit\` konumundan otomatik
+  (tek seferlik) taşınıyor.
+- **Görsel Getir**: tekli (Actions sütunu) ve toplu (sağ tık kapsülü) komutlarla Box/Background/
+  Screenshot/Clear Logo görselleri LaunchBox kaynağından indirilip yerel `Images\` klasörüne
+  yazılıyor; indirme sırasında alt durum çubuğunda % gösteren ilerleme çubuğu. İndirilen görseller
+  netlik kaybı olmadan Ayarlar > Genel'de seçilen boyuta (600px/800px/Original) küçültülüp
+  (şeffaflık gerekmeyen türler için) JPEG'e çevriliyor — küçük/basit görsellerde yeniden kodlama
+  orijinalden büyük çıkarsa orijinal korunuyor.
+- Sol panelde kullanılan ~40 platform için gerçek **platform logoları** (`Images/Platforms/`) —
+  detay panelinde Box'ın üstünde ayrı bir rozet olarak gösteriliyor, tıklanınca o platformun ROM
+  klasörünü açıyor.
+- **Top 250 / Top 100 / Top 25**: LaunchBox'ın `CommunityRatingCount` (oy sayısı) alanı artık
+  içe aktarılıyor ve IMDb'nin Top 250'sinde kullanılanla aynı ağırlıklı (Bayesian) ortalamayla
+  her platform için ayrı ayrı hesaplanıyor — az oyla yüksek puan almış oyunlar platform
+  ortalamasına çekiliyor. Playlist chip şeridine üç yeni filtre eklendi; bir oyun bu sıralamalardan
+  birine giriyorsa detay panelinde ilgili rozet (`Images/Badges/`) gösteriliyor.
+- Detay paneli yeniden tasarlandı: başlık artık ayrı bir üst satırda (YouTube/Wikipedia ikon
+  butonlarıyla aynı hizada, sağ üstte), Clear Logo kendi kartında (gameplay alanının üstünde),
+  Topluluk Puanı fanart'ın sağ alt köşesinde, görseli olmayan Box/Background/Screenshot için
+  `Images/NoImage/` altında sabit yer tutucular.
+- Ayarlar penceresine **Kaydet** düğmesi — ayarlar artık her değişiklikte sessizce değil, bu
+  düğmeye (veya Export'a) basıldığında diske yazılıyor. Bu arada Emülatörler/Bölge Önceliği/
+  Komutlar sekmelerinin hiçbir zaman kalıcı olmadığı (sadece JSON export/import ile taşınabildiği)
+  fark edildi ve düzeltildi.
+
+### Changed
+- Sağ detay paneli artık sabit genişlikte — kenarından tutup sürüklenerek yeniden
+  boyutlandırılamıyor, sadece toolbar'daki düğmeyle açılıp kapanıyor. Platform listesinde
+  gezinirken (henüz bir oyun seçilmemişken) boş görünmek yerine tamamen gizleniyor; bir oyuna
+  tıklanınca otomatik açılıyor.
+- Sürüm kartları (Sürümler listesi) daha kompakt: kaynak etiketi ("no-intro" vb.) artık kendi
+  satırı yerine üst satırın sağında, CRC32 kodları kaldırıldı.
+- DataGrid'deki Logo sütunu genişletildi ve yüksek kaliteli ölçekleme (`BitmapScalingMode`)
+  eklendi — geniş/yatay Clear Logo'lar artık küçük kare bir alana sıkışıp bulanıklaşmıyor.
+
+### Fixed
+- "Görsel Getir" ile indirilen bir görsel, uygulama yeniden başlatılana kadar grid/detay
+  panelinde görünmüyordu (bellek içi medya indeksi diskten sadece açılışta okunuyordu) —
+  indirme tamamlanır tamamlanmaz indeks güncelleniyor.
+- Sağ paneldeki Sürümler listesinin üzerine gelince fare tekerleği dıştaki panel yerine hiçbir
+  yeri kaydırmıyordu (iç kaydırması bilinçli kapalı ama olayı yutuyordu) — olay artık üst
+  ScrollViewer'a yönlendiriliyor.
+- YouTube/Wikipedia ikon butonları, yanlarındaki BAŞLAT butonundan daha kısa oldukları için
+  StackPanel'in dikey gerdirmesiyle üstten/alttan taşıyordu — artık sabit boyutlu, çerçevesiz
+  "widget" görünümünde.
+
 ## [0.19] - 2026-07-05
 
 ### Added

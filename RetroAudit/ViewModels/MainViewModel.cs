@@ -95,32 +95,13 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private double rowHeight = 30;
 
-    // Sağ detay panelinin GridSplitter ile sürüklenerek ayarlanan genişliği (bkz. SaveDetailPanelWidth).
-    // IsDetailPanelExpanded'dan bağımsız — panel kapatılıp açıldığında bu genişliğe geri döner.
-    // NOT: MainWindow.xaml'de bu ARTIK bir {Binding} ile ColumnDefinition.Width'e bağlanmıyor —
-    // GridSplitter'ın kendisi Width'i doğrudan SetValue ile değiştirdiği için bu, aktif bir OneWay
-    // Binding'i kalıcı olarak "koparıyordu" (sürükledikten sonra tam ekran düğmesi bir daha hiç
-    // işe yaramıyordu). Bunun yerine MainWindow.xaml.cs bu iki property'nin PropertyChanged'ını
-    // dinleyip ColumnDefinition.Width'i KENDİSİ, elle set ediyor (bkz. ApplyDetailPanelWidth).
+    // Sağ detay panelinin sabit genişliği — kullanıcı kararıyla artık elle (GridSplitter ile)
+    // ayarlanamıyor, sadece IsDetailPanelExpanded ile 0/bu değer arasında açılıp kapanıyor (bkz.
+    // MainWindow.xaml.cs ApplyDetailPanelWidth). NOT: MainWindow.xaml'de bu bir {Binding} ile
+    // ColumnDefinition.Width'e bağlanmıyor — MainWindow.xaml.cs bu iki property'nin
+    // PropertyChanged'ını dinleyip Width'i KENDİSİ, elle set ediyor.
     [ObservableProperty]
     private double detailPanelWidth = 340;
-
-    // MainWindow.xaml.cs, GridSplitter sürüklemesi bittiğinde (DragCompleted) çağırır — sürükleme
-    // sırasında piksel piksel değil, sadece bırakıldığında tek seferlik kaydeder.
-    public void SaveDetailPanelWidth(double width)
-    {
-        // GridSplitter'ın kendisi bir ColumnDefinition.MinWidth ile sınırlanmıyor (bkz. MainWindow.xaml
-        // yorumu) — kapanma (0) davranışıyla çakışmasın diye. Asgari genişlik bunun yerine sadece
-        // burada, kalıcı olarak kaydedilecek değere uygulanıyor. Math.Round: GridSplitter'dan gelen
-        // ActualWidth, DPI ölçeklemesi yüzünden küsuratlı olabiliyor (ör. 339.667) — bu küsuratlı
-        // değer daha sonra "tam ekran" düğmesiyle KENDİSİ yeniden uygulanınca, pencere o an farklı
-        // bir DPI/boyutta olsa bile aynı küsurat tekrar hesaba katılıyor ve toplam sütun genişliği
-        // pencereyi bir-iki piksel aşıp dikey scrollbar'ın kırpılmasına yol açabiliyordu.
-        width = Math.Round(Math.Max(220, width));
-        DetailPanelWidth = width;
-        _appSettings.DetailPanelWidth = width;
-        ConfigService.SaveDefault(_appSettings);
-    }
 
     // "OTHERS" kategorisinin açık/kapalı durumu. Varsayılan kapalı: kullanıcı ilk açılışta sadece
     // popüler kategorileri (CONSOLES/HANDHELDS/ARCADE/COMPUTERS/CLASSIC) görür.
@@ -171,7 +152,7 @@ public partial class MainViewModel : ObservableObject
     // RomImportWindow gibi ViewModel'e ayrı bağımlı pencerelerin ihtiyaç duyduğu salt-okunur
     // erişim — _allGames doğrudan dışarı sızdırılmıyor, sadece IReadOnlyList olarak.
     public IReadOnlyList<Game> AllGames => _allGames;
-    public string RetroAuditDataPath => _appSettings.RetroAuditDataPath;
+    public string GamesRootPath => AppPaths.Games;
 
     // DataGrid sütun başlıklarındaki joystick ikonuyla açılan filtre dropdown'ları. Her biri
     // _allGames üzerinden (tüm veri setinden, aktif filtrelerden bağımsız) bir kere hesaplanan
@@ -225,6 +206,7 @@ public partial class MainViewModel : ObservableObject
             game.HasLocalFile = HasLocalFile(game);
             NotifyArtworkDownloaded(game);
         }
+        ComputeTopRankBadges();
 
         Platforms = new ObservableCollection<Platform>(CatalogDatabaseService.GetPlatforms());
 
@@ -452,6 +434,9 @@ public partial class MainViewModel : ObservableObject
         PlaylistChips.Add(new PlaylistChip { Name = "Recycle Bin", Color = "#8A8D93", IsBuiltIn = true, Kind = PlaylistChipKind.RecycleBin });
         PlaylistChips.Add(new PlaylistChip { Name = "Ready to Play", Color = "#3FB950", IsBuiltIn = true, Kind = PlaylistChipKind.ReadyToPlay });
         PlaylistChips.Add(new PlaylistChip { Name = "Needs Search", Color = "#E5484D", IsBuiltIn = true, Kind = PlaylistChipKind.NeedsSearch });
+        PlaylistChips.Add(new PlaylistChip { Name = "Top 250", Color = "#D9932B", IsBuiltIn = true, Kind = PlaylistChipKind.Top250 });
+        PlaylistChips.Add(new PlaylistChip { Name = "Top 100", Color = "#D9932B", IsBuiltIn = true, Kind = PlaylistChipKind.Top100 });
+        PlaylistChips.Add(new PlaylistChip { Name = "Top 25", Color = "#D9932B", IsBuiltIn = true, Kind = PlaylistChipKind.Top25 });
 
         if (previousSelection is not null)
             SelectedChip = PlaylistChips.FirstOrDefault(c => c.Kind == previousSelection.Kind && c.PlaylistId == previousSelection.PlaylistId);
@@ -582,13 +567,13 @@ public partial class MainViewModel : ObservableObject
     // kullanılır (bkz. RomImportService/RomImportViewModel). GameKey -> tam dosya yolu.
     private Dictionary<string, string> _filePathOverrides = new();
 
-    // Box/Background/Screenshot/ClearLogo için ayrı ayrı (platform -> uzantısız dosya adı -> tam
-    // yol) dizinleri — "Görsel Getir" ile indirilen dosyaların koyduğu yer (bkz. ArtworkService.
-    // BuildLocalPath: {RetroAuditDataPath}\{Platform}\Media\{Type}\). Uzantısız anahtar kullanılıyor
+    // Box/BG/Logo/SS için ayrı ayrı (görünen platform adı -> uzantısız dosya adı -> tam yol)
+    // dizinleri — "Görsel Getir" ile indirilen dosyaların koyduğu yer (bkz. ArtworkService.
+    // BuildLocalPath: AppPaths.Images\{PlatformDisplayName}\{Type}\). Uzantısız anahtar kullanılıyor
     // çünkü indirilen dosyanın uzantısı (jpg/png) kaynağa göre değişir, ROM dosya adıyla (uzantısız)
-    // birebir eşleşmesi gereken tek şey isim gövdesi. ClearLogo için TAM YOL gerekiyor (Logo
-    // sütununda gerçek bir küçük resim gösteriliyor); diğer üçü sadece var/yok kontrolü için
-    // kullanılıyor ama aynı yapıyı paylaşmak kodu tekilleştiriyor.
+    // birebir eşleşmesi gereken tek şey isim gövdesi. Logo için TAM YOL gerekiyor (Logo sütununda
+    // gerçek bir küçük resim gösteriliyor); diğer üçü sadece var/yok kontrolü için kullanılıyor
+    // ama aynı yapıyı paylaşmak kodu tekilleştiriyor.
     private Dictionary<string, Dictionary<string, string>> _boxByPlatform = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, Dictionary<string, string>> _backgroundByPlatform = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, Dictionary<string, string>> _screenshotByPlatform = new(StringComparer.OrdinalIgnoreCase);
@@ -600,14 +585,11 @@ public partial class MainViewModel : ObservableObject
 
         _filesByPlatform = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         _boxByPlatform = BuildMediaTypeIndex("Box");
-        _backgroundByPlatform = BuildMediaTypeIndex("Background");
-        _screenshotByPlatform = BuildMediaTypeIndex("Screenshot");
-        _clearLogoByPlatform = BuildMediaTypeIndex("ClearLogo");
+        _backgroundByPlatform = BuildMediaTypeIndex("BG");
+        _screenshotByPlatform = BuildMediaTypeIndex("SS");
+        _clearLogoByPlatform = BuildMediaTypeIndex("Logo");
 
-        if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath) || !Directory.Exists(_appSettings.RetroAuditDataPath))
-            return;
-
-        foreach (var platformDir in Directory.EnumerateDirectories(_appSettings.RetroAuditDataPath))
+        foreach (var platformDir in Directory.EnumerateDirectories(AppPaths.Games))
         {
             var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var file in Directory.EnumerateFiles(platformDir))
@@ -619,12 +601,10 @@ public partial class MainViewModel : ObservableObject
     private Dictionary<string, Dictionary<string, string>> BuildMediaTypeIndex(string typeFolder)
     {
         var result = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase);
-        if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath) || !Directory.Exists(_appSettings.RetroAuditDataPath))
-            return result;
 
-        foreach (var platformDir in Directory.EnumerateDirectories(_appSettings.RetroAuditDataPath))
+        foreach (var platformDir in Directory.EnumerateDirectories(AppPaths.Images))
         {
-            var mediaTypeDir = Path.Combine(platformDir, "Media", typeFolder);
+            var mediaTypeDir = Path.Combine(platformDir, typeFolder);
             if (!Directory.Exists(mediaTypeDir))
                 continue;
 
@@ -642,31 +622,58 @@ public partial class MainViewModel : ObservableObject
             return null;
 
         var baseName = Path.GetFileNameWithoutExtension(game.File);
-        return byPlatform.TryGetValue(game.Platform, out var files) && files.TryGetValue(baseName, out var path)
+        return byPlatform.TryGetValue(game.PlatformDisplayName, out var files) && files.TryGetValue(baseName, out var path)
             ? path
             : null;
     }
 
-    private bool HasBoxFile(Game game) => TryGetMediaPath(_boxByPlatform, game) is not null;
-    private bool HasBackgroundFile(Game game) => TryGetMediaPath(_backgroundByPlatform, game) is not null;
-    private bool HasScreenshotFile(Game game) => TryGetMediaPath(_screenshotByPlatform, game) is not null;
+    private string GetBoxPath(Game game) => TryGetMediaPath(_boxByPlatform, game) ?? string.Empty;
+    private string GetBackgroundPath(Game game) => TryGetMediaPath(_backgroundByPlatform, game) ?? string.Empty;
+    private string GetScreenshotPath(Game game) => TryGetMediaPath(_screenshotByPlatform, game) ?? string.Empty;
     private string GetClearLogoPath(Game game) => TryGetMediaPath(_clearLogoByPlatform, game) ?? string.Empty;
 
+    // Medya sözlükleri (_boxByPlatform vb.) uygulama açılışında diskten BİR KEZ kuruluyor —
+    // "Görsel Getir" ile yeni indirilen bir dosya restart olmadan bu sözlüklerde yoktu, bu yüzden
+    // NotifyArtworkDownloaded hemen ardından çağrılsa bile GetXPath boş dönüyordu (kullanıcı geri
+    // bildirimi: "resim gelmiyor, kapatıp açınca geliyor"). DownloadArtworkAsync artık her başarılı
+    // indirmeden sonra ilgili sözlüğü bu metotla güncelliyor, restart beklemeden anında görünüyor.
+    private void RegisterDownloadedMedia(string type, string platformDisplayName, string baseFileName, string destination)
+    {
+        var byPlatform = type switch
+        {
+            "Box" => _boxByPlatform,
+            "BG" => _backgroundByPlatform,
+            "SS" => _screenshotByPlatform,
+            "Logo" => _clearLogoByPlatform,
+            _ => null,
+        };
+        if (byPlatform is null)
+            return;
+
+        if (!byPlatform.TryGetValue(platformDisplayName, out var files))
+        {
+            files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            byPlatform[platformDisplayName] = files;
+        }
+        files[baseFileName] = destination;
+    }
+
     // NotifyRomDownloaded ile aynı desen (bkz. aşağıda) — tek bir oyun için "Görsel Getir"
-    // tamamlandığında uygulama yeniden başlatılmadan grid/Logo sütunu güncellensin diye.
+    // tamamlandığında uygulama yeniden başlatılmadan grid/Logo sütunu VE sağ detay panelindeki
+    // Box/Background/Screenshot önizlemeleri güncellensin diye (bkz. Game.HasBox vb. — artık path'in
+    // doluluğundan türetiliyor, ayrıca set edilmiyor).
     public void NotifyArtworkDownloaded(Game game)
     {
-        game.HasBox = HasBoxFile(game);
-        game.HasBackground = HasBackgroundFile(game);
-        game.HasScreenshot = HasScreenshotFile(game);
+        game.BoxPath = GetBoxPath(game);
+        game.BackgroundPath = GetBackgroundPath(game);
+        game.ScreenshotPath = GetScreenshotPath(game);
         game.ClearLogoPath = GetClearLogoPath(game);
     }
 
     // Grid'deki "eksik ROM'u ara" sütunu ve context menüsündeki "Open File Location"ın paylaştığı
     // tek dosya-var-mı kontrolü. Önce kullanıcının "Şu anki yoldan kullan" ile kaydettiği bir
     // override var mı bakılır (bkz. FilePathOverrides); yoksa standart kural devreye girer:
-    // AppSettings.RetroAuditDataPath\{Platform}\{File} var mı? Ayarlar > Genel'de veri kök dizini
-    // boşsa (ilk çalıştırma) ve override da yoksa her zaman false döner.
+    // AppPaths.Games\{PlatformDisplayName}\{File} var mı?
     public bool HasLocalFile(Game game)
     {
         if (_filePathOverrides.TryGetValue(game.GameKey, out var overridePath))
@@ -676,20 +683,19 @@ public partial class MainViewModel : ObservableObject
             return false;
 
         if (_filesByPlatform is not null)
-            return _filesByPlatform.TryGetValue(game.Platform, out var files) && files.Contains(game.File);
+            return _filesByPlatform.TryGetValue(game.PlatformDisplayName, out var files) && files.Contains(game.File);
 
-        return !string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath) && File.Exists(GetLocalFilePath(game));
+        return File.Exists(GetLocalFilePath(game));
     }
 
     private string GetLocalFilePath(Game game) =>
         _filePathOverrides.TryGetValue(game.GameKey, out var overridePath)
             ? overridePath
-            : Path.Combine(_appSettings.RetroAuditDataPath, game.Platform, game.File);
+            : Path.Combine(AppPaths.Games, game.PlatformDisplayName, game.File);
 
     // View katmanı (MainWindow.xaml.cs) bunu dinleyip embedded WebView2 penceresini açıyor —
     // ViewModel doğrudan bir Window tipine bağımlı olmasın diye (bkz. RequestOpenMediaProvider
-    // ile aynı desen). TargetFolder boşsa (RetroAuditDataPath ayarlanmamışsa) View, indirme
-    // yolunu override ETMİYOR — WebView2 kendi varsayılan İndirilenler klasörünü kullanıyor.
+    // ile aynı desen).
     public event Action<(string Url, string TargetFolder, Game Game)>? RequestSearchRom;
 
     [RelayCommand]
@@ -702,9 +708,7 @@ public partial class MainViewModel : ObservableObject
             : $"{game.Title} ({region}) {game.PlatformDisplayName} rom + {tag}";
         var url = "https://www.google.com/search?q=" + Uri.EscapeDataString(query);
 
-        var targetFolder = string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath)
-            ? string.Empty
-            : Path.Combine(_appSettings.RetroAuditDataPath, game.Platform);
+        var targetFolder = Path.Combine(AppPaths.Games, game.PlatformDisplayName);
 
         RequestSearchRom?.Invoke((url, targetFolder, game));
     }
@@ -730,6 +734,17 @@ public partial class MainViewModel : ObservableObject
             return;
 
         Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{GetLocalFilePath(game)}\"") { UseShellExecute = true });
+    }
+
+    // Detay panelindeki platform logosu rozetine tıklayınca (bkz. MainWindow.xaml) o platformun
+    // Games\{PlatformDisplayName} klasörünü açar — henüz hiç ROM içe aktarılmadıysa klasör
+    // olmayabilir, bu durumda önce oluşturuluyor (Explorer boş bir klasörü de açabilir).
+    [RelayCommand]
+    private void OpenPlatformFolder(Game game)
+    {
+        var folder = Path.Combine(AppPaths.Games, game.PlatformDisplayName);
+        Directory.CreateDirectory(folder);
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
     }
 
     // --- Hide / Recycle Bin ---
@@ -1015,6 +1030,15 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnIsBulkArtworkFetchingChanged(bool value) => OnPropertyChanged(nameof(CanBulkFetchArtwork));
 
+    // Tekli/toplu "Görsel Getir" sırasında pencerenin altındaki ilerleme çubuğunu besler (bkz.
+    // MainWindow.xaml, kullanıcı isteği: "% gösteren ilerleyen bir gösterge bar"). Tekli indirmede
+    // her bir görsel (en fazla 4), toplu indirmede her bir oyun tamamlandığında güncellenir.
+    [ObservableProperty]
+    private bool isArtworkDownloadInProgress;
+
+    [ObservableProperty]
+    private double artworkDownloadProgress;
+
     [RelayCommand]
     private async Task FetchArtwork(Game game)
     {
@@ -1025,28 +1049,35 @@ public partial class MainViewModel : ObservableObject
             RequestShowMessage?.Invoke("Bu oyun için eşleşmiş bir metadata kaydı yok, görsel aranamadı.");
             return;
         }
-        if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath))
+
+        IsArtworkDownloadInProgress = true;
+        ArtworkDownloadProgress = 0;
+        (int Succeeded, int Total) result;
+        try
         {
-            RequestShowMessage?.Invoke("Önce Ayarlar > Genel'den RetroAudit veri dizinini ayarlayın.");
-            return;
+            result = await DownloadArtworkAsync(game, (completed, total) =>
+                ArtworkDownloadProgress = total == 0 ? 100 : (double)completed / total * 100);
+        }
+        finally
+        {
+            IsArtworkDownloadInProgress = false;
         }
 
-        var downloaded = await DownloadArtworkAsync(game);
         NotifyArtworkDownloaded(game);
         ApplyFilter();
-        RequestShowMessage?.Invoke($"{downloaded} / 4 görsel indirildi.");
+
+        // Başarılı indirmede bilgi mesajı gösterilmiyor (kullanıcı kararı: "gereksiz") — sadece
+        // hiç görsel bulunamadığında veya bir kısmı indirilemediğinde uyarılıyor.
+        if (result.Total == 0)
+            RequestShowMessage?.Invoke("Bu oyun için indirilebilecek görsel bulunamadı.");
+        else if (result.Succeeded < result.Total)
+            RequestShowMessage?.Invoke($"{result.Total - result.Succeeded} görsel indirilemedi.");
     }
 
     [RelayCommand]
     private async Task BulkFetchArtwork()
     {
         IsContextMenuOpen = false;
-
-        if (string.IsNullOrWhiteSpace(_appSettings.RetroAuditDataPath))
-        {
-            RequestShowMessage?.Invoke("Önce Ayarlar > Genel'den RetroAudit veri dizinini ayarlayın.");
-            return;
-        }
 
         var targets = ContextMenuSelection.Where(g => g.HasArtworkSource).ToList();
         if (targets.Count == 0)
@@ -1056,48 +1087,81 @@ public partial class MainViewModel : ObservableObject
         }
 
         IsBulkArtworkFetching = true;
+        IsArtworkDownloadInProgress = true;
+        ArtworkDownloadProgress = 0;
         var totalDownloaded = 0;
+        var totalAssets = 0;
         try
         {
-            foreach (var game in targets)
+            for (var i = 0; i < targets.Count; i++)
             {
-                totalDownloaded += await DownloadArtworkAsync(game);
-                NotifyArtworkDownloaded(game);
+                var result = await DownloadArtworkAsync(targets[i]);
+                totalDownloaded += result.Succeeded;
+                totalAssets += result.Total;
+                NotifyArtworkDownloaded(targets[i]);
+                ArtworkDownloadProgress = (double)(i + 1) / targets.Count * 100;
             }
         }
         finally
         {
             IsBulkArtworkFetching = false;
+            IsArtworkDownloadInProgress = false;
         }
 
         ApplyFilter();
-        RequestShowMessage?.Invoke($"{targets.Count} oyun için toplam {totalDownloaded} görsel indirildi.");
+
+        // Başarılı indirmede bilgi mesajı gösterilmiyor (kullanıcı kararı: "gereksiz") — sadece
+        // hiçbir görsel bulunamadığında veya bir kısmı indirilemediğinde uyarılıyor.
+        if (totalAssets == 0)
+            RequestShowMessage?.Invoke("Seçilen oyunlar için indirilebilecek görsel bulunamadı.");
+        else if (totalDownloaded < totalAssets)
+            RequestShowMessage?.Invoke($"{totalAssets - totalDownloaded} görsel indirilemedi.");
     }
 
-    // FetchArtwork ve BulkFetchArtwork'ün paylaştığı asıl indirme mantığı — bir oyun için mevcut
-    // olan (en fazla 4: Box/Background/Screenshot/ClearLogo) görsel varlığı indirip diske yazar,
-    // kaç tanesinin başarılı olduğunu döner. Sıralı (paralel değil) — hem basit hem de kaynak
-    // sunucuyu yormamak için (bkz. ArtworkService yorumu).
-    private async Task<int> DownloadArtworkAsync(Game game)
+    // FetchArtwork/BulkFetchArtwork'ün paylaştığı indirme mantığı — mevcut olan (en fazla 4)
+    // görsel varlığı sıralı (paralel değil) indirir, (başarı sayısı, toplam) döner — çağıran taraf
+    // buna bakarak sadece eksik/başarısız durumda uyarı gösteriyor (bkz. RequestShowMessage
+    // çağrıları, kullanıcı kararı: başarılı indirmede mesaj gösterilmiyor). onProgress: her görsel
+    // denemesinden sonra (completed, total) ile çağrılır — sadece tekli indirmede kullanılıyor
+    // (bkz. FetchArtwork), toplu indirme kendi ilerlemesini oyun bazında ayrıca hesaplıyor.
+    private async Task<(int Succeeded, int Total)> DownloadArtworkAsync(Game game, Action<int, int>? onProgress = null)
     {
         var assets = CatalogDatabaseService.GetArtworkAssets(game.GameId);
         if (assets.Count == 0)
-            return 0;
+            return (0, 0);
 
         var baseFileName = GetMediaBaseFileName(game);
         var succeeded = 0;
+        var completed = 0;
         foreach (var (type, fileName) in assets)
         {
-            var destination = ArtworkService.BuildLocalPath(_appSettings.RetroAuditDataPath, game.Platform, type, baseFileName, fileName);
-            if (await ArtworkService.DownloadAsync(fileName, destination))
+            // Sadece Logo şeffaflık gerektirir (PNG) — Box/BG/SS küçük/kayıplı JPEG'e çevriliyor
+            // (bkz. ArtworkService, kullanıcı kararı: dosya boyutunu azalt).
+            var preserveTransparency = type == "Logo";
+            var destination = ArtworkService.BuildLocalPath(AppPaths.Images, game.PlatformDisplayName, type, baseFileName, preserveTransparency);
+            if (await ArtworkService.DownloadAsync(fileName, destination, preserveTransparency, GetArtworkMaxDimensionPixels()))
+            {
+                RegisterDownloadedMedia(type, game.PlatformDisplayName, baseFileName, destination);
                 succeeded++;
+            }
+            completed++;
+            onProgress?.Invoke(completed, assets.Count);
         }
-        return succeeded;
+        return (succeeded, assets.Count);
     }
 
-    // Görsel dosya adı normalde ROM dosyasıyla aynı kimliği kullanır (uzantısız) — ama bir oyunun
-    // henüz ROM'u olmayabilir (kullanıcı sadece kapak/görsel arşivliyor olabilir), bu durumda
-    // başlıktan, dosya sisteminde geçersiz karakterler temizlenerek türetilir.
+    // Ayarlar > Genel'de seçilen boyutu (bkz. AppSettings.ArtworkMaxDimension) ArtworkService'in
+    // beklediği piksel değerine çevirir. Original: int.MaxValue — hiçbir gerçek görsel bu kadar
+    // büyük olmadığı için resize hiç tetiklenmez.
+    private int GetArtworkMaxDimensionPixels() => _appSettings.ArtworkMaxDimension switch
+    {
+        ArtworkMaxDimension.Px800 => 800,
+        ArtworkMaxDimension.Original => int.MaxValue,
+        _ => 600,
+    };
+
+    // Normalde ROM dosya adı (uzantısız) kullanılır; ROM henüz yoksa başlıktan, geçersiz
+    // dosya adı karakterleri temizlenerek türetilir.
     private static string GetMediaBaseFileName(Game game)
     {
         if (!string.IsNullOrWhiteSpace(game.File))
@@ -1107,7 +1171,17 @@ public partial class MainViewModel : ObservableObject
         return new string(game.Title.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
     }
 
-    partial void OnSelectedGameChanged(Game? value) => LoadSelectedGameVersions();
+    // Bir oyuna tıklanınca detay paneli otomatik açılır (kullanıcı isteği) — platform listesinde
+    // gezinirken SelectedGame null'a düşer, panel MainWindow.xaml.cs (ApplyDetailPanelWidth) ve
+    // XAML'deki Visibility tetikleyicisi sayesinde gizlenir (boş panel gösterme sorunu). Kullanıcı
+    // IsDetailPanelExpanded'ı toolbar düğmesiyle manuel kapatırsa bu, sadece SONRAKİ oyun
+    // seçiminde tekrar açılana kadar geçerli kalır.
+    partial void OnSelectedGameChanged(Game? value)
+    {
+        LoadSelectedGameVersions();
+        if (value is not null)
+            IsDetailPanelExpanded = true;
+    }
 
     // Sağ paneldeki Versions listesini seçili oyuna göre yeniden doldurur.
     private void LoadSelectedGameVersions()
@@ -1148,11 +1222,11 @@ public partial class MainViewModel : ObservableObject
             }
         }
 
-        if (_filesByPlatform is not null && _filesByPlatform.TryGetValue(game.Platform, out var files))
+        if (_filesByPlatform is not null && _filesByPlatform.TryGetValue(game.PlatformDisplayName, out var files))
         {
             var match = version.Hashes.FirstOrDefault(h => files.Contains(h.FileName));
             if (match is not null)
-                return Path.Combine(_appSettings.RetroAuditDataPath, game.Platform, match.FileName);
+                return Path.Combine(AppPaths.Games, game.PlatformDisplayName, match.FileName);
         }
 
         return null;
@@ -1234,6 +1308,11 @@ public partial class MainViewModel : ObservableObject
                 PlaylistChipKind.RecycleBin => _allGames.Where(g => g.IsDeleted),
                 PlaylistChipKind.ReadyToPlay => _allGames.Where(g => g.HasLocalFile),
                 PlaylistChipKind.NeedsSearch => _allGames.Where(g => !g.HasLocalFile),
+                // Seçili platforma göre (bkz. SelectedPlatform) — "All Platforms" iken tüm
+                // kütüphane üzerinden hesaplanır.
+                PlaylistChipKind.Top250 => ComputeTopRated(GetTopRatedPopulation(), 250),
+                PlaylistChipKind.Top100 => ComputeTopRated(GetTopRatedPopulation(), 100),
+                PlaylistChipKind.Top25 => ComputeTopRated(GetTopRatedPopulation(), 25),
                 _ => _allGames.Where(g => _selectedChipMembership.Contains(g.GameKey)),
             };
         }
@@ -1273,6 +1352,66 @@ public partial class MainViewModel : ObservableObject
 
         OnPropertyChanged(nameof(VisibleCount));
         OnPropertyChanged(nameof(TotalCount));
+    }
+
+    // "Top 250/100/25" chip'leri için ağırlıklı ortalama (IMDb'nin kendi Top 250'sinde kullandığı
+    // Bayesian tahminle aynı formül): WR = (v/(v+m))*R + (m/(v+m))*C. Ham CommunityRating'e göre
+    // sıralamak yanıltıcı olurdu — az oyla mükemmel puan almış bir oyun, binlerce oyla biraz daha
+    // düşük puan almış bir oyunun önüne geçerdi. m (bu popülasyondaki tipik oy sayısı, medyan) ve
+    // C (bu popülasyonun ortalama puanı) HER ZAMAN verilen "population" kümesinden hesaplanır —
+    // yani çağıran taraf hangi alt kümeyi verirse (tek platform ya da tüm kütüphane) ağırlıklandırma
+    // ona göre normalize olur. Tam sıralı listeyi döndürür; kesme noktası (250/100/25) çağıran tarafta.
+    private static List<Game> RankByWeightedRating(IEnumerable<Game> population)
+    {
+        var rated = population.Where(g => g.CommunityRating is > 0 && g.CommunityRatingCount is > 0).ToList();
+        if (rated.Count == 0)
+            return new List<Game>();
+
+        var meanRating = rated.Average(g => g.CommunityRating!.Value);
+        var voteCounts = rated.Select(g => g.CommunityRatingCount!.Value).OrderBy(v => v).ToList();
+        var m = voteCounts[voteCounts.Count / 2];
+
+        return rated
+            .Select(g => new
+            {
+                Game = g,
+                Weighted = (g.CommunityRatingCount!.Value / (double)(g.CommunityRatingCount.Value + m)) * g.CommunityRating!.Value
+                           + (m / (double)(g.CommunityRatingCount.Value + m)) * meanRating,
+            })
+            .OrderByDescending(x => x.Weighted)
+            .Select(x => x.Game)
+            .ToList();
+    }
+
+    private static IEnumerable<Game> ComputeTopRated(IEnumerable<Game> population, int take) =>
+        RankByWeightedRating(population).Take(take);
+
+    // Top 250/100/25 chip'lerinin filtre popülasyonu — seçili platforma göre daralır, "All
+    // Platforms" iken tüm kütüphaneyi kapsar (bkz. ApplyFilter).
+    private IEnumerable<Game> GetTopRatedPopulation() => SelectedPlatform is { IsAllPlatforms: false }
+        ? _allGames.Where(g => g.Platform == SelectedPlatform.Name && !g.IsHidden && !g.IsDeleted)
+        : _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
+
+    // Uygulama açılışında BİR KEZ hesaplanır (bkz. constructor) — her oyunun KENDİ platformu
+    // içindeki ağırlıklı sıralamaya göre en yüksek rozeti (Top25 > Top100 > Top250) belirlenir.
+    // Bilinçli olarak SelectedPlatform/chip filtresinden BAĞIMSIZ: detay panelindeki rozet, sol
+    // panelde hangi platform seçili olursa olsun aynı kalmalı (bkz. kullanıcı isteği, Images/Badges).
+    private void ComputeTopRankBadges()
+    {
+        foreach (var platformGroup in _allGames.GroupBy(g => g.Platform))
+        {
+            var ranked = RankByWeightedRating(platformGroup);
+            for (var i = 0; i < ranked.Count; i++)
+            {
+                ranked[i].TopRankBadge = i switch
+                {
+                    < 25 => "Top 25",
+                    < 100 => "Top 100",
+                    < 250 => "Top 250",
+                    _ => string.Empty,
+                };
+            }
+        }
     }
 
     // Bir sütun filtresi "aktif" (en az bir değer işaretsiz) değilse hiçbir şey elemez; aktifse

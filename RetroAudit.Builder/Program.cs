@@ -25,10 +25,13 @@ var platformFilter = args2.GetValueOrDefault("platform");
 var launchBoxDb = args2.GetValueOrDefault("launchbox-db")
     ?? @"C:\Users\srhts\LaunchBox\Metadata\LaunchBox.Metadata.db";
 
-// Repo'nun asla içine düşmeyecek bir varsayılan konum — RetroAudit.db LaunchBox'tan türetilmiş
-// veri içerdiği için hiçbir zaman git'e girmemeli (bkz. .gitignore).
+// Taşınabilir düzende WPF uygulaması RetroAudit.db'yi kendi çalıştırılabilir dosyasının yanındaki
+// Metadata\ klasöründe arar (bkz. RetroAudit/Services/AppPaths.cs). Gerçekten tek-klasörlük bir
+// dağıtımda (her iki .exe de aynı klasörde) bu varsayılan otomatik doğru yeri bulur; geliştirme
+// sırasında iki proje ayrı bin\ klasörlerinde olduğu için --output ile WPF'in kendi klasörü
+// açıkça verilmeli.
 var outputDb = args2.GetValueOrDefault("output")
-    ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RetroAudit", "RetroAudit.db");
+    ?? Path.Combine(AppContext.BaseDirectory, "Metadata", "RetroAudit.db");
 
 Console.WriteLine("RetroAudit DAT Builder");
 Console.WriteLine($"  DAT root:       {datRoot}");

@@ -13,8 +13,10 @@ public class Platform
     // Eşlemede yoksa Name'e düşer (CatalogDatabaseService.GetPlatforms bunu ayarlar).
     public string DisplayName { get; set; } = string.Empty;
 
-    // Gerçek logo görseli yerine kullanılan kısa metin placeholder'ı (ör. "NES", "PS2").
-    // İleride gerçek platform logosu eklendiğinde bu alanın yerini bir ImageSource alacak.
+    // Gerçek logo görseli yerine kullanılan kısa metin placeholder'ı (ör. "NES", "PS2"). Sol
+    // paneldeki platform listesinde hâlâ bu kullanılıyor — gerçek logolar bunun yerine DataGrid'in
+    // Platform sütununda gösteriliyor (bkz. Game.PlatformLogoPath, kullanıcı kararı: sol panelde
+    // logo çirkin duruyordu).
     public string IconGlyph { get; set; } = string.Empty;
 
     // Listede platform adının yanında gösterilen oyun sayısı rozeti.

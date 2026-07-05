@@ -171,6 +171,30 @@
         </Setter>
     </Style>
 
+    <!-- ===================== ProgressBar ===================== -->
+    <!-- "Görsel Getir" indirme ilerlemesi için (bkz. MainWindow.xaml alt durum çubuğu). Varsayılan
+         WPF ProgressBar'ı (beyaz Aero şeridi) koyu temaya hiç uymuyordu. PART_Indicator ismi WPF'in
+         kendi ProgressBar mantığı tarafından aranıyor — Value/Minimum/Maximum'a göre genişliğini
+         otomatik hesaplıyor, burada sadece görünümü (düz renkli, köşeleri yuvarlak) özelleştiriliyor. -->
+    <Style TargetType="{x:Type ProgressBar}">
+        <Setter Property="Background" Value="{StaticResource Brush.Background.Elevated}" />
+        <Setter Property="Foreground" Value="{StaticResource Brush.Accent.SelectedBorder}" />
+        <Setter Property="Height" Value="6" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ProgressBar}">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="3" ClipToBounds="True">
+                        <Grid>
+                            <Decorator x:Name="PART_Indicator" HorizontalAlignment="Left">
+                                <Border Background="{TemplateBinding Foreground}" CornerRadius="3" />
+                            </Decorator>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Varsayılan WPF ToolTip'i (beyaz arka plan, siyah yazı) koyu temaya hiç uymuyordu — hem
          elle Tooltip="..." verilen düğmelerde hem DataGrid'in kısaltılmış (ellipsis) hücreler için
          otomatik gösterdiği tooltip'lerde aynı sorun görülüyordu; tek bir global stil ikisini de

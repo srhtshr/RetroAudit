@@ -36,6 +36,13 @@
         <conv:BoolToStatusGlyphConverter x:Key="BoolToStatusGlyph" />
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
 
+        <!-- "YouTube'da İzle"/"Wikipedia" düğmelerindeki ikonlar — açık kaynak Material Design
+             Icons setinden (Apache 2.0), sabit 24x24 viewbox'ta vektör path verisi. Raster
+             (PNG) yerine vektör kullanmak DPI'dan bağımsız keskinlik sağlıyor ve ek dosya
+             yönetimi gerektirmiyor. -->
+        <Geometry x:Key="Icon.YouTube">M21.582,6.186c-0.23-0.86-0.908-1.538-1.768-1.768C18.254,4,12,4,12,4S5.746,4,4.186,4.418 c-0.86,0.23-1.538,0.908-1.768,1.768C2,7.746,2,12,2,12s0,4.254,0.418,5.814c0.23,0.86,0.908,1.538,1.768,1.768 C5.746,20,12,20,12,20s6.254,0,7.814-0.418c0.861-0.23,1.538-0.908,1.768-1.768C22,16.254,22,12,22,12S22,7.746,21.582,6.186z M10,14.598V9.402c0-0.385,0.417-0.625,0.75-0.433l4.5,2.598c0.333,0.192,0.333,0.674,0,0.866l-4.5,2.598 C10.417,15.224,10,14.983,10,14.598z</Geometry>
+        <Geometry x:Key="Icon.Wikipedia">M19,3H5C3.9,3,3,3.9,3,5v14c0,1.1,0.9,2,2,2h14c1.1,0,2-0.9,2-2V5C21,3.9,20.1,3,19,3z M19.8,8.6c0,0.1-0.1,0.2-0.2,0.2h-0.9l-4.3,9.1c0,0.1-0.1,0.1-0.2,0.1c0,0,0,0,0,0c-0.1,0-0.1,0-0.2-0.1l-2-4l-2.2,4C9.9,18,9.8,18,9.8,18c-0.1,0-0.1,0-0.2-0.1L5.3,8.8h-1c-0.1,0-0.2-0.1-0.2-0.2V8.2C4.2,8.1,4.2,8,4.3,8h3.5C7.9,8,8,8.1,8,8.2v0.5c0,0.1-0.1,0.2-0.2,0.2H7.1l3,6.9l1.6-2.9l-2-4H9.2C9.1,8.8,9,8.7,9,8.6V8.2C9,8.1,9.1,8,9.2,8h2.6c0.1,0,0.2,0.1,0.2,0.2v0.5c0,0.1-0.1,0.2-0.2,0.2h-0.5l1.1,2.5l1.3-2.5h-0.8c-0.1,0-0.2-0.1-0.2-0.2V8.2c0-0.1,0.1-0.2,0.2-0.2h2.5c0.1,0,0.2,0.1,0.2,0.2v0.5c0,0.1-0.1,0.2-0.2,0.2h-0.5l-2,3.6l1.6,3.3l3.1-6.9h-1c-0.1,0-0.2-0.1-0.2-0.2V8.2c0-0.1,0.1-0.2,0.2-0.2h3c0.1,0,0.2,0.1,0.2,0.2V8.6z</Geometry>
+
         <!-- DataGridColumn.Header gibi görsel-ağaç-dışı alanların ViewModel'e erişebilmesi için
              (bkz. BindingProxy.cs) — Data, Window'un DataContext'ine (MainViewModel) bağlanır. -->
         <views:BindingProxy x:Key="ViewModelProxy" Data="{Binding}" />
@@ -73,62 +80,68 @@
                     </Style>
                 </Border.Style>
                 <StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <!-- Bu sürümün dosyası diskte var mı — mavi Play / kırmızı çarpı (bkz.
-                             MainViewModel.IsVersionOwned). Grid'deki Play/Search sütunuyla aynı
-                             mavi rengi kullanıyor, tutarlılık için. -->
-                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="&#xE711;" />
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Status.Missing}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsOwned}" Value="True">
-                                            <Setter Property="Text" Value="&#xE768;" />
-                                            <Setter Property="Foreground" Value="{StaticResource Brush.Accent.SelectedBorder}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        <TextBlock Text="{Binding Region}" FontWeight="Bold" FontSize="11">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsOwned}" Value="False">
-                                            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        <TextBlock Text="{Binding VersionLabel}" Margin="6,0,0,0" FontSize="11"
-                                   Foreground="{StaticResource Brush.Text.Secondary}" />
-                        <TextBlock Text="★ Preferred" Margin="6,0,0,0" FontSize="10">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsPreferred}" Value="True">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </StackPanel>
-                    <TextBlock Text="{Binding SourceDat}" FontSize="10" Margin="0,2,0,0"
-                               Foreground="{StaticResource Brush.Text.Secondary}" />
+                    <!-- Kompakt hale getirildi (kullanıcı isteği): SourceDat ("no-intro" vb.) artık
+                         kendi satırı yerine bu üst satırın sağ üst köşesinde — Grid ile sol taraf
+                         (ikon/Region/VersionLabel/Preferred) ve sağdaki SourceDat aynı satırda. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <!-- Bu sürümün dosyası diskte var mı — mavi Play / kırmızı çarpı (bkz.
+                                 MainViewModel.IsVersionOwned). Grid'deki Play/Search sütunuyla aynı
+                                 mavi rengi kullanıyor, tutarlılık için. -->
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Text" Value="&#xE711;" />
+                                        <Setter Property="Foreground" Value="{StaticResource Brush.Status.Missing}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsOwned}" Value="True">
+                                                <Setter Property="Text" Value="&#xE768;" />
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Accent.SelectedBorder}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding Region}" FontWeight="Bold" FontSize="11">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsOwned}" Value="False">
+                                                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBlock Text="{Binding VersionLabel}" Margin="6,0,0,0" FontSize="11"
+                                       Foreground="{StaticResource Brush.Text.Secondary}" />
+                            <TextBlock Text="★ Preferred" Margin="6,0,0,0" FontSize="10">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsPreferred}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" Text="{Binding SourceDat}" FontSize="10" Margin="6,0,0,0"
+                                   VerticalAlignment="Top" Foreground="{StaticResource Brush.Text.Secondary}" />
+                    </Grid>
                     <ItemsControl ItemsSource="{Binding Hashes}" Margin="0,4,0,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <TextBlock FontSize="10" TextWrapping="Wrap"
-                                           Foreground="{StaticResource Brush.Text.Secondary}">
-                                    <Run Text="{Binding FileName, Mode=OneWay}" />
-                                    <Run Text=" · CRC32: " />
-                                    <Run Text="{Binding Crc32, Mode=OneWay}" />
-                                </TextBlock>
+                                <!-- CRC32 kaldırıldı (kullanıcı kararı: gerekli değil) — sadece dosya adı. -->
+                                <TextBlock Text="{Binding FileName, Mode=OneWay}" FontSize="10" TextWrapping="Wrap"
+                                           Foreground="{StaticResource Brush.Text.Secondary}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -835,18 +848,13 @@
                 <ColumnDefinition Width="220" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <!-- Sürgülü sağ panel: IsDetailPanelExpanded false iken 0'a iner, açıkken kullanıcının
-                     GridSplitter ile ayarladığı DetailPanelWidth'e döner. BİLİNÇLİ OLARAK bir
-                     {Binding} DEĞİL — GridSplitter sürüklerken ColumnDefinition.Width'i doğrudan
-                     SetValue ile değiştiriyor, bu da aktif bir OneWay Binding'i kalıcı olarak
-                     koparıyordu (sürükledikten SONRA tam ekran düğmesi bir daha hiç işe yaramıyordu,
-                     çünkü ViewModel'deki değişiklik artık kopan binding'e ulaşamıyordu). Bunun yerine
-                     MainWindow.xaml.cs (ApplyDetailPanelWidth) IsDetailPanelExpanded/DetailPanelWidth
-                     PropertyChanged'ını dinleyip Width'i kendisi, elle set ediyor — GridSplitter'ın
-                     kendi canlı sürüklemesiyle hiç çakışmıyor çünkü aralarında kalıcı bir Binding yok,
-                     sadece olay bazlı tek seferlik senkronizasyon var. MinWidth de kasıtlı olarak
-                     YOK: kapatma (Width=0) ile çakışırdı; asgari genişlik SaveDetailPanelWidth
-                     içinde sadece KALICI kaydedilecek değere uygulanıyor. -->
+                <!-- Sürgülü sağ panel: IsDetailPanelExpanded false iken 0'a iner, açıkken sabit
+                     DetailPanelWidth'e döner. Kullanıcı kararıyla GridSplitter (kenardan tutup
+                     sürükleme) kaldırıldı — panel artık sadece toolbar'daki aç/kapa düğmesiyle
+                     (DetailPanelToggleButton) küçültülüp büyütülüyor, genişliği elle
+                     değiştirilemiyor. BİLİNÇLİ OLARAK bir {Binding} DEĞİL — MainWindow.xaml.cs
+                     (ApplyDetailPanelWidth) IsDetailPanelExpanded/DetailPanelWidth PropertyChanged'ını
+                     dinleyip Width'i kendisi, elle set ediyor. -->
                 <ColumnDefinition x:Name="DetailPanelColumnDef" Width="340" />
             </Grid.ColumnDefinitions>
 
@@ -1058,13 +1066,14 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <DataGridTemplateColumn x:Name="LogoColumn" Header="Logo" Width="44">
+                    <!-- Genişlik 44'ten 70'e çıkarıldı: Clear Logo'lar genelde geniş/yatay (kare
+                         değil) görseller, eski dar 28x28 kare alanda çok küçülüp kötü görünüyordu
+                         (kullanıcı geri bildirimi: "sığmıyor"). Stretch=Uniform kırpma yapmadan
+                         orijinal en/boy oranını koruyor, sadece daha geniş alanda daha büyük çiziyor. -->
+                    <DataGridTemplateColumn x:Name="LogoColumn" Header="Logo" Width="70">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <!-- ClearLogoPath doluysa (bkz. "Görsel Getir") gerçek küçük resim,
-                                     yoksa eski gri yer tutucu — WPF'in string->ImageSource örtük
-                                     TypeConverter'ı sayesinde ekstra bir converter gerekmiyor. -->
-                                <Grid Width="28" Height="28">
+                                <Grid Width="64" Height="28">
                                     <Border CornerRadius="3" Background="{StaticResource Brush.Background.Elevated}">
                                         <Border.Style>
                                             <Style TargetType="Border">
@@ -1077,7 +1086,12 @@
                                             </Style>
                                         </Border.Style>
                                     </Border>
-                                    <Image Stretch="Uniform" Source="{Binding ClearLogoPath}">
+                                    <!-- RenderOptions.BitmapScalingMode="HighQuality": genişlik sorunu değil,
+                                         WPF'in varsayılan ölçekleme modu büyük kaynak görselleri küçük bir
+                                         hücreye sığdırırken bulanık/pikselli çiziyordu (kullanıcı geri
+                                         bildirimi: LaunchBox'ta net görünen logolar burada bulanık). -->
+                                    <Image Stretch="Uniform" Source="{Binding ClearLogoPath}"
+                                           RenderOptions.BitmapScalingMode="HighQuality">
                                         <Image.Style>
                                             <Style TargetType="Image">
                                                 <Setter Property="Visibility" Value="Collapsed" />
@@ -1266,6 +1280,8 @@
                     <DataGridTextColumn x:Name="FileColumn" Header="{Binding Data.FileFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding File}" SortMemberPath="File" Width="200" />
+                    <!-- Düz metin (kullanıcı kararı: tabloda logo değil metin, logo sadece detay
+                         panelinde gösterilsin — bkz. aşağıda "Platform" satırı). -->
                     <DataGridTextColumn x:Name="PlatformColumn" Header="{Binding Data.PlatformFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding PlatformDisplayName}" SortMemberPath="PlatformDisplayName" Width="160" />
                     <DataGridTextColumn x:Name="GenresColumn" Header="{Binding Data.GenresFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
@@ -1653,16 +1669,21 @@
             </Popup>
 
             <!-- Right: Detail pane. Aç/kapa üst istatistik çubuğundaki tam ekran ikonuyla yapılıyor.
-                 Visibility ayrıca IsDetailPanelExpanded'a bağlı: sadece genişliği 0'a indirmek
-                 (bkz. ColumnDefinition) teorik olarak yeterli olsa da, kapalıyken bu Border'ın
-                 (Brush.Background.Panel — ana Base renginden farklı) kenarda ince bir şerit olarak
-                 sızmasını kesin olarak engellemek için Collapsed de yapılıyor. -->
+                 Visibility ayrıca IsDetailPanelExpanded VE SelectedGame'e bağlı: sadece genişliği
+                 0'a indirmek (bkz. ColumnDefinition) teorik olarak yeterli olsa da, kapalıyken bu
+                 Border'ın (Brush.Background.Panel — ana Base renginden farklı) kenarda ince bir
+                 şerit olarak sızmasını kesin olarak engellemek için Collapsed de yapılıyor.
+                 SelectedGame null kontrolü: platform listesinde gezinirken (henüz oyun seçilmemiş)
+                 boş bir panel gösterilmesin diye (kullanıcı geri bildirimi). -->
             <Border Grid.Column="3" Background="{StaticResource Brush.Background.Panel}">
                 <Border.Style>
                     <Style TargetType="Border">
                         <Setter Property="Visibility" Value="Visible" />
                         <Style.Triggers>
                             <DataTrigger Binding="{Binding IsDetailPanelExpanded}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding SelectedGame}" Value="{x:Null}">
                                 <Setter Property="Visibility" Value="Collapsed" />
                             </DataTrigger>
                         </Style.Triggers>
@@ -1674,17 +1695,115 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="140" />
-                        <RowDefinition Height="Auto" />
+                        <!-- BAŞLAT/YouTube/Wikipedia butonları artık bu alanın içinde (bkz. aşağıdaki
+                             Grid.Row="4"), eskiden ayrı bir satırdaki (Grid.Row="5") BAŞLAT'ın
+                             kapladığı yükseklik buraya eklendi. -->
+                        <RowDefinition Height="230" />
                     </Grid.RowDefinitions>
 
-                    <Border Grid.Row="0" Height="200" CornerRadius="4" Background="{StaticResource Brush.Background.Elevated}">
-                        <TextBlock Text="{Binding SelectedGame.Title}" TextWrapping="Wrap" TextAlignment="Center"
-                                   FontSize="20" FontWeight="Bold" VerticalAlignment="Center" Margin="16" />
+                    <!-- Background/Fanart görseli (bkz. "Görsel Getir") varsa tüm alanı kaplar, Box art
+                         sol altta küçük bir kare olarak üstüne biner (bkz. plan referans mockup'ı).
+                         İkisi de yoksa Game.BoxDisplayPath/BackgroundDisplayPath Images/NoImage
+                         altındaki sabit yer tutucuya düşer. UniformToFill: boşluk kalmadan alanı
+                         tam doldursun diye (kullanıcı geri bildirimi, kırpma kabul edilebilir). -->
+                    <Border Grid.Row="0" Height="240" Margin="0,0,0,10" CornerRadius="4" ClipToBounds="True" Background="{StaticResource Brush.Background.Elevated}">
+                        <Grid>
+                            <Image Source="{Binding SelectedGame.BackgroundDisplayPath}" Stretch="UniformToFill" />
+
+                            <!-- Platform logosu: Box'ın üstünde, sol üst köşede ayrı bir rozet (kullanıcı
+                                 kararı: metadata listesindeki düz metin satırı kaldırıldı, platform artık
+                                 sadece burada gösteriliyor). Genişlik Box'ınkiyle aynı — aynı sütunda
+                                 hizalı dursun diye. Box ile birlikte ~%17 büyütüldü (90x54 -> 105x63,
+                                 120x90 -> 105x140), ikisi de aynı oranda genişlesin diye (kullanıcı isteği:
+                                 "dikey ve yatay olarak eşit oranda genişlet"). Logo yoksa (ör. PC-FX)
+                                 rozet hiç görünmüyor. Tıklanabilir (kullanıcı isteği): platformun ROM
+                                 klasörünü açar (bkz. MainWindow.xaml.cs PlatformLogoBadge_MouseLeftButtonDown,
+                                 MainViewModel.OpenPlatformFolderCommand). -->
+                            <Border Width="105" Height="63" CornerRadius="4" Margin="10" Cursor="Hand"
+                                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                                    Background="{StaticResource Brush.Background.Elevated}"
+                                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                                    ToolTip="ROM klasörünü aç"
+                                    MouseLeftButtonDown="PlatformLogoBadge_MouseLeftButtonDown"
+                                    Visibility="{Binding SelectedGame.HasPlatformLogo, Converter={StaticResource BoolToVisibility}}">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.5" />
+                                </Border.Effect>
+                                <Image Source="{Binding SelectedGame.PlatformLogoPath}" Stretch="Uniform" Margin="6"
+                                       RenderOptions.BitmapScalingMode="HighQuality" />
+                            </Border>
+
+                            <Border Width="105" Height="140" CornerRadius="4" Margin="10"
+                                    HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                                    Background="{StaticResource Brush.Background.Elevated}"
+                                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                                    ClipToBounds="True">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.5" />
+                                </Border.Effect>
+                                <Image Source="{Binding SelectedGame.BoxDisplayPath}" Stretch="UniformToFill" />
+                            </Border>
+
+                            <!-- Top 25/100/250 rozeti: fanart'ın sağ üst köşesi (platform logosuyla simetrik).
+                                 Game.TopRankBadge oyunun KENDİ platformu içindeki sıralamasına göre önceden
+                                 hesaplanmış (bkz. MainViewModel.ComputeTopRankBadges) — hiç kazanmadıysa
+                                 (HasTopRankBadge=false) hiç görünmüyor. Rozet görselleri zaten kendi içinde
+                                 dekoratif (yuvarlak damga), ekstra bir arkaplan/çerçeve gerekmiyor. -->
+                            <Image Source="{Binding SelectedGame.TopRankBadgePath}" Stretch="Uniform"
+                                   Width="60" Height="60" Margin="10"
+                                   HorizontalAlignment="Right" VerticalAlignment="Top"
+                                   RenderOptions.BitmapScalingMode="HighQuality"
+                                   Visibility="{Binding SelectedGame.HasTopRankBadge, Converter={StaticResource BoolToVisibility}}">
+                                <Image.Effect>
+                                    <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.5" />
+                                </Image.Effect>
+                            </Image>
+
+                            <!-- Topluluk Puanı: metadata listesinden buraya taşındı (kullanıcı kararı),
+                                 fanart'ın sağ alt köşesi — yarı saydam koyu zemin, arkadaki görsel ne
+                                 olursa olsun okunaklı kalsın diye. -->
+                            <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="10" CornerRadius="4"
+                                    Background="#CC1E1E1E" Padding="6,3"
+                                    Visibility="{Binding SelectedGame.HasCommunityRating, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock Text="{Binding SelectedGame.CommunityRatingDisplay}" FontSize="11"
+                                           Foreground="{StaticResource Brush.Accent.Amber}" />
+                            </Border>
+                        </Grid>
                     </Border>
 
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
+                            <!-- Başlık artık ayrı, büyük bir başlık metni (kullanıcı kararı: "Başlık gibi
+                                 olsun ama altındaki metadata satırlarıyla aynı boyutta olmasın") — "Başlık:"
+                                 etiketi ve satır yapısı kaldırıldı, Platform/Topluluk Puanı da fanart
+                                 alanına taşındığı için aşağıdaki Grid'den çıkarıldı. YouTube/Wikipedia
+                                 düğmeleri gameplay alanından buraya, başlıkla aynı satırın sağ üstüne
+                                 taşındı (kullanıcı kararı). -->
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding SelectedGame.Title}" FontSize="16" FontWeight="Bold"
+                                           TextWrapping="Wrap" VerticalAlignment="Top" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="6,0,0,0">
+                                    <Button Style="{StaticResource ActionsIconButton}" Width="28" Height="28" Margin="0,0,4,0"
+                                            ToolTip="YouTube'da İzle"
+                                            Command="{Binding OpenVideoUrlCommand}" CommandParameter="{Binding SelectedGame}"
+                                            Visibility="{Binding SelectedGame.HasVideoUrl, Converter={StaticResource BoolToVisibility}}">
+                                        <Path Data="{StaticResource Icon.YouTube}" Fill="{StaticResource Brush.Text.Primary}"
+                                              Width="18" Height="18" Stretch="Uniform" />
+                                    </Button>
+                                    <Button Style="{StaticResource ActionsIconButton}" Width="28" Height="28"
+                                            ToolTip="Wikipedia"
+                                            Command="{Binding OpenWikipediaUrlCommand}" CommandParameter="{Binding SelectedGame}"
+                                            Visibility="{Binding SelectedGame.HasWikipediaUrl, Converter={StaticResource BoolToVisibility}}">
+                                        <Path Data="{StaticResource Icon.Wikipedia}" Fill="{StaticResource Brush.Text.Primary}"
+                                              Width="18" Height="18" Stretch="Uniform" />
+                                    </Button>
+                                </StackPanel>
+                            </Grid>
+
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="100" />
@@ -1700,69 +1819,48 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
-
-                                <Label Grid.Row="0" Grid.Column="0" Content="Başlık" />
-                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedGame.Title}" Margin="0,3" TextWrapping="Wrap" />
-
-                                <Label Grid.Row="1" Grid.Column="0" Content="Platform" />
-                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedGame.Platform}" Margin="0,3" />
 
                                 <!-- ReleaseDateDisplay: LaunchBox'ta tam tarih (gün/ay/yıl) varsa onu, yoksa
                                      sadece yılı gösterir (bkz. Game.ReleaseDateDisplay) — ikisi de LaunchBox
                                      kaynaklı, ReleaseDate sadece daha kesin bir versiyonu. -->
-                                <Label Grid.Row="2" Grid.Column="0" Content="Çıkış Tarihi" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedGame.ReleaseDateDisplay}" Margin="0,3" />
+                                <Label Grid.Row="0" Grid.Column="0" Content="Çıkış Tarihi" />
+                                <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding SelectedGame.ReleaseDateDisplay}" Margin="0,3" />
 
-                                <!-- Topluluk Puanı: LaunchBox CommunityRating'i (0-5) — sadece değer varsa
-                                     gösterilir (bkz. Game.HasCommunityRating), Favori yıldızıyla aynı ★/☆
-                                     görsel dilini kullanır. -->
-                                <Label Grid.Row="3" Grid.Column="0" Content="Topluluk Puanı"
-                                       Visibility="{Binding SelectedGame.HasCommunityRating, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedGame.CommunityRatingDisplay}" Margin="0,3"
-                                           Foreground="{StaticResource Brush.Accent.Amber}"
-                                           Visibility="{Binding SelectedGame.HasCommunityRating, Converter={StaticResource BoolToVisibility}}" />
+                                <Label Grid.Row="1" Grid.Column="0" Content="Geliştirici" />
+                                <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedGame.Developer}" Margin="0,3" />
 
-                                <Label Grid.Row="4" Grid.Column="0" Content="Geliştirici" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedGame.Developer}" Margin="0,3" />
+                                <Label Grid.Row="2" Grid.Column="0" Content="Yayıncı" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedGame.Publisher}" Margin="0,3" />
 
-                                <Label Grid.Row="5" Grid.Column="0" Content="Yayıncı" />
-                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedGame.Publisher}" Margin="0,3" />
-
-                                <Label Grid.Row="6" Grid.Column="0" Content="Tür" />
-                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedGame.Genres}" Margin="0,3" TextWrapping="Wrap" />
+                                <Label Grid.Row="3" Grid.Column="0" Content="Tür" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedGame.Genres}" Margin="0,3" TextWrapping="Wrap" />
 
                                 <!-- Oyun modu: LaunchBox'ın Cooperative bayrağını yansıtır (bkz.
                                      CatalogDatabaseService.GetGames) — "Kooperatif"/"Kooperatif Değil" ya da
                                      LaunchBox'ta hiç bilgi yoksa boş. -->
-                                <Label Grid.Row="7" Grid.Column="0" Content="Oyun modu" />
-                                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedGame.GameMode}" Margin="0,3" />
+                                <Label Grid.Row="4" Grid.Column="0" Content="Oyun modu" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedGame.GameMode}" Margin="0,3" />
 
-                                <Label Grid.Row="8" Grid.Column="0" Content="Maks. Oyuncu" />
-                                <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SelectedGame.MaxPlayers}" Margin="0,3" />
+                                <Label Grid.Row="5" Grid.Column="0" Content="Maks. Oyuncu" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedGame.MaxPlayers}" Margin="0,3" />
 
-                                <Label Grid.Row="9" Grid.Column="0" Content="Sürüm" />
-                                <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SelectedGame.Version}" Margin="0,3" />
+                                <Label Grid.Row="6" Grid.Column="0" Content="Sürüm" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedGame.Version}" Margin="0,3" />
 
-                                <Label Grid.Row="10" Grid.Column="0" Content="File" />
-                                <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding SelectedGame.File}" Margin="0,3" TextWrapping="Wrap" />
+                                <Label Grid.Row="7" Grid.Column="0" Content="File" />
+                                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedGame.File}" Margin="0,3" TextWrapping="Wrap" />
 
                                 <!-- Steam AppID: LaunchBox'ın Steam mağaza sayfası kimliği — RetroAudit'in
                                      kendi emülatör/eşleştirme sisteminden bağımsız, sadece bilgi amaçlı.
                                      Sadece değer varsa gösterilir. -->
-                                <Label Grid.Row="11" Grid.Column="0" Content="Steam AppID"
+                                <Label Grid.Row="8" Grid.Column="0" Content="Steam AppID"
                                        Visibility="{Binding SelectedGame.HasSteamAppId, Converter={StaticResource BoolToVisibility}}" />
-                                <TextBlock Grid.Row="11" Grid.Column="1" Text="{Binding SelectedGame.SteamAppId}" Margin="0,3"
+                                <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SelectedGame.SteamAppId}" Margin="0,3"
                                            Visibility="{Binding SelectedGame.HasSteamAppId, Converter={StaticResource BoolToVisibility}}" />
                             </Grid>
 
-                            <TextBlock Text="{Binding SelectedGame.Description}" TextWrapping="Wrap" Margin="0,10,0,0"
-                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
-
-                            <TextBlock Text="Sürümler (Region)" FontWeight="Bold" Margin="0,14,0,4"
+                            <TextBlock Text="Sürümler (Region)" FontWeight="Bold" Margin="0,10,0,4"
                                        Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
                             <!-- Kart seçilebilir (tek tık, mavi çerçeveyle belli olur) ve çift tıklayınca
                                  o SÜRÜMÜN dosyasını doğrudan tanımlı emülatörle başlatır (bkz.
@@ -1778,42 +1876,69 @@
                                      ScrollViewer.VerticalScrollBarVisibility="Disabled"
                                      ItemContainerStyle="{StaticResource VersionCardItemContainerStyle}"
                                      ItemTemplate="{StaticResource VersionCardItemTemplate}"
-                                     MouseDoubleClick="VersionsList_MouseDoubleClick" />
+                                     MouseDoubleClick="VersionsList_MouseDoubleClick"
+                                     PreviewMouseWheel="VersionsList_PreviewMouseWheel" />
+
+                            <TextBlock Text="{Binding SelectedGame.Description}" TextWrapping="Wrap" Margin="0,14,0,0"
+                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
                         </StackPanel>
                     </ScrollViewer>
 
-                    <!-- LaunchBox'tan gelen VideoUrl/WikipediaUrl için tıklanabilir bağlantı butonları —
-                         henüz gerçek bir gameplay görsel/önizleme sistemi yok, bu yüzden butonlar bu
-                         yer tutucunun altına, sadece ilgili URL varsa görünür şekilde eklendi (bkz.
-                         Game.HasVideoUrl/HasWikipediaUrl, MainViewModel.OpenVideoUrl/OpenWikipediaUrl). -->
-                    <Border Grid.Row="4" CornerRadius="4" Background="{StaticResource Brush.Background.Elevated}" Margin="0,10">
+                    <!-- Clear Logo: Gameplay alanının hemen üstünde ayrı bir kart (kullanıcı kararı:
+                         başlığın altındaki denemeden buraya taşındı, "en iyisi" burası). Logo yoksa
+                         (bkz. Game.HasClearLogo) Border tamamen gizleniyor — RowDefinition Auto
+                         olduğu için satır da 0'a inip boşta yer kaplamıyor (kullanıcı isteği). -->
+                    <Border Grid.Row="3" Margin="0,0,0,10" CornerRadius="4" Padding="10"
+                            Background="{StaticResource Brush.Background.Elevated}"
+                            Visibility="{Binding SelectedGame.HasClearLogo, Converter={StaticResource BoolToVisibility}}">
+                        <Image Source="{Binding SelectedGame.ClearLogoPath}" Stretch="Uniform" Height="60"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                    </Border>
+
+                    <!-- Gameplay Screenshot (bkz. "Görsel Getir") varsa alanı doldurur; yoksa
+                         Game.ScreenshotDisplayPath Images/NoImage/Background.png'ye düşer.
+                         YouTube/Wikipedia butonları (bkz. Game.HasVideoUrl/HasWikipediaUrl) her
+                         iki durumda da altta kalıyor.
+                         Stretch=Fill (kullanıcı kararı: gerdir) — hem gerçek screenshot hem
+                         yer tutucu, boşluk/kırpma kaygısı olmadan alanı tam doldursun diye. -->
+                    <!-- BAŞLAT artık burada, YouTube/Wikipedia ile aynı satırda — kendi ayrı satırı
+                         (eski Grid.Row="5") kaldırıldığı için gameplay alanına daha fazla yükseklik
+                         kalıyor (bkz. kullanıcı isteği). -->
+                    <Border Grid.Row="4" CornerRadius="4" ClipToBounds="True" Background="{StaticResource Brush.Background.Elevated}" Margin="0,10">
                         <Grid>
-                            <TextBlock Text="Oynanış Önizleme" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
+                            <Image Source="{Binding SelectedGame.ScreenshotDisplayPath}" Stretch="Fill" />
+
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10">
-                                <Button Content="▶ YouTube'da İzle" Margin="0,0,6,0"
-                                        Command="{Binding OpenVideoUrlCommand}" CommandParameter="{Binding SelectedGame}"
-                                        Visibility="{Binding SelectedGame.HasVideoUrl, Converter={StaticResource BoolToVisibility}}" />
-                                <Button Content="Wikipedia"
-                                        Command="{Binding OpenWikipediaUrlCommand}" CommandParameter="{Binding SelectedGame}"
-                                        Visibility="{Binding SelectedGame.HasWikipediaUrl, Converter={StaticResource BoolToVisibility}}" />
+                                <Button Content="BAŞLAT" Style="{StaticResource LaunchButton}" Width="110"
+                                        Command="{Binding LaunchCommand}" />
                             </StackPanel>
                         </Grid>
                     </Border>
-
-                    <Button Grid.Row="5" Content="BAŞLAT" Style="{StaticResource LaunchButton}"
-                            Command="{Binding LaunchCommand}" />
                 </Grid>
             </Border>
 
-            <!-- Panelin sol kenarını tutup çekerek genişliği ayarlamak için. Border'dan SONRA
-                 tanımlı olmalı ki z-sırasında üstte kalıp fareyi yakalayabilsin (Border opak
-                 olduğu için önce gelseydi 4px'lik şeridi tamamen örterdi). DragCompleted'a kadar
-                 hiçbir ViewModel property'sine dokunmuyor — sadece bırakıldığında son genişlik
-                 MainViewModel.SaveDetailPanelWidth ile kaydediliyor (bkz. MainWindow.xaml.cs). -->
-            <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Left"
-                          Background="Transparent" Cursor="SizeWE"
-                          DragCompleted="DetailPanelSplitter_DragCompleted" />
+            <!-- "Görsel Getir" (tekli/toplu) sırasında pencerenin altında beliren ince ilerleme
+                 çubuğu (kullanıcı isteği: "% gösteren ilerleyen bir gösterge bar"). Tüm sütunları
+                 kaplayıp en son eklendiği için z-sırasında üstte — indirme bitince tekrar gizleniyor. -->
+            <Border Grid.Column="0" Grid.ColumnSpan="4" VerticalAlignment="Bottom"
+                    Background="{StaticResource Brush.Background.Panel}"
+                    BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0" Padding="10,6"
+                    Visibility="{Binding IsArtworkDownloadInProgress, Converter={StaticResource BoolToVisibility}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Görsel indiriliyor..." VerticalAlignment="Center"
+                               FontSize="11" Foreground="{StaticResource Brush.Text.Secondary}" Margin="0,0,10,0" />
+                    <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                 Value="{Binding ArtworkDownloadProgress, Mode=OneWay}" />
+                    <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11" Width="34" TextAlignment="Right"
+                               Margin="10,0,0,0" Foreground="{StaticResource Brush.Text.Secondary}"
+                               Text="{Binding ArtworkDownloadProgress, StringFormat={}{0:0}%}" />
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </Window>

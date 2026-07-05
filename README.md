@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.19)
+## Mevcut durum (v0.20)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
@@ -18,7 +18,10 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 - Sütun başlığına **sol tık**: arama kutulu filtre + "Sırala A-Z/Z-A" dropdown'ı açılır (Title/File gibi neredeyse hiç tekrarlamayan sütunlarda sadece arama, Enter'a basınca uygulanır). **Sağ tık**: sütun görünürlüğünü aç/kapa ve sola/sağa sabitle (pin) — tercihler diske kaydedilip hatırlanır. Sütunlar sürükleyip yeniden sıralanabilir, bu sıra da kalıcıdır.
 - Favori/Ara-Başlat birleşik **Actions** sütunu ve her zaman en solda sabit ayrı bir **Gizle** sütunu; playlist chip şeridinde Favorites/Hidden/Recycle Bin'in yanında **Ready to Play** / **Needs Search** hızlı filtreleri.
 - ROM'u eksik bir oyun için tabloda doğrudan **uygulama içi (WebView2) arama penceresi** açılıyor; kullanıcının başlattığı indirme otomatik olarak oyunun platform klasörüne iniyor. Kendi ROM arşivinizi (farklı bir klasör düzeninde) **toplu içe aktarma** penceresiyle tarayıp Taşı/Kopyala/Referans modlarından biriyle (opsiyonel CRC32 doğrulamayla) tek seferde ekleyebilirsiniz.
-- LaunchBox'tan Release Date, Topluluk Puanı, YouTube/Wikipedia bağlantıları, Steam App ID ve Cooperative bilgisi de okunup detay panelinde gösteriliyor.
+- LaunchBox'tan Release Date, Topluluk Puanı (+ oy sayısı), YouTube/Wikipedia bağlantıları, Steam App ID ve Cooperative bilgisi de okunup detay panelinde gösteriliyor.
+- **Görsel Getir**: eksik Box/Background/Screenshot/Clear Logo görselleri tekli veya toplu olarak indirilip yerel `Images\` klasörüne yazılıyor (otomatik küçültme + sıkıştırma, Ayarlar'dan boyut seçilebilir). Platform logoları sol panelde değil, detay panelinde (tıklanınca ROM klasörünü açan bir rozet olarak) gösteriliyor.
+- **Top 250 / Top 100 / Top 25**: her platform için LaunchBox oy sayısına göre ağırlıklandırılmış (IMDb tarzı) sıralama; playlist chip'i olarak filtrelenebiliyor, uygun oyunlarda detay panelinde rozet olarak görünüyor.
+- Sağ detay paneli: başlık + YouTube/Wikipedia ikon butonları üstte, altında Clear Logo, fanart üzerinde platform rozeti + Topluluk Puanı, görseli olmayan alanlar için sabit yer tutucular. Panel genişliği sabit — sadece toolbar düğmesiyle açılıp kapanıyor, bir oyun seçilene kadar gizli.
 - Sağ tık ile açılan kapsül biçimli komut menüsü (Ayarlar > Arayüz'den İkon / İkon+Metin seçilebilir): Sil (önce çöp kutusuna taşır), Gizle, Metadata Düzenle, Dosya Konumunu Aç, Web'de Ara, Sürüm listesinden "Preferred yap", Metadata'yı Yeniden Eşleştir. Çoklu seçimde sadece çakışmayan toplu eylemler (favori/gizle/sil/playlist) gösterilir.
 - Kullanıcının oluşturduğu sınırsız playlist + sabit Favorites/Hidden/Recycle Bin, tümü tablonun üstünde tıklanabilir chip/etiket olarak.
 - Sağ detay panelinde seçili oyunun tüm sürümleri (bölge/kaynak/hash) ve tercih edilen sürümü değiştirme; Ayarlar > Emülatörler'de platform başına tanımlanan emülatörle BAŞLAT butonu üzerinden doğrudan oynatma.
@@ -30,7 +33,7 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 - **MediaProviderWindow** — Eksik medya (kutu/arkaplan/ekran görüntüsü) için arama sonucu kartları; kartlar sürükle-bırak ile eksik öğe listesine uygulanabiliyor.
 - **CropEditorDialog** — Görsel kırpma oranı seçim arayüzü.
 - **EditMetadataWindow** — Bir oyunun Başlık/Tür/Açıklama/Notlar/Yayıncı/Geliştirici alanlarını elle düzenleme.
-- **SettingsWindow** — RetroAudit Data kök dizini (artık ilk açılışta otomatik varsayılan), LaunchBox metadata veritabanı yolu, platform başına emülatör yolu/parametreleri, bölge önceliği, arayüz tercihleri (komut menüsü görünümü, satır yüksekliği, platform listesi görünümü/kategorileri), Export/Import Config (JSON).
+- **SettingsWindow** — Veri klasörü (salt-okunur, her zaman .exe'nin yanında), görsel indirme boyutu, LaunchBox metadata veritabanı yolu, platform başına emülatör yolu/parametreleri, bölge önceliği, arayüz tercihleri (komut menüsü görünümü, satır yüksekliği, platform listesi görünümü/kategorileri) — hepsi **Kaydet** düğmesiyle diske yazılıyor. Export/Import Config (JSON).
 
 ## Gereksinimler
 

@@ -8,15 +8,21 @@ namespace RetroAudit.Services;
 // sadece okuma var (yazma/ROM içe aktarma Stage C'ye kalıyor).
 public static class CatalogDatabaseService
 {
-    // Builder'ın varsayılan çıktı yolu (RetroAudit.Builder/Program.cs ile aynı). İleride
-    // AppSettings.RetroAuditDataPath uygulama açılışında otomatik yükleniyor olsaydı buradan
-    // override edilebilirdi — o kablolama henüz yok (bkz. ConfigService yorumu), bu yüzden şimdilik
-    // sabit varsayılan kullanılıyor.
-    public static readonly string DbPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "RetroAudit", "RetroAudit.db");
+    // Builder'ın varsayılan çıktı yolu (RetroAudit.Builder/Program.cs ile aynı) — taşınabilir veri
+    // kökü altında (bkz. AppPaths.Metadata).
+    public static readonly string DbPath = Path.Combine(AppPaths.Metadata, "RetroAudit.db");
 
     public static bool DatabaseExists => File.Exists(DbPath);
+
+    // Images/Platforms/ altındaki logo paketi (kullanıcı tarafından eklendi, üçüncü taraf isimleri
+    // elle DisplayName'e göre yeniden adlandırıldı) — bkz. Platform.LogoPath.
+    private static readonly string PlatformLogoDirectory = Path.Combine(AppPaths.Images, "Platforms");
+
+    private static string ResolveLogoPath(string displayName)
+    {
+        var path = Path.Combine(PlatformLogoDirectory, $"{displayName}.png");
+        return File.Exists(path) ? path : string.Empty;
+    }
 
     // "PC Engine CD - TurboGrafx-CD" kullanıcı kararıyla programdan tamamen çıkarıldı (temel
     // "PC Engine - TurboGrafx-16" yeterli kabul edildi, ikisi kafa karıştırıyordu). RetroAudit.db
@@ -126,8 +132,8 @@ public static class CatalogDatabaseService
         cmd.CommandText = """
             SELECT g.GameId, g.Title, g.CompareTitle, p.Name, g.ReleaseYear, d.Name, pub.Name,
                    g.Overview, g.MaxPlayers, g.MatchedMetadata, g.HiddenByDefault,
-                   g.MatchMethod, g.NeedsReview, g.ReleaseDate, g.CommunityRating, g.VideoUrl,
-                   g.WikipediaUrl, g.SteamAppId, g.Cooperative, g.MetadataSourceId
+                   g.MatchMethod, g.NeedsReview, g.ReleaseDate, g.CommunityRating, g.CommunityRatingCount,
+                   g.VideoUrl, g.WikipediaUrl, g.SteamAppId, g.Cooperative, g.MetadataSourceId
             FROM Games g
             JOIN Platforms p ON p.PlatformId = g.PlatformId
             LEFT JOIN Developers d ON d.DeveloperId = g.DeveloperId
@@ -143,7 +149,7 @@ public static class CatalogDatabaseService
             var compareTitle = gameReader.GetString(2);
             var hidden = !gameReader.IsDBNull(10) && gameReader.GetInt32(10) != 0;
             var preferred = preferredByGame.GetValueOrDefault(gameId, (Region: string.Empty, SourceDat: string.Empty, FileName: string.Empty));
-            var cooperative = gameReader.IsDBNull(18) ? (bool?)null : gameReader.GetInt32(18) != 0;
+            var cooperative = gameReader.IsDBNull(19) ? (bool?)null : gameReader.GetInt32(19) != 0;
 
             // LaunchBox'ta ReleaseYear ve ReleaseDate BİRBİRİNDEN BAĞIMSIZ nullable alanlar —
             // bir oyunda ReleaseDate dolu olup ReleaseYear NULL olabilir (ör. Friday the 13th,
@@ -152,13 +158,15 @@ public static class CatalogDatabaseService
             var releaseDate = gameReader.IsDBNull(13) ? (DateTime?)null : DateTime.Parse(gameReader.GetString(13));
             var releaseYear = gameReader.IsDBNull(4) ? (releaseDate?.Year ?? 0) : gameReader.GetInt32(4);
 
+            var platformDisplayName = PlatformDisplayNameMap.Resolve(platformName);
             games.Add(new Game
             {
                 GameId = gameId,
                 GameKey = GameKeyHelper.Compute(platformName, compareTitle),
                 Title = gameReader.GetString(1),
                 Platform = platformName,
-                PlatformDisplayName = PlatformDisplayNameMap.Resolve(platformName),
+                PlatformDisplayName = platformDisplayName,
+                PlatformLogoPath = ResolveLogoPath(platformDisplayName),
                 ReleaseYear = releaseYear,
                 Developer = gameReader.IsDBNull(5) ? string.Empty : gameReader.GetString(5),
                 Publisher = gameReader.IsDBNull(6) ? string.Empty : gameReader.GetString(6),
@@ -174,11 +182,12 @@ public static class CatalogDatabaseService
                 NeedsReview = !gameReader.IsDBNull(12) && gameReader.GetInt32(12) != 0,
                 ReleaseDate = releaseDate,
                 CommunityRating = gameReader.IsDBNull(14) ? null : gameReader.GetDouble(14),
-                VideoUrl = gameReader.IsDBNull(15) ? string.Empty : gameReader.GetString(15),
-                WikipediaUrl = gameReader.IsDBNull(16) ? string.Empty : gameReader.GetString(16),
-                SteamAppId = gameReader.IsDBNull(17) ? null : gameReader.GetInt64(17),
+                CommunityRatingCount = gameReader.IsDBNull(15) ? null : gameReader.GetInt32(15),
+                VideoUrl = gameReader.IsDBNull(16) ? string.Empty : gameReader.GetString(16),
+                WikipediaUrl = gameReader.IsDBNull(17) ? string.Empty : gameReader.GetString(17),
+                SteamAppId = gameReader.IsDBNull(18) ? null : gameReader.GetInt64(18),
                 Cooperative = cooperative,
-                MetadataSourceId = gameReader.IsDBNull(19) ? null : gameReader.GetInt32(19),
+                MetadataSourceId = gameReader.IsDBNull(20) ? null : gameReader.GetInt32(20),
                 // GameMode: LaunchBox'ın kesin bir "oyun modu" alanı yok, sadece Cooperative
                 // (co-op) bilgisi var — bu yüzden burada tam bir mod adı değil, sadece bu tek
                 // boyutu yansıtıyoruz. Bilinmiyorsa (null) uydurma bir varsayılan göstermiyoruz.

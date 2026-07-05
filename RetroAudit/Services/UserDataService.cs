@@ -12,7 +12,12 @@ namespace RetroAudit.Services;
 // referans alınır (bkz. GameKeyHelper yorumu).
 public static class UserDataService
 {
-    public static readonly string DbPath = Path.Combine(
+    public static readonly string DbPath = Path.Combine(AppPaths.Metadata, "RetroAuditUserData.db");
+
+    // Eski (taşınabilir düzenden ÖNCEki) konum — favori/gizli/playlist/override içeren bu dosya
+    // küçük ve yeri doldurulamaz olduğu için (RetroAudit.db'nin aksine, o Builder ile yeniden
+    // üretiliyor), tek seferlik bir kopya ile (taşıma değil) yeni konuma aktarılıyor.
+    private static readonly string LegacyDbPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "RetroAudit", "RetroAuditUserData.db");
 
@@ -71,6 +76,11 @@ public static class UserDataService
         var directory = Path.GetDirectoryName(DbPath);
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
+
+        // Tek seferlik göç: yeni konumda henüz dosya yoksa ama eski (AppData) konumunda varsa,
+        // kopyala (taşıma değil — eski dosyaya dokunmadan).
+        if (!File.Exists(DbPath) && File.Exists(LegacyDbPath))
+            File.Copy(LegacyDbPath, DbPath);
 
         using var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = DbPath }.ConnectionString);
         connection.Open();

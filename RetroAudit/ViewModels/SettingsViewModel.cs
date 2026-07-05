@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,14 +14,9 @@ namespace RetroAudit.ViewModels;
 // buraya bir alan olarak eklenip Export/Import Config akışına otomatik dahil olacak.
 public partial class SettingsViewModel : ObservableObject
 {
-    // RetroAudit'in kendi veri kök dizini (romlar, medya ve RetroAudit.db bu dizin altında aranır —
-    // ROM İçe Aktar ve Arayıp İndir akışlarının ikisi de doğrudan bu yola yazar/okur). Diğer alanların
-    // aksine (Emulators/RegionPriority/Commands sadece Export/Import ile taşınır) bu alan da
-    // ContextMenuDisplayMode/LaunchBoxDbPath/RowHeight gibi her değiştiğinde otomatik kaydedilir
-    // (bkz. SaveInterfaceSettings) — aksi halde MainWindow bu tercihi bir daha hiç okuyamazdı, çünkü
-    // Ayarlar penceresi elle "Kaydet" düğmesi olmayan, Export/Import'a dayanan bir tasarımda.
-    [ObservableProperty]
-    private string retroAuditDataPath = string.Empty;
+    // Romlar/görseller/veritabanları artık kullanıcı tarafından seçilemiyor — her zaman uygulamanın
+    // kendi klasörünün yanında (bkz. AppPaths). Ayarlar > Genel bu kökü salt-okunur gösterir.
+    public string DataRootPath => AppPaths.Root;
 
     // DataGrid'de düzenlenen, seçili emülatör satırı (Sil/Gözat komutları bunu hedef alabilir).
     [ObservableProperty]
@@ -52,6 +48,10 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private PlatformListDisplayMode platformListDisplayMode = PlatformListDisplayMode.Text;
 
+    // "Görsel Getir" indirmelerinin küçültüleceği maksimum boyut (bkz. Ayarlar > Genel).
+    [ObservableProperty]
+    private ArtworkMaxDimension artworkMaxDimension = ArtworkMaxDimension.Px600;
+
     // Her kategori için görünür/gizli tercihi — MainViewModel.CategoryConsoles/Handhelds/... ile
     // aynı sabit anahtarları kullanır (Key), ColumnVisibilityOption'ın Sütunlar seçicisindeki
     // rolüyle aynı deseni burada da tekrar kullanıyor.
@@ -70,12 +70,12 @@ public partial class SettingsViewModel : ObservableObject
     public SettingsViewModel()
     {
         var settings = ConfigService.LoadDefault();
-        retroAuditDataPath = settings.RetroAuditDataPath;
         contextMenuDisplayMode = settings.ContextMenuDisplayMode;
         launchBoxDbPath = settings.LaunchBoxDbPath;
         rowHeight = settings.RowHeight;
         groupPlatformsByCategory = settings.GroupPlatformsByCategory;
         platformListDisplayMode = settings.PlatformListDisplayMode;
+        artworkMaxDimension = settings.ArtworkMaxDimension;
         BuildCategoryOptions(settings);
     }
 
@@ -84,44 +84,26 @@ public partial class SettingsViewModel : ObservableObject
         CategoryOptions.Clear();
         foreach (var (key, header) in CategoryDefinitions)
         {
-            var option = new ColumnVisibilityOption
+            CategoryOptions.Add(new ColumnVisibilityOption
             {
                 Key = key,
                 Header = header,
                 IsVisible = settings.CategoryVisibility.GetValueOrDefault(key, true),
-            };
-            option.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(option.IsVisible))
-                    SaveInterfaceSettings();
-            };
-            CategoryOptions.Add(option);
+            });
         }
     }
 
-    partial void OnRetroAuditDataPathChanged(string value) => SaveInterfaceSettings();
-
-    partial void OnContextMenuDisplayModeChanged(ContextMenuDisplayMode value) => SaveInterfaceSettings();
-
-    partial void OnLaunchBoxDbPathChanged(string value) => SaveInterfaceSettings();
-
-    partial void OnRowHeightChanged(double value) => SaveInterfaceSettings();
-
-    partial void OnGroupPlatformsByCategoryChanged(bool value) => SaveInterfaceSettings();
-
-    partial void OnPlatformListDisplayModeChanged(PlatformListDisplayMode value) => SaveInterfaceSettings();
-
-    private void SaveInterfaceSettings()
+    // Ayarlar artık her değişiklikte değil, sadece "Kaydet" butonuna (bkz. SaveSettings) veya
+    // Export Config'e basıldığında yazılıyor (kullanıcı kararı: görünür/kasıtlı bir kaydetme
+    // eylemi istendi, sessiz oto-kaydetmenin yerine). ConfigService.LoadDefault ile önce diskteki
+    // güncel hali okunuyor ki MainViewModel'in ayrıca yönettiği alanlar (ColumnWidths, PinnedLeft/
+    // RightColumns, ColumnOrder, DetailPanelWidth, PlatformOrder, ColumnVisibility) ezilmesin —
+    // sadece bu ViewModel'in sahip olduğu alanlar üzerine yazılıyor.
+    [RelayCommand]
+    private void SaveSettings()
     {
-        var settings = ConfigService.LoadDefault();
-        settings.RetroAuditDataPath = RetroAuditDataPath;
-        settings.ContextMenuDisplayMode = ContextMenuDisplayMode;
-        settings.LaunchBoxDbPath = LaunchBoxDbPath;
-        settings.RowHeight = RowHeight;
-        settings.GroupPlatformsByCategory = GroupPlatformsByCategory;
-        settings.PlatformListDisplayMode = PlatformListDisplayMode;
-        settings.CategoryVisibility = CategoryOptions.ToDictionary(o => o.Key, o => o.IsVisible);
-        ConfigService.SaveDefault(settings);
+        ConfigService.SaveDefault(ToAppSettings());
+        RequestShowMessage?.Invoke("Ayarlar kaydedildi.");
     }
 
     [RelayCommand]
@@ -219,14 +201,11 @@ public partial class SettingsViewModel : ObservableObject
     // ViewModel MessageBox gibi View-katmanı tiplerine doğrudan bağımlı olmasın diye event üzerinden iletilir.
     public event Action<string>? RequestShowMessage;
 
-    // RetroAudit veri kök dizinini seçmek için klasör tarayıcısı açar.
+    // Ayarlar > Genel'deki "Klasörü Aç" düğmesi — Games/Images/Metadata/Emulation'ın hepsinin
+    // yaşadığı kökü Explorer'da açar (bkz. MainViewModel.OpenFileLocation ile aynı desen).
     [RelayCommand]
-    private void BrowseDataPath()
-    {
-        var dialog = new OpenFolderDialog { Title = "RetroAudit Data Dizinini Seçin" };
-        if (dialog.ShowDialog() == true)
-            RetroAuditDataPath = dialog.FolderName;
-    }
+    private void OpenDataFolder() =>
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{AppPaths.Root}\"") { UseShellExecute = true });
 
     // Boş bir emülatör satırı ekler; kullanıcı sonra platform adı/exe yolunu doldurur.
     [RelayCommand]
@@ -247,10 +226,13 @@ public partial class SettingsViewModel : ObservableObject
         if (emulator is null)
             return;
 
+        // Kullanıcı kendi emülatörünü nereye kurduysa oradan seçebilir — Emulation\ sadece bir
+        // öneri, dialog başlangıçta orayı açıyor ama zorunlu değil.
         var dialog = new OpenFileDialog
         {
             Title = "Emülatör Çalıştırılabilir Dosyası",
             Filter = "Çalıştırılabilir dosyalar (*.exe)|*.exe|Tüm dosyalar (*.*)|*.*",
+            InitialDirectory = AppPaths.Emulation,
         };
 
         if (dialog.ShowDialog() == true)
@@ -316,19 +298,37 @@ public partial class SettingsViewModel : ObservableObject
         RequestShowMessage?.Invoke($"Config içe aktarıldı: {dialog.FileName}");
     }
 
-    // Ekrandaki ObservableCollection'ları JSON'a yazılabilecek sade bir AppSettings POCO'suna dönüştürür.
-    private AppSettings ToAppSettings() => new()
+    // Ekrandaki tüm alan/koleksiyonları JSON'a yazılabilecek bir AppSettings POCO'suna dönüştürür.
+    // Önce diskteki güncel hal okunuyor (ConfigService.LoadDefault) — MainViewModel'in ayrıca
+    // yönettiği alanlar (ColumnWidths, PinnedLeft/RightColumns, ColumnOrder, DetailPanelWidth,
+    // PlatformOrder, ColumnVisibility) bu ViewModel'de hiç yok, o yüzden sıfırdan bir AppSettings
+    // oluşturmak onları silerdi.
+    private AppSettings ToAppSettings()
     {
-        RetroAuditDataPath = RetroAuditDataPath,
-        Emulators = Emulators.ToList(),
-        RegionPriority = RegionPriority.ToList(),
-        Commands = Commands.ToList(),
-    };
+        var settings = ConfigService.LoadDefault();
+        settings.ContextMenuDisplayMode = ContextMenuDisplayMode;
+        settings.LaunchBoxDbPath = LaunchBoxDbPath;
+        settings.RowHeight = RowHeight;
+        settings.GroupPlatformsByCategory = GroupPlatformsByCategory;
+        settings.PlatformListDisplayMode = PlatformListDisplayMode;
+        settings.ArtworkMaxDimension = ArtworkMaxDimension;
+        settings.CategoryVisibility = CategoryOptions.ToDictionary(o => o.Key, o => o.IsVisible);
+        settings.Emulators = Emulators.ToList();
+        settings.RegionPriority = RegionPriority.ToList();
+        settings.Commands = Commands.ToList();
+        return settings;
+    }
 
-    // İçe aktarılan AppSettings verisini ekrandaki ObservableCollection'lara ve alanlara uygular.
+    // İçe aktarılan AppSettings verisini ekrandaki alanlara/ObservableCollection'lara uygular.
     private void LoadFromAppSettings(AppSettings settings)
     {
-        RetroAuditDataPath = settings.RetroAuditDataPath;
+        ContextMenuDisplayMode = settings.ContextMenuDisplayMode;
+        LaunchBoxDbPath = settings.LaunchBoxDbPath;
+        RowHeight = settings.RowHeight;
+        GroupPlatformsByCategory = settings.GroupPlatformsByCategory;
+        PlatformListDisplayMode = settings.PlatformListDisplayMode;
+        ArtworkMaxDimension = settings.ArtworkMaxDimension;
+        BuildCategoryOptions(settings);
 
         Emulators.Clear();
         foreach (var emulator in settings.Emulators)

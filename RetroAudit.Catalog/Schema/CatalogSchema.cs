@@ -51,6 +51,7 @@ public static class CatalogSchema
             -- bazı kayıtlarda hiç yok — bu yüzden ikisi de ayrı ayrı saklanıyor.
             ReleaseDate TEXT,
             CommunityRating REAL,
+            CommunityRatingCount INTEGER,
             VideoUrl TEXT,
             WikipediaUrl TEXT,
             SteamAppId INTEGER,

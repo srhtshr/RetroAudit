@@ -26,3 +26,16 @@ RetroAudit.db
 *.dat
 /ExternalMetadata/
 /DatFiles/
+
+## Kullanıcının kişisel favori/gizli/playlist verisi (RetroAudit.db'den ayrı, WPF'in kendi
+## kalıcı deposu) — makineye özel çalışma zamanı verisi, asla commit edilmez.
+RetroAuditUserData.db
+
+## "Görsel Getir" ile indirilen oyun-özel kapak/arkaplan/ekran görüntüsü/logo dosyaları —
+## LaunchBox kaynaklı, üçüncü taraf telif hakkına sahip görseller (RetroAudit.db ile aynı
+## gerekçe: yeniden dağıtım hakkımız yok). Images/Platforms, Images/NoImage ve Images/Badges
+## bilinçli olarak İSTİSNA — bunlar bu projenin kendi statik arayüz varlıkları, oyun görseli değil.
+RetroAudit/Images/*/Box/
+RetroAudit/Images/*/BG/
+RetroAudit/Images/*/SS/
+RetroAudit/Images/*/Logo/
