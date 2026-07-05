@@ -52,9 +52,42 @@ public partial class Game : ObservableObject
     public int MaxPlayers { get; set; } = 1;
     public string Description { get; set; } = string.Empty;
 
+    // LaunchBox'tan gelen ek zenginleştirme alanları (bkz. CatalogDatabaseService.GetGames).
+    // ReleaseDate, ReleaseYear'dan daha kesin (gün/ay dahil) ama her kayıtta yok — detay panelinde
+    // varsa tam tarih, yoksa yıl gösterilir (bkz. ReleaseDateDisplay).
+    public DateTime? ReleaseDate { get; set; }
+    public double? CommunityRating { get; set; }
+    public string VideoUrl { get; set; } = string.Empty;
+    public string WikipediaUrl { get; set; } = string.Empty;
+    public long? SteamAppId { get; set; }
+    public bool? Cooperative { get; set; }
+
+    public string ReleaseDateDisplay => ReleaseDate is { } date ? date.ToString("d") : (ReleaseYear > 0 ? ReleaseYear.ToString() : string.Empty);
+    public bool HasVideoUrl => !string.IsNullOrWhiteSpace(VideoUrl);
+    public bool HasWikipediaUrl => !string.IsNullOrWhiteSpace(WikipediaUrl);
+    public bool HasCommunityRating => CommunityRating.HasValue;
+    public bool HasSteamAppId => SteamAppId.HasValue;
+
+    // 5 yıldız üzerinden dolu/boş yıldız gösterimi (Favori yıldızıyla aynı görsel dil, ★/☆) +
+    // sayısal değer. LaunchBox'ın CommunityRating'i zaten 0-5 aralığında.
+    public string CommunityRatingDisplay
+    {
+        get
+        {
+            if (CommunityRating is not { } rating)
+                return string.Empty;
+
+            var filled = Math.Clamp((int)Math.Round(rating), 0, 5);
+            return $"{new string('★', filled)}{new string('☆', 5 - filled)}  ({rating:0.0})";
+        }
+    }
+
     // Tercih edilen (preferred) sürümün bölgesi ve kaynağı — DataGrid'de sütun/filtre olarak
     // gösterilebilsin diye Game seviyesine taşındı (GameVersion listesi sadece seçili oyun için
-    // ayrıca sorgulanıyor, DataGrid'de tüm oyunlar için tek bakışta bölge/kaynak lazım).
+    // ayrıca sorgulanıyor, DataGrid'de tüm oyunlar için tek bakışta bölge/kaynak lazım). Sürüm
+    // etiketi (Rev A, Beta vb.) bilinçli olarak burada yok — sağ paneldeki Sürümler listesinde
+    // (GameVersion.VersionLabel) zaten her sürüm için ayrı ayrı gösteriliyor, Game seviyesinde
+    // tekilleştirmek (sadece preferred sürümü yansıtır) yanıltıcı olur.
     public string Region { get; set; } = string.Empty;
     public string SourceDat { get; set; } = string.Empty;
 

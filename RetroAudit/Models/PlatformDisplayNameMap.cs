@@ -9,8 +9,8 @@ public static class PlatformDisplayNameMap
 {
     private static readonly Dictionary<string, string> Names = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Nintendo - Nintendo Entertainment System"] = "Nintendo Entertainment System",
-        ["Nintendo - Super Nintendo Entertainment System"] = "Super Nintendo Entertainment System",
+        ["Nintendo - Nintendo Entertainment System"] = "Nintendo",
+        ["Nintendo - Super Nintendo Entertainment System"] = "Super Nintendo",
         ["Nintendo - Nintendo 64"] = "Nintendo 64",
         ["Nintendo - GameCube"] = "GameCube",
         ["Nintendo - Wii"] = "Wii",

@@ -31,6 +31,11 @@ public static class UserDataService
             PreferredVersionRawName TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS FilePathOverrides (
+            GameKey TEXT PRIMARY KEY,
+            FilePath TEXT NOT NULL
+        );
+
         CREATE TABLE IF NOT EXISTS Playlists (
             PlaylistId INTEGER PRIMARY KEY AUTOINCREMENT,
             Name TEXT NOT NULL UNIQUE,
@@ -129,6 +134,32 @@ public static class UserDataService
                 reader.IsDBNull(7) ? null : reader.GetString(7));
         }
         return result;
+    }
+
+    public static Dictionary<string, string> GetAllFilePathOverrides()
+    {
+        var result = new Dictionary<string, string>();
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT GameKey, FilePath FROM FilePathOverrides";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            result[reader.GetString(0)] = reader.GetString(1);
+        return result;
+    }
+
+    public static void SaveFilePathOverride(string gameKey, string filePath)
+    {
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO FilePathOverrides (GameKey, FilePath)
+            VALUES ($gameKey, $filePath)
+            ON CONFLICT(GameKey) DO UPDATE SET FilePath = $filePath
+            """;
+        cmd.Parameters.AddWithValue("$gameKey", gameKey);
+        cmd.Parameters.AddWithValue("$filePath", filePath);
+        cmd.ExecuteNonQuery();
     }
 
     public static HashSet<string> GetFavoriteGameKeys()

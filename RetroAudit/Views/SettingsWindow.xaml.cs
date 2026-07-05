@@ -8,6 +8,7 @@ public partial class SettingsWindow : Window
     public SettingsWindow()
     {
         InitializeComponent();
+        DarkTitleBarHelper.Apply(this);
 
         // ViewModel MessageBox'a doğrudan bağımlı olmasın diye basit bir bilgi olayı üzerinden haberleşiyoruz.
         if (DataContext is SettingsViewModel vm)

@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.17)
+## Mevcut durum (v0.19)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
@@ -15,18 +15,22 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 
 ### Özellikler
 - Sol panelde kategoriye göre gruplanmış ~40 platform (sade isimlerle, ör. "Nintendo 64"), sanallaştırılmış oyun tablosu (67 binin üzerinde oyun).
-- Sütun başlığına **sol tık**: arama kutulu filtre + "Sırala A-Z/Z-A" dropdown'ı açılır (Title/File gibi neredeyse hiç tekrarlamayan sütunlarda sadece arama, Enter'a basınca uygulanır). **Sağ tık**: tüm 19 sütunun görünürlüğünü aç/kapa (tercih diske kaydedilip hatırlanır).
-- Yıldız sütunuyla tek tıkla favoriye ekleme; ROM'u eksik oyunlarda tabloda doğrudan görünen "web'de ara" butonu.
+- Sütun başlığına **sol tık**: arama kutulu filtre + "Sırala A-Z/Z-A" dropdown'ı açılır (Title/File gibi neredeyse hiç tekrarlamayan sütunlarda sadece arama, Enter'a basınca uygulanır). **Sağ tık**: sütun görünürlüğünü aç/kapa ve sola/sağa sabitle (pin) — tercihler diske kaydedilip hatırlanır. Sütunlar sürükleyip yeniden sıralanabilir, bu sıra da kalıcıdır.
+- Favori/Ara-Başlat birleşik **Actions** sütunu ve her zaman en solda sabit ayrı bir **Gizle** sütunu; playlist chip şeridinde Favorites/Hidden/Recycle Bin'in yanında **Ready to Play** / **Needs Search** hızlı filtreleri.
+- ROM'u eksik bir oyun için tabloda doğrudan **uygulama içi (WebView2) arama penceresi** açılıyor; kullanıcının başlattığı indirme otomatik olarak oyunun platform klasörüne iniyor. Kendi ROM arşivinizi (farklı bir klasör düzeninde) **toplu içe aktarma** penceresiyle tarayıp Taşı/Kopyala/Referans modlarından biriyle (opsiyonel CRC32 doğrulamayla) tek seferde ekleyebilirsiniz.
+- LaunchBox'tan Release Date, Topluluk Puanı, YouTube/Wikipedia bağlantıları, Steam App ID ve Cooperative bilgisi de okunup detay panelinde gösteriliyor.
 - Sağ tık ile açılan kapsül biçimli komut menüsü (Ayarlar > Arayüz'den İkon / İkon+Metin seçilebilir): Sil (önce çöp kutusuna taşır), Gizle, Metadata Düzenle, Dosya Konumunu Aç, Web'de Ara, Sürüm listesinden "Preferred yap", Metadata'yı Yeniden Eşleştir. Çoklu seçimde sadece çakışmayan toplu eylemler (favori/gizle/sil/playlist) gösterilir.
 - Kullanıcının oluşturduğu sınırsız playlist + sabit Favorites/Hidden/Recycle Bin, tümü tablonun üstünde tıklanabilir chip/etiket olarak.
-- Sağ detay panelinde seçili oyunun tüm sürümleri (bölge/kaynak/hash) ve tercih edilen sürümü değiştirme.
+- Sağ detay panelinde seçili oyunun tüm sürümleri (bölge/kaynak/hash) ve tercih edilen sürümü değiştirme; Ayarlar > Emülatörler'de platform başına tanımlanan emülatörle BAŞLAT butonu üzerinden doğrudan oynatma.
 
 ### Pencereler
 - **MainWindow** — Platform listesi, sanallaştırılmış oyun tablosu (DataGrid), playlist chip şeridi, seçili oyun detay paneli ve BAŞLAT butonu.
+- **RomSearchWindow** — "Ara" butonuyla açılan, uygulama içi (WebView2) ROM arama penceresi; indirmeler otomatik olarak doğru platform klasörüne yönlendirilir.
+- **RomImportWindow** — Kendi ROM arşivinizi tarayıp toplu Taşı/Kopyala/Referans ile içe aktarma, opsiyonel hash doğrulaması.
 - **MediaProviderWindow** — Eksik medya (kutu/arkaplan/ekran görüntüsü) için arama sonucu kartları; kartlar sürükle-bırak ile eksik öğe listesine uygulanabiliyor.
 - **CropEditorDialog** — Görsel kırpma oranı seçim arayüzü.
 - **EditMetadataWindow** — Bir oyunun Başlık/Tür/Açıklama/Notlar/Yayıncı/Geliştirici alanlarını elle düzenleme.
-- **SettingsWindow** — RetroAudit Data kök dizini, LaunchBox metadata veritabanı yolu, platform başına emülatör yolu/parametreleri, bölge önceliği, arayüz tercihleri (komut menüsü görünümü), Export/Import Config (JSON).
+- **SettingsWindow** — RetroAudit Data kök dizini (artık ilk açılışta otomatik varsayılan), LaunchBox metadata veritabanı yolu, platform başına emülatör yolu/parametreleri, bölge önceliği, arayüz tercihleri (komut menüsü görünümü, satır yüksekliği, platform listesi görünümü/kategorileri), Export/Import Config (JSON).
 
 ## Gereksinimler
 
@@ -69,8 +73,12 @@ RetroAudit/            WPF uygulaması
 
 - [x] DAT (No-Intro/Redump/TOSEC) tabanlı RetroAudit.db üretimi (Builder)
 - [x] WPF'nin gerçek RetroAudit.db'yi okuması + kalıcı kullanıcı verisi (favori/gizle/playlist/metadata)
-- [ ] Gerçek ROM tarama / hash kontrolü (şu an "dosya var mı" kontrolü sadece isim eşleşmesine bakıyor)
-- [ ] Emülatör başlatma mantığı (BAŞLAT butonu henüz bağlı değil)
+- [x] Emülatör başlatma mantığı (Ayarlar > Emülatörler'de tanımlanan yol ile BAŞLAT butonu)
+- [x] Toplu ROM içe aktarma (Taşı/Kopyala/Referans + opsiyonel CRC32 hash doğrulama)
+- [ ] Günlük "dosya var mı" kontrolü hâlâ sadece dosya adına bakıyor — sürekli/otomatik hash
+      doğrulaması yok, hash kontrolü şu an sadece toplu içe aktarma sırasında opsiyonel bir adım
+- [ ] Medya (kutu/arkaplan/ekran görüntüsü) için de ROM içe aktarmaya benzer toplu bir yerel
+      klasör taraması yok — MediaProviderWindow şu an sadece çevrimiçi arama sonucu kartlarıyla çalışıyor
 
 ## Lisans
 

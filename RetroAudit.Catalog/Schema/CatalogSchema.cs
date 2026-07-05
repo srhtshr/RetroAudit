@@ -46,6 +46,15 @@ public static class CatalogSchema
             ReleaseYear INTEGER,
             Overview TEXT,
             MaxPlayers INTEGER,
+            -- LaunchBox'tan gelen ek zenginleştirme alanları (bkz. LaunchBoxMetadataReader,
+            -- CatalogGame). ReleaseDate, ReleaseYear'dan daha kesin (gün/ay dahil) ama LaunchBox'ta
+            -- bazı kayıtlarda hiç yok — bu yüzden ikisi de ayrı ayrı saklanıyor.
+            ReleaseDate TEXT,
+            CommunityRating REAL,
+            VideoUrl TEXT,
+            WikipediaUrl TEXT,
+            SteamAppId INTEGER,
+            Cooperative INTEGER,
             PreferredVersionId INTEGER REFERENCES GameVersions(GameVersionId),
             -- Bu oyun LaunchBox.Metadata.db'de gerçekten bulundu mu? Developer/Publisher/Overview/
             -- ReleaseYear/MaxPlayers'ın hepsi LaunchBox'ta da boş olabileceği için (nadir ama mümkün),

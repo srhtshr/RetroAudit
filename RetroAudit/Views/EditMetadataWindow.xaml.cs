@@ -9,6 +9,7 @@ public partial class EditMetadataWindow : Window
     public EditMetadataWindow(Game game)
     {
         InitializeComponent();
+        DarkTitleBarHelper.Apply(this);
 
         var vm = new EditMetadataViewModel(game);
         vm.RequestClose += saved =>

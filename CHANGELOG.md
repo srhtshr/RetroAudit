@@ -2,6 +2,65 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.19] - 2026-07-05
+
+### Added
+- LaunchBox'tan 6 yeni zenginleştirme alanı okunuyor: Release Date, Topluluk Yıldız
+  Derecelendirmesi, VideoUrl (tıklanabilir YouTube butonu), WikipediaUrl (tıklanabilir Wikipedia
+  butonu), Steam App ID ve Cooperative bilgisi; `GameAlternateTitles` de artık okunup
+  `AlternateNames` tablosuna yazılıyor (eşleştirmede ileride kullanılabilir).
+- **Uygulama içi ROM arama** (`RomSearchWindow`, WebView2 tabanlı): "Ara" butonu artık dış
+  tarayıcı yerine RetroAudit içinde açılan bir pencerede arama yapıyor; kullanıcının kendi
+  başlattığı indirmeler otomatik olarak oyunun `{Platform}\{Dosya}` klasörüne yönlendiriliyor
+  ("Farklı Kaydet" diyaloğu hiç çıkmıyor). Platforma göre arşiv standardı etiketi
+  (No-Intro/Redump/TOSEC/MAME, bkz. `RomSearchTagMap`) arama sorgusuna otomatik ekleniyor.
+- **Toplu ROM İçe Aktarma** (`RomImportWindow`): kullanıcının kendi düzenindeki bir klasörü
+  tarayıp dosya adına göre katalogla eşleştiriyor (tekil oyun başına .zip arşivleri dahil),
+  Taşı / Kopyala / Referans (dosyayı olduğu yerde bırak, yeni `FilePathOverrides` tablosuyla)
+  modlarından biri toplu uygulanabiliyor; opsiyonel CRC32 hash doğrulaması yanlış/bozuk
+  dosyaları içe aktarımdan önce yakalıyor.
+- RetroAudit Data dizini artık ilk açılışta otomatik bir varsayılan konum alıyor
+  (`%LocalAppData%\RetroAudit\Data`) ve Ayarlar penceresinde gerçek, kalıcı bir alan — önceden
+  "ileriki aşama için hazırlık" notuyla pasif duruyordu.
+- DataGrid'e birleşik **Actions** sütunu: Favori ve Ara/Başlat butonları tek hücrede, filtreleri
+  (Favori + Durum) tek bir popup'tan yönetiliyor. **Gizle** ayrı, her zaman en solda sabit bir
+  sütun (sağ-tık pin/sürükleme dahil hiçbir kullanıcı eylemiyle yer değiştirmiyor).
+- Sütun başlığına sağ tıklayıp **sola/sağa sabitleme (pin)** — sabitlenen alanın sınırını
+  gösteren ince bir dikey çizgi. Sütunları sürükleyip yeniden sıralamak artık kalıcı (yeni
+  `AppSettings.ColumnOrder`).
+- Playlist chip şeridine **"Ready to Play"** (ROM'u olan) ve **"Needs Search"** (ROM'u eksik)
+  filtreleri eklendi.
+- Tüm ikincil pencerelere (Ayarlar, Metadata Düzenle, Medya Sağlayıcı, Kırpma, ROM Ara, ROM İçe
+  Aktar) Windows'un immersive koyu başlık çubuğu uygulandı (`DarkTitleBarHelper`).
+- Ayarlar > Arayüz'e satır yüksekliği kaydırıcısı ve platform listesi görünüm/kategori
+  tercihleri taşındı — önceden ana penceredeki geçici, kalıcı olmayan kontrollerdi.
+
+### Changed
+- `ReleaseYear` boş/0 olan ama LaunchBox `ReleaseDate`'i dolu olan oyunlar artık tabloda ve
+  Metadata'yı Yeniden Eşleştir sonrasında doğru yılı gösteriyor (önceden "0" görünüyordu).
+- Sürüm (Released/Junk) ve Yıl/Tarih sütunları tablodan kaldırıldı — ilki zaten üst araç
+  çubuğundaki Released/Junk butonlarıyla, ikincisi detay panelindeki tam tarihle karşılanıyordu.
+- Box/BG/SS ve (Maks. Oyuncu'dan yeniden adlandırılan) Oyuncu sütunlarının başlığı ve içeriği
+  ortalandı.
+- ROM'u eksik/eşleşmeyen satırların soluklaştırılması artık SATIR değil HÜCRE bazlı uygulanıyor.
+
+### Fixed
+- Sütun sabitleme (pin) durumu birkaç ayrı kök nedenden dolayı uygulama kapatılıp açıldığında
+  bozuluyordu: (1) sabitlemeyi kaldırmak sütunu eski konumuna döndürmüyor, komşu sütunların
+  sırasını kalıcı olarak bozuyordu — artık her değişiklikte tüm sütunların konumu baştan
+  hesaplanıyor; (2) sürükleyerek yapılan sıralama hiç kaydedilmiyordu; (3) pinli bir sütunu
+  sürüklemek, WPF'in kendi "ilk N sütun donuk" konumsal modeliyle (Excel/Sheets'teki "bölmeleri
+  dondur" gibi) artık doğru şekilde ele alınıyor — ne stale pin kayıtları sütunu yanlış yere
+  zorluyor ne de pinli alan içinde ince ayar yapmak sabitlemeyi bozuyor.
+- Soluklaştırmanın SATIR seviyesinde uygulanması, satırın kendi şablonundaki yatay ayırıcı
+  çizgiyi de soldurup satırdan satıra farklı tonda çizgilere yol açıyordu — hücre seviyesine
+  taşınarak çizgi artık tüm satırlarda aynı.
+- Actions sütunu başlığı gerçekten ortalandı; favori yıldızının (★/☆ karakterinin font
+  metriklerinden kaynaklanan) "aşağıda kalmış" görünümü düzeltildi; Actions/Gizle/Favori
+  butonları arasındaki boşluk artırılıp üzerine gelindiğinde oluşan "yanıp sönme" (global buton
+  stilinin tam dikdörtgen hover efekti, bitişik küçük butonlarda ardışık görünüp kayboluyordu)
+  küçük, dairesel bir hover stiliyle giderildi.
+
 ## [0.18] - 2026-07-05
 
 ### Fixed

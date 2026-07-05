@@ -41,7 +41,7 @@
             <TabItem Header="Genel">
                 <StackPanel Margin="4,16,4,4">
                     <TextBlock Text="RetroAudit Data Dizini" FontWeight="Bold" Margin="0,0,0,4" />
-                    <TextBlock Text="Romlar, medya dosyaları ve RetroAudit.db bu klasör altında aranacak (gerçek tarama mantığı henüz bağlı değil, bu alan ileriki aşama için hazırlık)."
+                    <TextBlock Text="ROM İçe Aktar ve Arayıp İndir ile eklenen dosyalar bu klasör altında ({Platform}\{Dosya} olarak) saklanır. İlk açılışta otomatik bir varsayılan atanır; büyük arşivler için farklı bir sürücü/klasör seçebilirsiniz."
                                Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -78,6 +78,60 @@
                                  IsChecked="{Binding ContextMenuDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=IconAndText}" />
                     <RadioButton Content="Icon Only (sadece ikon, daha kompakt)"
                                  IsChecked="{Binding ContextMenuDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=IconOnly}" />
+
+                    <!-- Önceden ana penceredeki araç çubuğunda bir kaydırıcıydı ve hiç kalıcı
+                         değildi (her açılışta 30'a sıfırlanıyordu) — kullanıcı isteğiyle buraya
+                         taşındı, artık diğer Arayüz alanları gibi otomatik kaydedilip hatırlanıyor. -->
+                    <TextBlock Text="Tablo Görünümü" FontWeight="Bold" Margin="0,20,0,4" />
+                    <TextBlock Text="Oyun tablosundaki satır yüksekliği."
+                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <StackPanel Orientation="Horizontal">
+                        <Slider Minimum="20" Maximum="60" Width="200" VerticalAlignment="Center" Value="{Binding RowHeight}" />
+                        <TextBlock Text="{Binding RowHeight, StringFormat={}{0:0}}" Width="24" VerticalAlignment="Center" Margin="8,0,0,0" />
+                    </StackPanel>
+
+                    <!-- Şu an değiştirilebilir bir tema seçici yok (tek tema var) — bu sadece
+                         bilgilendirme amaçlı; ileride birden fazla tema eklenirse buraya bir
+                         seçici konabilir. -->
+                    <TextBlock Text="Tema" FontWeight="Bold" Margin="0,20,0,4" />
+                    <TextBlock Text="Obsidyen (koyu tema, sabit)"
+                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" FontStyle="Italic" />
+
+                    <!-- Sol paneldeki platform listesinin görünümü — grup/kategori ve satır görünümü
+                         (yazı/logo) tercihleri, ana pencerede sürükle-bırak ile ayarlanan sıralamadan
+                         (bkz. MainWindow.xaml.cs PlatformRow_Drop) ayrı ama onunla birlikte çalışır:
+                         kategoriler AÇIKKEN sıralama sadece aynı kategori içinde yapılabilir. -->
+                    <TextBlock Text="Platform Listesi" FontWeight="Bold" Margin="0,20,0,4" />
+                    <TextBlock Text="Ana penceredeki soldaki platform listesinin görünümü. Sürükleyip bırakarak sıralamayı platform listesinin kendisinden değiştirebilirsiniz."
+                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <CheckBox Content="Kategorilere göre grupla (Konsollar, El Konsolları, ...)"
+                              IsChecked="{Binding GroupPlatformsByCategory}" Margin="0,0,0,10" />
+
+                    <TextBlock Text="Satır Görünümü" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4" />
+                    <RadioButton Content="Yazı (platform adı)" Margin="0,0,0,4"
+                                 IsChecked="{Binding PlatformListDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=Text}" />
+                    <RadioButton Content="Logo (sadece kısa ikon, adı üzerine gelince görünür)" Margin="0,0,0,10"
+                                 IsChecked="{Binding PlatformListDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=Logo}" />
+
+                    <TextBlock Text="Görünür Kategoriler" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Opacity" Value="1" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding GroupPlatformsByCategory}" Value="False">
+                                        <Setter Property="Opacity" Value="0.5" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ItemsControl ItemsSource="{Binding CategoryOptions}" IsEnabled="{Binding GroupPlatformsByCategory}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type models:ColumnVisibilityOption}">
+                                <CheckBox Content="{Binding Header}" IsChecked="{Binding IsVisible}" Margin="0,0,0,4" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
             </TabItem>
 

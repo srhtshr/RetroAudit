@@ -6,7 +6,26 @@
         xmlns:vm="clr-namespace:RetroAudit.ViewModels"
         xmlns:models="clr-namespace:RetroAudit.Models"
         xmlns:views="clr-namespace:RetroAudit.Views"
-        Title="RetroAudit" Height="820" Width="1400" WindowStartupLocation="CenterScreen">
+        xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
+        Title="RetroAudit" Height="820" Width="1400" WindowStartupLocation="CenterScreen"
+        Background="{StaticResource Brush.Background.Base}">
+
+    <!-- Özel (custom-drawn) başlık çubuğu: Windows 10'da native title bar'ı uygulamanın kendi
+         Obsidian rengiyle (#252526) boyayan bir DWM API'si yok (DWMWA_CAPTION_COLOR sadece
+         Windows 11 22H2+'ta var — bkz. DarkTitleBarHelper.cs), bu yüzden kullanıcı kararıyla
+         başlık çubuğu elle çiziliyor. WindowChrome, WindowStyle="None" GEREKMEDEN native
+         chrome'un render'ını bastırıp CaptionHeight kadarlık üst şeridi Win32'nin kendi
+         "caption" hit-test bölgesi yapıyor — bu sayede sürükle-taşı, çift tık ile büyüt/eski
+         hâle getir, sağ tık sistem menüsü ve Aero Snap TAMAMEN NATIVE Win32 mekanizmasıyla
+         (elle yeniden yazılmadan) çalışmaya devam ediyor. UseAeroCaptionButtons="False": aksi
+         halde WindowChrome kendi min/maks/kapat düğmelerini de üstüne bindirmeye çalışırdı.
+         Aşağıdaki CustomTitleBarButton düğmeleri WindowChrome.IsHitTestVisibleInChrome="True"
+         ile bu caption bölgesinden hariç tutuluyor ki tıklanabilir kalsınlar. -->
+    <shell:WindowChrome.WindowChrome>
+        <shell:WindowChrome CaptionHeight="32" ResizeBorderThickness="6"
+                             GlassFrameThickness="0" CornerRadius="0"
+                             UseAeroCaptionButtons="False" />
+    </shell:WindowChrome.WindowChrome>
 
     <Window.DataContext>
         <vm:MainViewModel />
@@ -15,11 +34,107 @@
     <Window.Resources>
         <conv:BoolToStatusBrushConverter x:Key="BoolToStatusBrush" />
         <conv:BoolToStatusGlyphConverter x:Key="BoolToStatusGlyph" />
-        <conv:BoolToGridLengthConverter x:Key="BoolToGridLength" />
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
 
         <!-- DataGridColumn.Header gibi görsel-ağaç-dışı alanların ViewModel'e erişebilmesi için
              (bkz. BindingProxy.cs) — Data, Window'un DataContext'ine (MainViewModel) bağlanır. -->
         <views:BindingProxy x:Key="ViewModelProxy" Data="{Binding}" />
+
+        <!-- Sürüm kartı (GameVersion) görünümü — hem sağ detay panelindeki hem de sağ tık
+             kapsülündeki "Versions" düğmesiyle açılan popup'taki ListBox'lar tarafından paylaşılır
+             (bkz. MainWindow.xaml.cs VersionsList_MouseDoubleClick, ikisi de aynı handler'ı kullanır).
+             Varsayılan ListBoxItem mavi seçim dikdörtgeni tamamen kaldırılıp seçim vurgusu karttaki
+             Border'a bırakılıyor (bkz. IsSelected DataTrigger aşağıda). -->
+        <Style x:Key="VersionCardItemContainerStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <ContentPresenter />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="VersionCardItemTemplate">
+            <Border Background="{StaticResource Brush.Background.Elevated}"
+                    CornerRadius="4" Padding="8" Cursor="Hand">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding RelativeSource={RelativeSource AncestorType=ListBoxItem}, Path=IsSelected}" Value="True">
+                                <Setter Property="BorderThickness" Value="2" />
+                                <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent.SelectedBorder}" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <!-- Bu sürümün dosyası diskte var mı — mavi Play / kırmızı çarpı (bkz.
+                             MainViewModel.IsVersionOwned). Grid'deki Play/Search sütunuyla aynı
+                             mavi rengi kullanıyor, tutarlılık için. -->
+                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="11" Margin="0,0,4,0" VerticalAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="&#xE711;" />
+                                    <Setter Property="Foreground" Value="{StaticResource Brush.Status.Missing}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOwned}" Value="True">
+                                            <Setter Property="Text" Value="&#xE768;" />
+                                            <Setter Property="Foreground" Value="{StaticResource Brush.Accent.SelectedBorder}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding Region}" FontWeight="Bold" FontSize="11">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsOwned}" Value="False">
+                                            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBlock Text="{Binding VersionLabel}" Margin="6,0,0,0" FontSize="11"
+                                   Foreground="{StaticResource Brush.Text.Secondary}" />
+                        <TextBlock Text="★ Preferred" Margin="6,0,0,0" FontSize="10">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsPreferred}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
+                    <TextBlock Text="{Binding SourceDat}" FontSize="10" Margin="0,2,0,0"
+                               Foreground="{StaticResource Brush.Text.Secondary}" />
+                    <ItemsControl ItemsSource="{Binding Hashes}" Margin="0,4,0,0">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock FontSize="10" TextWrapping="Wrap"
+                                           Foreground="{StaticResource Brush.Text.Secondary}">
+                                    <Run Text="{Binding FileName, Mode=OneWay}" />
+                                    <Run Text=" · CRC32: " />
+                                    <Run Text="{Binding Crc32, Mode=OneWay}" />
+                                </TextBlock>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
 
         <!-- DataGrid sütun başlıklarında kullanılan ortak filtre şablonu. Header'a bir
              ColumnFilterViewModel atandığında (DataGridColumn.Header, ViewModelProxy üzerinden
@@ -187,6 +302,81 @@
             </Grid>
         </DataTemplate>
 
+        <!-- Birleşik "Actions" sütununun (Favori+Gizle+Ara/Başlat, bkz. ActionsColumn) başlığı —
+             standart FilterableColumnHeader'dan farklı olarak: TEK popup'ta İKİ grup (Favori,
+             Durum) birden gösterilir, arama kutusu YOK (sadece birkaç seçenek olduğu için gerek
+             yok) ve sıralama düğmeleri YOK (bu sütun tek bir sıralanabilir değeri temsil etmiyor).
+             "Gizle" için grup yok — bkz. ActionsColumnFilterViewModel yorumu. -->
+        <DataTemplate x:Key="ActionsColumnFilterHeader" DataType="{x:Type models:ActionsColumnFilterViewModel}">
+            <Grid MinHeight="30">
+                <Button x:Name="ActionsHeaderButton" Command="{Binding OpenCommand}" Cursor="Hand"
+                        Background="Transparent" BorderThickness="0" Padding="4,0"
+                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" ToolTip="Filtrele">
+                    <TextBlock Text="Actions" TextTrimming="CharacterEllipsis">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                        <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Button>
+
+                <Popup PlacementTarget="{Binding ElementName=ActionsHeaderButton}" IsOpen="{Binding IsPopupOpen}"
+                       StaysOpen="False" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade">
+                    <Border Background="{StaticResource Brush.Background.Elevated}"
+                            BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                            CornerRadius="4" Padding="6" Width="230">
+                        <DockPanel>
+                            <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                <Button Content="Temizle" Command="{Binding ClearAllCommand}" FontSize="10"
+                                        HorizontalAlignment="Left" />
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="OK" Command="{Binding ApplyFilterCommand}" FontSize="10" Margin="0,0,4,0" />
+                                    <Button Content="Cancel" Command="{Binding CancelFilterCommand}" FontSize="10" />
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel>
+                                <TextBlock Text="Favori" FontWeight="SemiBold" FontSize="10" Margin="0,0,0,2"
+                                           Foreground="{StaticResource Brush.Text.Secondary}" />
+                                <ItemsControl ItemsSource="{Binding FavoriteFilter.OptionsView}" Margin="0,0,0,6">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type models:FilterOption}">
+                                            <CheckBox IsChecked="{Binding IsChecked}" FontSize="11" Margin="2">
+                                                <TextBlock FontSize="11">
+                                                    <Run Text="{Binding Value, Mode=OneWay}" />
+                                                    <Run Text=" (" /><Run Text="{Binding Count, Mode=OneWay}" /><Run Text=")" />
+                                                </TextBlock>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <TextBlock Text="Durum" FontWeight="SemiBold" FontSize="10" Margin="0,0,0,2"
+                                           Foreground="{StaticResource Brush.Text.Secondary}" />
+                                <ItemsControl ItemsSource="{Binding HasLocalFileFilter.OptionsView}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate DataType="{x:Type models:FilterOption}">
+                                            <CheckBox IsChecked="{Binding IsChecked}" FontSize="11" Margin="2">
+                                                <TextBlock FontSize="11">
+                                                    <Run Text="{Binding Value, Mode=OneWay}" />
+                                                    <Run Text=" (" /><Run Text="{Binding Count, Mode=OneWay}" /><Run Text=")" />
+                                                </TextBlock>
+                                            </CheckBox>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                </Popup>
+            </Grid>
+        </DataTemplate>
+
         <!-- Kapsül sağ tık menüsündeki her dairesel ikon düğmesi için ortak şablon: hover'da
              (Brush.Background.Hover) yuvarlak bir vurgu belirir — bkz. plan referans ekran görüntüsü. -->
         <Style x:Key="ContextMenuIconButton" TargetType="Button">
@@ -213,6 +403,37 @@
             </Setter>
         </Style>
 
+        <!-- Actions sütunundaki (Favori/Gizle/Ara-Başlat) küçük ikon düğmeleri için — ContextMenuIconButton
+             ile aynı mantık (dairesel hover vurgusu) ama küçük boyutta. Bu olmadan bu düğmeler global
+             Button Style'ını (ObsidianDark.xaml) devralıyordu: o şablonun IsMouseOver tetikleyicisi,
+             düğmenin Background/BorderThickness local Setter'larını YOK SAYIP CornerRadius=3'lük dolu
+             bir dikdörtgeni doğrudan "border" adlı elemana uyguluyordu. Üç düğme neredeyse bitişik
+             durduğu için fare sınırda gezinirken bu dikdörtgenler art arda görünüp kayboluyor, göz
+             "yanıp sönme" olarak algılıyordu. Sabit Width/Height + dairesel (CornerRadius=Width/2)
+             küçük bir vurgu bu sorunu ortadan kaldırıyor. -->
+        <Style x:Key="ActionsIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="11" Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush.Background.Hover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- IconOnly modunda etiket metni gizlenir (bkz. Ayarlar > Arayüz, ContextMenuDisplayMode). -->
         <Style x:Key="ContextMenuLabelText" TargetType="TextBlock">
             <Setter Property="FontSize" Value="9" />
@@ -232,27 +453,140 @@
             <Setter Property="HorizontalAlignment" Value="Center" />
             <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
         </Style>
+
+        <!-- Özel başlık çubuğundaki min/maks düğmeleri — Windows'un kendi native caption
+             düğmeleriyle birebir aynı Segoe MDL2 glyph'leri (ChromeMinimize/ChromeMaximize/
+             ChromeRestore/ChromeClose) ve hover davranışı (gri) kullanıyor, sadece Kapat
+             kırmızı olacak şekilde ayrıca override ediliyor (bkz. TitleBarCloseButton). -->
+        <Style x:Key="TitleBarButton" TargetType="Button">
+            <Setter Property="Width" Value="46" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+            <Setter Property="Cursor" Value="Arrow" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" Background="{TemplateBinding Background}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush.Background.Hover}" />
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="TitleBarCloseButton" TargetType="Button" BasedOn="{StaticResource TitleBarButton}">
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#E81123" />
+                    <Setter Property="Foreground" Value="White" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Sabitlenmiş (pinned) sütun bölgesinin sınırını göstermek için ince dikey çizgi —
+             bkz. MainWindow.xaml.cs ApplyColumnPinningPositions. Sol sabitlemenin SON sütununa
+             "Right" varyantı, sağ sabitlemenin İLK sütununa "Left" varyantı, sadece HÜCRELERE
+             (başlığa değil — bkz. code-behind yorumu, "Actions" gibi özel HeaderTemplate'i olan
+             sütunlarda HeaderStyle değişimi başlığı temasız/beyaz gösteriyordu) uygulanır. Hücre
+             stili özel bir ControlTemplate kullanıyor (bkz. ObsidianDark.xaml varsayılan
+             DataGridCell şablonu) çünkü o şablon BorderBrush/BorderThickness'ı hiç kullanmıyor —
+             bu yüzden burada gerçek bir kenarlık çizen kendi şablonumuzu tanımlıyoruz. Renk VE
+             kalınlık normal sütun ayraçlarıyla birebir aynı (Brush.Border, 1px) — vurgu (accent)
+             rengi ve kalın çizgi dikkat dağıtıcı/kötü duruyordu. -->
+        <Style x:Key="PinBoundaryRightCellStyle" TargetType="{x:Type DataGridCell}" BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type DataGridCell}">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                                BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,1,0"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="PinBoundaryLeftCellStyle" TargetType="{x:Type DataGridCell}" BasedOn="{StaticResource {x:Type DataGridCell}}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="{x:Type DataGridCell}">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1,0,0,0"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Box/BG/SS/Oyuncu gibi kısa, tek değerli sütunların başlığını ortalamak için — standart
+             FilterableColumnHeader tüm sütunlarda paylaşıldığı için (Title/Platform/... hâlâ sola
+             yaslı kalmalı), ortalamayı şablonun kendisinde değil, sadece bu sütunların
+             HeaderStyle'ında yapıyoruz. -->
+        <Style x:Key="CenteredColumnHeaderStyle" TargetType="{x:Type DataGridColumnHeader}" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
     </Window.Resources>
 
-    <Grid Background="{StaticResource Brush.Background.Base}">
+    <Grid x:Name="RootLayoutGrid" Background="{StaticResource Brush.Background.Base}">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
+        <!-- ===================== Özel başlık çubuğu ===================== -->
+        <Border Grid.Row="0" Height="32" Background="{StaticResource Brush.Background.Panel}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Pencere ikonu yok (uygulamanın henüz özel bir .ico'su yok) — sadece başlık
+                     metni. Bu alan (düğmeler hariç) WindowChrome.CaptionHeight sayesinde zaten
+                     sürüklenebilir/çift-tıkla-büyüt/sağ-tıkla-sistem-menüsü davranışına sahip,
+                     ayrıca bir event handler'a gerek yok. -->
+                <TextBlock Grid.Column="0" Text="RetroAudit" VerticalAlignment="Center"
+                           Margin="12,0,0,0" FontSize="12" Foreground="{StaticResource Brush.Text.Secondary}" />
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button shell:WindowChrome.IsHitTestVisibleInChrome="True" Style="{StaticResource TitleBarButton}"
+                            Click="MinimizeButton_Click" ToolTip="Simge durumuna küçült">
+                        <TextBlock Text="&#xE921;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+                    </Button>
+                    <Button x:Name="MaximizeRestoreButton" shell:WindowChrome.IsHitTestVisibleInChrome="True"
+                            Style="{StaticResource TitleBarButton}" Click="MaximizeRestoreButton_Click"
+                            ToolTip="Ekranı kapla/geri yükle">
+                        <TextBlock x:Name="MaximizeRestoreGlyph" Text="&#xE922;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+                    </Button>
+                    <Button shell:WindowChrome.IsHitTestVisibleInChrome="True" Style="{StaticResource TitleBarCloseButton}"
+                            Click="CloseButton_Click" ToolTip="Kapat">
+                        <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </Border>
+
         <!-- ===================== Toolbar ===================== -->
-        <Border Grid.Row="0" Background="{StaticResource Brush.Background.Panel}"
+        <Border Grid.Row="1" Background="{StaticResource Brush.Background.Panel}"
                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,0,1" Padding="8">
             <DockPanel>
-                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="Satır:" VerticalAlignment="Center" Margin="12,0,4,0" Foreground="{StaticResource Brush.Text.Secondary}" />
-                    <Slider Minimum="20" Maximum="60" Width="90" VerticalAlignment="Center" Value="{Binding RowHeight}" />
-                    <TextBlock Text="{Binding RowHeight, StringFormat={}{0:0}}" Width="24" VerticalAlignment="Center" Margin="4,0,12,0" />
-                    <TextBlock Text="Obsidyen" VerticalAlignment="Center" Foreground="{StaticResource Brush.Text.Secondary}" FontStyle="Italic" />
-                </StackPanel>
-
+                <!-- Satır yüksekliği kaydırıcısı ve "Obsidyen" tema etiketi Ayarlar > Arayüz'e
+                     taşındı (kullanıcı isteği: "Tema Ayarları ve Tablo Satır genişlik ayarları...
+                     Ayarlar içine uygun kategori içine ekle") — RowHeight artık orada kalıcı
+                     olarak ayarlanıp diske kaydediliyor, burada ayrıca tekrar göstermeye gerek yok. -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                     <Button Content="Import" Command="{Binding ImportCommand}" Margin="0,0,6,0" />
                     <Button Content="Rescan" Command="{Binding RescanCommand}" Margin="0,0,6,0" />
@@ -310,18 +644,34 @@
                            StaysOpen="False" Placement="MousePoint" AllowsTransparency="True" PopupAnimation="Fade">
                         <Border Background="{StaticResource Brush.Background.Elevated}"
                                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
-                                CornerRadius="4" Padding="8" MinWidth="160">
-                            <!-- 19 sütunun hepsi listede olduğu için (bkz. MainViewModel.ColumnDefinitions)
-                                 sabit bir MaxHeight + kaydırma şart — yoksa popup ekranın altına taşabilir. -->
-                            <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
-                                <ItemsControl ItemsSource="{Binding ColumnOptions}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type models:ColumnVisibilityOption}">
-                                            <CheckBox Content="{Binding Header}" IsChecked="{Binding IsVisible}" Margin="2" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                                CornerRadius="4" Padding="8" MinWidth="180">
+                            <StackPanel>
+                                <!-- Sağ tıklanan sütunu sabitler (bkz. MainWindow.xaml.cs
+                                     _lastRightClickedColumn/PinColumn) — sola sabitleme gerçek bir
+                                     yatay-kaydırmadan-bağışıklık (FrozenColumnCount), sağa sabitleme
+                                     ise WPF DataGrid'in sağdan dondurma desteği olmadığı için sadece
+                                     sütunu en sona taşır. -->
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Button Content="◀ Sola Sabitle" FontSize="10" Padding="4,2" Margin="0,0,4,0"
+                                            Click="PinColumnLeft_Click" />
+                                    <Button Content="Sağa Sabitle ▶" FontSize="10" Padding="4,2" Margin="0,0,4,0"
+                                            Click="PinColumnRight_Click" />
+                                    <Button Content="✕" FontSize="10" Padding="4,2" ToolTip="Sabitlemeyi kaldır"
+                                            Click="UnpinColumn_Click" />
+                                </StackPanel>
+                                <Separator Margin="0,0,0,6" Background="{StaticResource Brush.Border}" />
+                                <!-- 19 sütunun hepsi listede olduğu için (bkz. MainViewModel.ColumnDefinitions)
+                                     sabit bir MaxHeight + kaydırma şart — yoksa popup ekranın altına taşabilir. -->
+                                <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto">
+                                    <ItemsControl ItemsSource="{Binding ColumnOptions}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate DataType="{x:Type models:ColumnVisibilityOption}">
+                                                <CheckBox Content="{Binding Header}" IsChecked="{Binding IsVisible}" Margin="2" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
                         </Border>
                     </Popup>
                 </StackPanel>
@@ -329,7 +679,7 @@
         </Border>
 
         <!-- ===================== Stats bar ===================== -->
-        <Border Grid.Row="1" Background="{StaticResource Brush.Background.Base}"
+        <Border Grid.Row="2" Background="{StaticResource Brush.Background.Base}"
                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,0,1" Padding="10,4">
             <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11">
                 <Run Text="Görünen:" /><Run Text=" " /><Run Text="{Binding VisibleCount, Mode=OneWay}" />
@@ -338,7 +688,7 @@
         </Border>
 
         <!-- ===================== Playlist chip şeridi ===================== -->
-        <Border Grid.Row="2" Background="{StaticResource Brush.Background.Base}"
+        <Border Grid.Row="3" Background="{StaticResource Brush.Background.Base}"
                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,0,1" Padding="10,6">
             <StackPanel Orientation="Horizontal">
             <ItemsControl ItemsSource="{Binding PlaylistChips}">
@@ -401,6 +751,12 @@
                                                     </DataTrigger>
                                                     <DataTrigger Binding="{Binding Kind}" Value="RecycleBin">
                                                         <Setter Property="Text" Value="&#xE74D;" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Kind}" Value="ReadyToPlay">
+                                                        <Setter Property="Text" Value="&#xE768;" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Kind}" Value="NeedsSearch">
+                                                        <Setter Property="Text" Value="&#xE721;" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -465,17 +821,33 @@
         </Border>
 
         <!-- ===================== Body ===================== -->
-        <Grid Grid.Row="3">
+        <!-- Bu satır (Row 4, Height="*") pencerenin gerçek sol/sağ/alt kenarlarına değen TEK katman —
+             üstü (0-3) başlık çubuğu/araç çubukları. Maximized'ta WindowChrome'un klasik "görünmez
+             resize/frame kenarlığı" telafisi (bkz. MainWindow.xaml.cs ApplyMaximizedBodyInset) BURAYA,
+             tek seferde uygulanıyor — sol/sağ/alt Margin (üst YOK, çünkü bu satırın üstü zaten pencere
+             kenarına değmiyor, başlık çubuğu değiyor). Bu, hem sol Platformlar panelini hem GamesGrid'i
+             hem sağdaki detay panelini TEK PARÇA halinde pencere kenarından içeri çekiyor — aralarında
+             yapay bir boşluk/dikiş OLUŞMUYOR (panel açık/kapalı farketmez, ikisi de aynı satırın
+             çocukları). Background açıkça Base'e eşitlendi ki bu Margin'in açığa çıkardığı şerit
+             DataGrid'in kendi arkaplanıyla birebir eşleşsin. -->
+        <Grid x:Name="BodyGrid" Grid.Row="4" Background="{StaticResource Brush.Background.Base}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220" />
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <!-- Sürgülü sağ panel: IsDetailPanelExpanded false iken 0'a iner. Aç/kapa artık
-                     kenarda ayrı bir sütun/düğme değil — üst istatistik çubuğundaki tam ekran
-                     genişletme ikonu (bkz. "Görünen/Toplam" satırı) bu komutu tetikliyor; kenardaki
-                     düğme hem scrollbar'la görsel dikiş hem de (eski GridSplitter'la) Binding
-                     çakışması sorunlarına yol açıyordu. -->
-                <ColumnDefinition Width="{Binding IsDetailPanelExpanded, Converter={StaticResource BoolToGridLength}, ConverterParameter=340}" />
+                <!-- Sürgülü sağ panel: IsDetailPanelExpanded false iken 0'a iner, açıkken kullanıcının
+                     GridSplitter ile ayarladığı DetailPanelWidth'e döner. BİLİNÇLİ OLARAK bir
+                     {Binding} DEĞİL — GridSplitter sürüklerken ColumnDefinition.Width'i doğrudan
+                     SetValue ile değiştiriyor, bu da aktif bir OneWay Binding'i kalıcı olarak
+                     koparıyordu (sürükledikten SONRA tam ekran düğmesi bir daha hiç işe yaramıyordu,
+                     çünkü ViewModel'deki değişiklik artık kopan binding'e ulaşamıyordu). Bunun yerine
+                     MainWindow.xaml.cs (ApplyDetailPanelWidth) IsDetailPanelExpanded/DetailPanelWidth
+                     PropertyChanged'ını dinleyip Width'i kendisi, elle set ediyor — GridSplitter'ın
+                     kendi canlı sürüklemesiyle hiç çakışmıyor çünkü aralarında kalıcı bir Binding yok,
+                     sadece olay bazlı tek seferlik senkronizasyon var. MinWidth de kasıtlı olarak
+                     YOK: kapatma (Width=0) ile çakışırdı; asgari genişlik SaveDetailPanelWidth
+                     içinde sadece KALICI kaydedilecek değere uygulanıyor. -->
+                <ColumnDefinition x:Name="DetailPanelColumnDef" Width="340" />
             </Grid.ColumnDefinitions>
 
             <!-- Left: Platforms -->
@@ -567,8 +939,15 @@
                                         </Button>
                                     </Grid>
 
-                                    <!-- Platform satırı -->
-                                    <Grid>
+                                    <!-- Platform satırı. Tut-sürükle ile manuel sıralama, sürüklerken CANLI
+                                         konumlanır (bkz. MainWindow.xaml.cs PlatformRow_DragOver ->
+                                         MainViewModel.MoveInPlatformListItems, her üstünden geçilen satırda anında
+                                         yer değiştirir; kalıcı kayıt sürükleme bitince CommitPlatformOrder ile) —
+                                         kategoriler açıkken sadece aynı kategori içinde taşınabilir. -->
+                                    <Grid AllowDrop="True"
+                                          PreviewMouseLeftButtonDown="PlatformRow_PreviewMouseLeftButtonDown"
+                                          MouseMove="PlatformRow_MouseMove"
+                                          DragOver="PlatformRow_DragOver">
                                         <Grid.Style>
                                             <Style TargetType="Grid">
                                                 <Setter Property="Visibility" Value="Visible" />
@@ -584,14 +963,27 @@
                                             <ColumnDefinition Width="*" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
+                                        <!-- Ayarlar > Arayüz > Platform Listesi'nde "Logo" seçiliyse ad metni gizlenir,
+                                             tam ad bu rozetin ToolTip'inde hâlâ erişilebilir kalır. -->
                                         <Border Grid.Column="0" Width="22" Height="22" CornerRadius="4"
-                                                Background="{StaticResource Brush.Background.Elevated}">
+                                                Background="{StaticResource Brush.Background.Elevated}"
+                                                ToolTip="{Binding Platform.DisplayName}">
                                             <TextBlock Text="{Binding Platform.IconGlyph}" FontSize="7" FontWeight="Bold"
                                                        HorizontalAlignment="Center" VerticalAlignment="Center"
                                                        Foreground="{StaticResource Brush.Text.Secondary}" />
                                         </Border>
                                         <TextBlock Grid.Column="1" Text="{Binding Platform.DisplayName}" VerticalAlignment="Center"
-                                                   Margin="6,0,4,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Platform.Name}" />
+                                                   Margin="6,0,4,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Platform.Name}">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding DataContext.PlatformListDisplayMode, RelativeSource={RelativeSource AncestorType=Window}}" Value="Logo">
+                                                            <Setter Property="Visibility" Value="Collapsed" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <Border Grid.Column="2" Background="{StaticResource Brush.Background.Elevated}"
                                                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
                                                 CornerRadius="8" Padding="6,1" VerticalAlignment="Center">
@@ -617,19 +1009,42 @@
                  Aradaki 4px boşluk kaldırıldı: scrollbar artık kendi (Elevated) arkaplanıyla zaten
                  net bir şekilde ayırt edilebiliyor (bkz. ObsidianDark.xaml ScrollBar Style), bu
                  yüzden sağ paneldeki aç/kapa tutamacıyla arasına ayrıca boşluk bırakmaya gerek
-                 kalmadı — tutamaç artık scrollbar'a bitişik duruyor. -->
+                 kalmadı — tutamaç artık scrollbar'a bitişik duruyor.
+
+                 EnableColumnVirtualization="False": sütun sanallaştırması ~19 sütun için zaten bir
+                 fayda sağlamıyor (asıl performans kazancı 67 bin SATIR için EnableRowVirtualization'da) —
+                 kesin sebep olduğu doğrulanmasa da gereksiz karmaşıklık olduğu için kapalı bırakıldı.
+
+                 SADECE pencere Maximized iken dikey scrollbar pencere kenarının bir kısmını aşıp
+                 kırpılıyordu (normal pencerede hiç olmuyor) — WindowChrome'un klasik "maximize
+                 taşması": WM_GETMINMAXINFO (bkz. WmGetMinMaxInfo) pencerenin DIŞ boyutunu work area'ya
+                 birebir eşitliyor, ama Windows'un görünmez resize/frame kenarlığı (SystemParameters.
+                 WindowResizeBorderThickness + WindowNonClientFrameThickness, DPI'a göre değişir) yine
+                 de içerik tarafında hesaba katılmıyor. Düzeltme MainWindow.xaml.cs'te (StateChanged) —
+                 sabit bir piksel sayısı yerine bu iki SystemParameters değerini TOPLAYIP GamesGrid'e
+                 sağ Margin olarak uyguluyor, böylece farklı DPI ölçeklerinde de doğru kalıyor. -->
             <DataGrid x:Name="GamesGrid" Grid.Column="2"
                       ItemsSource="{Binding Games}"
                       SelectedItem="{Binding SelectedGame}"
                       RowHeight="{Binding RowHeight}"
                       CanUserSortColumns="False"
                       EnableRowVirtualization="True"
-                      EnableColumnVirtualization="True"
+                      EnableColumnVirtualization="False"
                       VirtualizingPanel.IsVirtualizing="True"
                       VirtualizingPanel.VirtualizationMode="Recycling"
                       ScrollViewer.CanContentScroll="True"
                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                      PreviewMouseRightButtonUp="GamesGrid_PreviewMouseRightButtonUp">
+                      PreviewMouseRightButtonUp="GamesGrid_PreviewMouseRightButtonUp"
+                      ColumnReordered="GamesGrid_ColumnReordered">
+                <!-- ROM'u eksik satırlar soluklaştırılır ki Play/Search sütunundaki farkın dışında da
+                     eksik olan satırlar gözle bir bakışta ayırt edilebilsin. Soluklaştırma ROW değil
+                     HÜCRE seviyesinde uygulanıyor (bkz. ObsidianDark.xaml DataGridCell Style.Triggers) —
+                     Opacity DataGridRow'a uygulanırsa, satırın varsayılan şablonundaki yatay ayırıcı
+                     çizgi (BottomGridLine) de aynı satırın görsel ağacının parçası olduğu için onunla
+                     birlikte soluyor, bu da satırdan satıra farklı renkte/tonda çizgilere yol açıyordu
+                     ("yatay çizgilerin rengi değişkenlik yapıyor" hatası). Hücre seviyesinde uygulamak
+                     çizgiyi (satır şablonunun bir parçası, hücrelerin DIŞINDA) tamamen etkilemeden
+                     bırakıyor, sadece hücre içeriği (metin/ikon/resim) soluyor. -->
                 <DataGrid.Columns>
                     <DataGridTemplateColumn x:Name="MatchedColumn" Header="{Binding Data.MatchedFilter, Source={StaticResource ViewModelProxy}}"
                                              HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="34">
@@ -651,27 +1066,36 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- Favori yıldızı: her satırda tıklanabilir, IsFavorite'e göre dolu (★)/boş (☆).
-                         Düz Unicode karakter kullanılıyor (emoji değil) — sütun başlığındaki ★'ın
-                         bu ortamda sorunsuz render olduğu zaten doğrulandı; ilk denemede kullanılan
-                         elle çizilmiş Polygon şekli 34px'lik hücrede bozuk görünüyordu. -->
-                    <DataGridTemplateColumn x:Name="FavoriteColumn" Header="{Binding Data.FavoriteFilter, Source={StaticResource ViewModelProxy}}"
-                                             HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="34">
+                    <!-- Gizle/Göster artık AYRI, her zaman en solda sabit bir sütun (kullanıcı isteği:
+                         "en sola sabitle onu değişmesin yeri") — normal sağ-tık ile pinleme/kaldırma
+                         mekanizmasına HİÇ girmiyor, MainWindow.xaml.cs ApplyColumnPinningPositions
+                         her çağrıda bunu zorla _pinnedLeftKeys listesinin başına koyuyor, kullanıcı
+                         sağ-tıklayıp "Sabitlemeyi Kaldır" dese bile bir sonraki uygulamada geri
+                         zorlanıyor. Header düz metin ("Gizle") — filtresi yok. -->
+                    <DataGridTemplateColumn x:Name="HideColumn" Header=""
+                                             HeaderStyle="{StaticResource CenteredColumnHeaderStyle}" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <!-- Padding="0": genel Button stilinin varsayılan 10,5 iç boşluğu bu
-                                     34px'lik dar sütunda yıldızı neredeyse görünmez hale getiriyordu. -->
-                                <Button Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Padding="0"
-                                        Cursor="Hand" ToolTip="Favorilere ekle/çıkar" HorizontalContentAlignment="Center">
-                                    <TextBlock FontSize="17" VerticalAlignment="Center">
+                                <Button HorizontalAlignment="Center">
+                                    <Button.Style>
+                                        <Style TargetType="Button" BasedOn="{StaticResource ActionsIconButton}">
+                                            <Setter Property="Command" Value="{Binding DataContext.HideGameCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                            <Setter Property="CommandParameter" Value="{Binding}" />
+                                            <Setter Property="ToolTip" Value="Gizle" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsHidden}" Value="True">
+                                                    <Setter Property="Command" Value="{Binding DataContext.UnhideGameCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                                                    <Setter Property="ToolTip" Value="Göster" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                    <TextBlock Text="&#xE7B3;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
-                                                <Setter Property="Text" Value="☆" />
                                                 <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
                                                 <Style.Triggers>
-                                                    <DataTrigger Binding="{Binding IsFavorite}" Value="True">
-                                                        <Setter Property="Text" Value="★" />
+                                                    <DataTrigger Binding="{Binding IsHidden}" Value="True">
                                                         <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
                                                     </DataTrigger>
                                                 </Style.Triggers>
@@ -683,34 +1107,80 @@
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
-                    <!-- ROM'u bulunamayan oyunlarda görünen "web'de ara" büyüteci — ROM mevcutsa
-                         (HasLocalFile) hiç gösterilmiyor, kullanıcı isteğiyle sadece eksik olanlarda. -->
-                    <DataGridTemplateColumn x:Name="SearchColumn" Header="{Binding Data.HasLocalFileFilter, Source={StaticResource ViewModelProxy}}"
-                                             HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="34">
+                    <!-- Favori/Ara(Play) tek "Actions" sütununda birleştirildi (kullanıcı isteği) —
+                         Gizle artık ayrı bir sütun (yukarıda, HideColumn). Filtreleri de (Favori,
+                         Dosya) TEK bir popup'tan yönetiliyor (bkz. Window.Resources
+                         ActionsColumnFilterHeader, MainViewModel.ActionsFilter,
+                         Models/ActionsColumnFilterViewModel). -->
+                    <DataGridTemplateColumn x:Name="ActionsColumn" Header="{Binding Data.ActionsFilter, Source={StaticResource ViewModelProxy}}"
+                                             HeaderTemplate="{StaticResource ActionsColumnFilterHeader}"
+                                             HeaderStyle="{StaticResource CenteredColumnHeaderStyle}" Width="70">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <Button Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                        CommandParameter="{Binding}" Background="Transparent" BorderThickness="0" Padding="0"
-                                        Cursor="Hand" ToolTip="Eksik ROM'u web'de ara">
-                                    <!-- BasedOn şart: yoksa bu Style genel (koyu temalı hover'lı) Button
-                                         stilinin YERİNE geçip WPF'in varsayılan (beyaz) chrome'una
-                                         düşüyordu — bu yüzden hover beyaz görünüyordu. -->
-                                    <Button.Style>
-                                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding HasLocalFile}" Value="False">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                    <Grid Width="14" Height="14">
-                                        <Ellipse Width="9" Height="9" Stroke="{StaticResource Brush.Text.Secondary}"
-                                                 StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" />
-                                        <Line X1="8" Y1="8" X2="13" Y2="13" Stroke="{StaticResource Brush.Text.Secondary}" StrokeThickness="1.5" />
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                    <!-- Favori: düz Unicode karakter (emoji değil), dolu (★)/boş (☆). Star
+                                         glyph'i çoğu fontta em kutusunun ALTINA yakın çiziliyor (üstte
+                                         boşluk kalıyor) — bu yüzden container tam ortalasa bile gözle
+                                         "aşağıda kalmış" görünüyordu; -2px'lik üst Margin bunu telafi
+                                         ediyor. -->
+                                    <Button Style="{StaticResource ActionsIconButton}"
+                                            Command="{Binding DataContext.ToggleFavoriteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                            CommandParameter="{Binding}" Margin="0,0,10,0" ToolTip="Favorilere ekle/çıkar">
+                                        <TextBlock FontSize="15" VerticalAlignment="Center" Margin="0,-2,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Text" Value="☆" />
+                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsFavorite}" Value="True">
+                                                            <Setter Property="Text" Value="★" />
+                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Button>
+
+                                    <!-- Ara (eksik ROM) / Başlat (ROM mevcut) — ikisi de aynı hücrede,
+                                         HasLocalFile'a göre karşılıklı Visibility ile. -->
+                                    <Grid>
+                                        <Button Command="{Binding DataContext.SearchWebCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" ToolTip="Eksik ROM'u web'de ara">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource ActionsIconButton}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasLocalFile}" Value="False">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <Grid Width="14" Height="14">
+                                                <Ellipse Width="9" Height="9" Stroke="{StaticResource Brush.Text.Secondary}"
+                                                         StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" />
+                                                <Line X1="8" Y1="8" X2="13" Y2="13" Stroke="{StaticResource Brush.Text.Secondary}" StrokeThickness="1.5" />
+                                            </Grid>
+                                        </Button>
+
+                                        <Button Command="{Binding DataContext.LaunchGameCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" ToolTip="Oyunu başlat">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource ActionsIconButton}">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasLocalFile}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                            <TextBlock Text="&#xE768;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                       Foreground="{StaticResource Brush.Accent.SelectedBorder}" />
+                                        </Button>
                                     </Grid>
-                                </Button>
+                                </StackPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -724,28 +1194,31 @@
                                          Binding="{Binding Title}" SortMemberPath="Title" Width="220" />
 
                     <DataGridTemplateColumn x:Name="BoxColumn" Header="{Binding Data.BoxFilter, Source={StaticResource ViewModelProxy}}"
-                                             HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="40">
+                                             HeaderTemplate="{StaticResource FilterableColumnHeader}"
+                                             HeaderStyle="{StaticResource CenteredColumnHeaderStyle}" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <Ellipse Width="10" Height="10" Fill="{Binding HasBox, Converter={StaticResource BoolToStatusBrush}}" />
+                                <Ellipse Width="10" Height="10" HorizontalAlignment="Center" Fill="{Binding HasBox, Converter={StaticResource BoolToStatusBrush}}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                     <DataGridTemplateColumn x:Name="BackgroundColumn" Header="{Binding Data.BackgroundFilter, Source={StaticResource ViewModelProxy}}"
-                                             HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="40">
+                                             HeaderTemplate="{StaticResource FilterableColumnHeader}"
+                                             HeaderStyle="{StaticResource CenteredColumnHeaderStyle}" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <Ellipse Width="10" Height="10" Fill="{Binding HasBackground, Converter={StaticResource BoolToStatusBrush}}" />
+                                <Ellipse Width="10" Height="10" HorizontalAlignment="Center" Fill="{Binding HasBackground, Converter={StaticResource BoolToStatusBrush}}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
 
                     <DataGridTemplateColumn x:Name="ScreenshotColumn" Header="{Binding Data.ScreenshotFilter, Source={StaticResource ViewModelProxy}}"
-                                             HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="40">
+                                             HeaderTemplate="{StaticResource FilterableColumnHeader}"
+                                             HeaderStyle="{StaticResource CenteredColumnHeaderStyle}" Width="40">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <Ellipse Width="10" Height="10" Fill="{Binding HasScreenshot, Converter={StaticResource BoolToStatusBrush}}" />
+                                <Ellipse Width="10" Height="10" HorizontalAlignment="Center" Fill="{Binding HasScreenshot, Converter={StaticResource BoolToStatusBrush}}" />
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -755,25 +1228,28 @@
                                          Binding="{Binding File}" SortMemberPath="File" Width="200" />
                     <DataGridTextColumn x:Name="PlatformColumn" Header="{Binding Data.PlatformFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding PlatformDisplayName}" SortMemberPath="PlatformDisplayName" Width="160" />
-                    <DataGridTextColumn x:Name="StatusColumn" Header="{Binding Data.StatusFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Version}" SortMemberPath="Version" Width="90" />
                     <DataGridTextColumn x:Name="GenresColumn" Header="{Binding Data.GenresFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding Genres}" SortMemberPath="Genres" Width="150" />
 
                     <!-- Aşağıdaki sütunlar varsayılan gizli (bkz. ColumnOptions) — "Sütunlar" düğmesiyle
                          açılıp kapanır, kod-arkası (MainWindow.xaml.cs) x:Name üzerinden yönetir. -->
-                    <DataGridTextColumn x:Name="DeveloperColumn" Header="{Binding Data.DeveloperFilter, Source={StaticResource ViewModelProxy}}"
+                    <DataGridTextColumn x:Name="CommunityRatingColumn" Header="{Binding Data.CommunityRatingFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Developer}" SortMemberPath="Developer" Width="140" Visibility="Collapsed" />
+                                         Binding="{Binding CommunityRatingDisplay}" SortMemberPath="CommunityRating" Width="110" Visibility="Collapsed" />
                     <DataGridTextColumn x:Name="PublisherColumn" Header="{Binding Data.PublisherFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding Publisher}" SortMemberPath="Publisher" Width="140" Visibility="Collapsed" />
-                    <DataGridTextColumn x:Name="ReleaseYearColumn" Header="{Binding Data.ReleaseYearFilter, Source={StaticResource ViewModelProxy}}"
-                                         HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding ReleaseYear}" SortMemberPath="ReleaseYear" Width="70" Visibility="Collapsed" />
                     <DataGridTextColumn x:Name="MaxPlayersColumn" Header="{Binding Data.MaxPlayersFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding MaxPlayers}" SortMemberPath="MaxPlayers" Width="90" Visibility="Collapsed" />
+                                         HeaderStyle="{StaticResource CenteredColumnHeaderStyle}"
+                                         Binding="{Binding MaxPlayers}" SortMemberPath="MaxPlayers" Width="90" Visibility="Collapsed">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="HorizontalAlignment" Value="Center" />
+                                <Setter Property="TextAlignment" Value="Center" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn x:Name="RegionColumn" Header="{Binding Data.RegionFilter, Source={StaticResource ViewModelProxy}}"
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding Region}" SortMemberPath="Region" Width="90" Visibility="Collapsed" />
@@ -1092,6 +1568,12 @@
                                                     <DataTrigger Binding="{Binding Kind}" Value="RecycleBin">
                                                         <Setter Property="Visibility" Value="Collapsed" />
                                                     </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Kind}" Value="ReadyToPlay">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Kind}" Value="NeedsSearch">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
                                                 </Style.Triggers>
                                             </Style>
                                         </Button.Style>
@@ -1125,10 +1607,47 @@
                 </Border>
             </Popup>
 
-            <!-- Right: Detail pane. Ayrı bir Visibility binding'ine gerek yok — Grid.Column="3"
-                 genişliği 0'a indiğinde (bkz. ColumnDefinition) içerik zaten tamamen kırpılıyor.
-                 Aç/kapa artık üst istatistik çubuğundaki tam ekran ikonuyla yapılıyor. -->
+            <!-- Kapsüldeki "Versions" düğmesiyle açılır — kullanıcı isteği: sağ detay paneline
+                 gitmek yerine kapsülün kendi altında görünsün (bkz. MainViewModel.FocusVersions,
+                 aynı "Playlist'e Ekle" alt-popup deseni: MousePoint + VerticalOffset). Kart
+                 görünümü sağ paneldeki Sürümler listesiyle aynı (bkz. Window.Resources
+                 VersionCardItemContainerStyle/VersionCardItemTemplate) — tek/çift tık davranışı da
+                 aynı MouseDoubleClick handler'ını paylaşıyor. -->
+            <Popup Placement="MousePoint" IsOpen="{Binding IsVersionsPopupOpen}" StaysOpen="False"
+                   AllowsTransparency="True" VerticalOffset="52">
+                <Border CornerRadius="8" Padding="8" MinWidth="320" MaxWidth="380"
+                        Background="{StaticResource Brush.Background.Elevated}"
+                        BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.4" Color="Black" />
+                    </Border.Effect>
+                    <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto">
+                        <ListBox ItemsSource="{Binding SelectedGameVersions}"
+                                 Background="Transparent" BorderThickness="0"
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                 ItemContainerStyle="{StaticResource VersionCardItemContainerStyle}"
+                                 ItemTemplate="{StaticResource VersionCardItemTemplate}"
+                                 MouseDoubleClick="VersionsList_MouseDoubleClick" />
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+
+            <!-- Right: Detail pane. Aç/kapa üst istatistik çubuğundaki tam ekran ikonuyla yapılıyor.
+                 Visibility ayrıca IsDetailPanelExpanded'a bağlı: sadece genişliği 0'a indirmek
+                 (bkz. ColumnDefinition) teorik olarak yeterli olsa da, kapalıyken bu Border'ın
+                 (Brush.Background.Panel — ana Base renginden farklı) kenarda ince bir şerit olarak
+                 sızmasını kesin olarak engellemek için Collapsed de yapılıyor. -->
             <Border Grid.Column="3" Background="{StaticResource Brush.Background.Panel}">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Visible" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsDetailPanelExpanded}" Value="False">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
                 <Grid Margin="12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
@@ -1143,24 +1662,6 @@
                         <TextBlock Text="{Binding SelectedGame.Title}" TextWrapping="Wrap" TextAlignment="Center"
                                    FontSize="20" FontWeight="Bold" VerticalAlignment="Center" Margin="16" />
                     </Border>
-
-                    <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,10">
-                        <TextBlock Text="{Binding SelectedGame.StatusOk, Converter={StaticResource BoolToStatusGlyph}}"
-                                   FontFamily="Segoe MDL2 Assets"
-                                   Foreground="{Binding SelectedGame.StatusOk, Converter={StaticResource BoolToStatusBrush}}"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Text="{Binding SelectedGame.HasBox, Converter={StaticResource BoolToStatusGlyph}}"
-                                   FontFamily="Segoe MDL2 Assets"
-                                   Foreground="{Binding SelectedGame.HasBox, Converter={StaticResource BoolToStatusBrush}}"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Text="{Binding SelectedGame.HasBackground, Converter={StaticResource BoolToStatusGlyph}}"
-                                   FontFamily="Segoe MDL2 Assets"
-                                   Foreground="{Binding SelectedGame.HasBackground, Converter={StaticResource BoolToStatusBrush}}"
-                                   Margin="0,0,8,0" />
-                        <TextBlock Text="{Binding SelectedGame.HasScreenshot, Converter={StaticResource BoolToStatusGlyph}}"
-                                   FontFamily="Segoe MDL2 Assets"
-                                   Foreground="{Binding SelectedGame.HasScreenshot, Converter={StaticResource BoolToStatusBrush}}" />
-                    </StackPanel>
 
                     <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
@@ -1180,6 +1681,8 @@
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <Label Grid.Row="0" Grid.Column="0" Content="Başlık" />
@@ -1188,29 +1691,52 @@
                                 <Label Grid.Row="1" Grid.Column="0" Content="Platform" />
                                 <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding SelectedGame.Platform}" Margin="0,3" />
 
+                                <!-- ReleaseDateDisplay: LaunchBox'ta tam tarih (gün/ay/yıl) varsa onu, yoksa
+                                     sadece yılı gösterir (bkz. Game.ReleaseDateDisplay) — ikisi de LaunchBox
+                                     kaynaklı, ReleaseDate sadece daha kesin bir versiyonu. -->
                                 <Label Grid.Row="2" Grid.Column="0" Content="Çıkış Tarihi" />
-                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedGame.ReleaseYear}" Margin="0,3" />
+                                <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding SelectedGame.ReleaseDateDisplay}" Margin="0,3" />
 
-                                <Label Grid.Row="3" Grid.Column="0" Content="Geliştirici" />
-                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedGame.Developer}" Margin="0,3" />
+                                <!-- Topluluk Puanı: LaunchBox CommunityRating'i (0-5) — sadece değer varsa
+                                     gösterilir (bkz. Game.HasCommunityRating), Favori yıldızıyla aynı ★/☆
+                                     görsel dilini kullanır. -->
+                                <Label Grid.Row="3" Grid.Column="0" Content="Topluluk Puanı"
+                                       Visibility="{Binding SelectedGame.HasCommunityRating, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding SelectedGame.CommunityRatingDisplay}" Margin="0,3"
+                                           Foreground="{StaticResource Brush.Accent.Amber}"
+                                           Visibility="{Binding SelectedGame.HasCommunityRating, Converter={StaticResource BoolToVisibility}}" />
 
-                                <Label Grid.Row="4" Grid.Column="0" Content="Yayıncı" />
-                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedGame.Publisher}" Margin="0,3" />
+                                <Label Grid.Row="4" Grid.Column="0" Content="Geliştirici" />
+                                <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding SelectedGame.Developer}" Margin="0,3" />
 
-                                <Label Grid.Row="5" Grid.Column="0" Content="Tür" />
-                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedGame.Genres}" Margin="0,3" TextWrapping="Wrap" />
+                                <Label Grid.Row="5" Grid.Column="0" Content="Yayıncı" />
+                                <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding SelectedGame.Publisher}" Margin="0,3" />
 
-                                <Label Grid.Row="6" Grid.Column="0" Content="Oyun modu" />
-                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedGame.GameMode}" Margin="0,3" />
+                                <Label Grid.Row="6" Grid.Column="0" Content="Tür" />
+                                <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding SelectedGame.Genres}" Margin="0,3" TextWrapping="Wrap" />
 
-                                <Label Grid.Row="7" Grid.Column="0" Content="Maks. Oyuncu" />
-                                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedGame.MaxPlayers}" Margin="0,3" />
+                                <!-- Oyun modu: LaunchBox'ın Cooperative bayrağını yansıtır (bkz.
+                                     CatalogDatabaseService.GetGames) — "Kooperatif"/"Kooperatif Değil" ya da
+                                     LaunchBox'ta hiç bilgi yoksa boş. -->
+                                <Label Grid.Row="7" Grid.Column="0" Content="Oyun modu" />
+                                <TextBlock Grid.Row="7" Grid.Column="1" Text="{Binding SelectedGame.GameMode}" Margin="0,3" />
 
-                                <Label Grid.Row="8" Grid.Column="0" Content="Sürüm" />
-                                <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SelectedGame.Version}" Margin="0,3" />
+                                <Label Grid.Row="8" Grid.Column="0" Content="Maks. Oyuncu" />
+                                <TextBlock Grid.Row="8" Grid.Column="1" Text="{Binding SelectedGame.MaxPlayers}" Margin="0,3" />
 
-                                <Label Grid.Row="9" Grid.Column="0" Content="File" />
-                                <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SelectedGame.File}" Margin="0,3" TextWrapping="Wrap" />
+                                <Label Grid.Row="9" Grid.Column="0" Content="Sürüm" />
+                                <TextBlock Grid.Row="9" Grid.Column="1" Text="{Binding SelectedGame.Version}" Margin="0,3" />
+
+                                <Label Grid.Row="10" Grid.Column="0" Content="File" />
+                                <TextBlock Grid.Row="10" Grid.Column="1" Text="{Binding SelectedGame.File}" Margin="0,3" TextWrapping="Wrap" />
+
+                                <!-- Steam AppID: LaunchBox'ın Steam mağaza sayfası kimliği — RetroAudit'in
+                                     kendi emülatör/eşleştirme sisteminden bağımsız, sadece bilgi amaçlı.
+                                     Sadece değer varsa gösterilir. -->
+                                <Label Grid.Row="11" Grid.Column="0" Content="Steam AppID"
+                                       Visibility="{Binding SelectedGame.HasSteamAppId, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Grid.Row="11" Grid.Column="1" Text="{Binding SelectedGame.SteamAppId}" Margin="0,3"
+                                           Visibility="{Binding SelectedGame.HasSteamAppId, Converter={StaticResource BoolToVisibility}}" />
                             </Grid>
 
                             <TextBlock Text="{Binding SelectedGame.Description}" TextWrapping="Wrap" Margin="0,10,0,0"
@@ -1218,77 +1744,56 @@
 
                             <TextBlock Text="Sürümler (Region)" FontWeight="Bold" Margin="0,14,0,4"
                                        Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
-                            <ItemsControl ItemsSource="{Binding SelectedGameVersions}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Border Background="{StaticResource Brush.Background.Elevated}"
-                                                CornerRadius="4" Padding="8" Margin="0,0,0,6">
-                                            <StackPanel>
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{Binding Region}" FontWeight="Bold" FontSize="11" />
-                                                    <TextBlock Text="{Binding VersionLabel}" Margin="6,0,0,0" FontSize="11"
-                                                               Foreground="{StaticResource Brush.Text.Secondary}" />
-                                                    <TextBlock Text="★ Preferred" Margin="6,0,0,0" FontSize="10">
-                                                        <TextBlock.Style>
-                                                            <Style TargetType="TextBlock">
-                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsPreferred}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </TextBlock.Style>
-                                                    </TextBlock>
-
-                                                    <!-- Zaten preferred olan sürümde gösterilmiyor — RetroAuditUserData.db'ye
-                                                         yazan override (bkz. MainViewModel.SetPreferredVersionCommand). -->
-                                                    <Button Content="Preferred yap" FontSize="9" Padding="4,1" Margin="8,0,0,0"
-                                                            Command="{Binding DataContext.SetPreferredVersionCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}">
-                                                        <Button.Style>
-                                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-                                                                <Setter Property="Visibility" Value="Visible" />
-                                                                <Style.Triggers>
-                                                                    <DataTrigger Binding="{Binding IsPreferred}" Value="True">
-                                                                        <Setter Property="Visibility" Value="Collapsed" />
-                                                                    </DataTrigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Button.Style>
-                                                    </Button>
-                                                </StackPanel>
-                                                <TextBlock Text="{Binding SourceDat}" FontSize="10" Margin="0,2,0,0"
-                                                           Foreground="{StaticResource Brush.Text.Secondary}" />
-                                                <ItemsControl ItemsSource="{Binding Hashes}" Margin="0,4,0,0">
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <TextBlock FontSize="10" TextWrapping="Wrap"
-                                                                       Foreground="{StaticResource Brush.Text.Secondary}">
-                                                                <Run Text="{Binding FileName, Mode=OneWay}" />
-                                                                <Run Text=" · CRC32: " />
-                                                                <Run Text="{Binding Crc32, Mode=OneWay}" />
-                                                            </TextBlock>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
-                                            </StackPanel>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                            <!-- Kart seçilebilir (tek tık, mavi çerçeveyle belli olur) ve çift tıklayınca
+                                 o SÜRÜMÜN dosyasını doğrudan tanımlı emülatörle başlatır (bkz.
+                                 MainWindow.xaml.cs VersionsList_MouseDoubleClick, MainViewModel.
+                                 LaunchVersionCommand). Kart görünümü (ItemContainerStyle/ItemTemplate)
+                                 sağ tık kapsülündeki "Versions" popup'ıyla paylaşılıyor (bkz. Window.
+                                 Resources VersionCardItemContainerStyle/VersionCardItemTemplate).
+                                 ScrollViewer.VerticalScrollBarVisibility="Disabled": ListBox'ın kendi
+                                 iç kaydırıcısını kapatıp dıştaki tek ScrollViewer'a bırakıyor, aksi
+                                 halde iç içe iki kaydırma çubuğu oluşurdu. -->
+                            <ListBox x:Name="VersionsList" ItemsSource="{Binding SelectedGameVersions}"
+                                     Background="Transparent" BorderThickness="0"
+                                     ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                     ItemContainerStyle="{StaticResource VersionCardItemContainerStyle}"
+                                     ItemTemplate="{StaticResource VersionCardItemTemplate}"
+                                     MouseDoubleClick="VersionsList_MouseDoubleClick" />
                         </StackPanel>
                     </ScrollViewer>
 
+                    <!-- LaunchBox'tan gelen VideoUrl/WikipediaUrl için tıklanabilir bağlantı butonları —
+                         henüz gerçek bir gameplay görsel/önizleme sistemi yok, bu yüzden butonlar bu
+                         yer tutucunun altına, sadece ilgili URL varsa görünür şekilde eklendi (bkz.
+                         Game.HasVideoUrl/HasWikipediaUrl, MainViewModel.OpenVideoUrl/OpenWikipediaUrl). -->
                     <Border Grid.Row="4" CornerRadius="4" Background="{StaticResource Brush.Background.Elevated}" Margin="0,10">
-                        <TextBlock Text="Oynanış Önizleme" HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
+                        <Grid>
+                            <TextBlock Text="Oynanış Önizleme" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,10">
+                                <Button Content="▶ YouTube'da İzle" Margin="0,0,6,0"
+                                        Command="{Binding OpenVideoUrlCommand}" CommandParameter="{Binding SelectedGame}"
+                                        Visibility="{Binding SelectedGame.HasVideoUrl, Converter={StaticResource BoolToVisibility}}" />
+                                <Button Content="Wikipedia"
+                                        Command="{Binding OpenWikipediaUrlCommand}" CommandParameter="{Binding SelectedGame}"
+                                        Visibility="{Binding SelectedGame.HasWikipediaUrl, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
                     <Button Grid.Row="5" Content="BAŞLAT" Style="{StaticResource LaunchButton}"
                             Command="{Binding LaunchCommand}" />
                 </Grid>
             </Border>
+
+            <!-- Panelin sol kenarını tutup çekerek genişliği ayarlamak için. Border'dan SONRA
+                 tanımlı olmalı ki z-sırasında üstte kalıp fareyi yakalayabilsin (Border opak
+                 olduğu için önce gelseydi 4px'lik şeridi tamamen örterdi). DragCompleted'a kadar
+                 hiçbir ViewModel property'sine dokunmuyor — sadece bırakıldığında son genişlik
+                 MainViewModel.SaveDetailPanelWidth ile kaydediliyor (bkz. MainWindow.xaml.cs). -->
+            <GridSplitter Grid.Column="3" Width="4" HorizontalAlignment="Left"
+                          Background="Transparent" Cursor="SizeWE"
+                          DragCompleted="DetailPanelSplitter_DragCompleted" />
         </Grid>
     </Grid>
 </Window>

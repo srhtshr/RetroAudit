@@ -7,6 +7,8 @@ public enum PlaylistChipKind
     Playlist,
     Hidden,
     RecycleBin,
+    ReadyToPlay,
+    NeedsSearch,
 }
 
 // Ana tablonun üstündeki hashtag/chip şeridindeki tek bir satır. Favorites dahil gerçek

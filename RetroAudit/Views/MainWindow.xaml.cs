@@ -1,10 +1,15 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
+using System.Linq;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Data;
+using System.Windows.Interop;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using RetroAudit.Models;
 using RetroAudit.ViewModels;
 
@@ -12,9 +17,38 @@ namespace RetroAudit.Views;
 
 public partial class MainWindow : Window
 {
+    // Sol paneldeki platform satırlarını sürüklemenin başlangıç noktası (bkz. PlatformRow_MouseMove) —
+    // MediaProviderWindow'daki kart sürükleme deseniyle aynı yaklaşım. Tam nitelikli System.Windows.Point:
+    // bu sınıfta zaten WM_GETMINMAXINFO P/Invoke'u için ayrı bir iç içe "Point" struct'ı var.
+    private System.Windows.Point _platformDragStartPoint;
+
+    // Sütun başlığı sağ tık popup'ının üstündeki "Sola/Sağa Sabitle" düğmelerinin hedeflediği
+    // sütun (bkz. GamesGrid_PreviewMouseRightButtonUp) ve Key<->DataGridColumn eşlemesi (bkz.
+    // WireColumnVisibility) — ApplyColumnPinning/PinColumn tarafından paylaşılıyor.
+    private DataGridColumn? _lastRightClickedColumn;
+    private readonly Dictionary<string, DataGridColumn> _columnsByKey = new();
+    private readonly List<string> _pinnedLeftKeys = new();
+    private readonly List<string> _pinnedRightKeys = new();
+
     public MainWindow()
     {
         InitializeComponent();
+        DarkTitleBarHelper.Apply(this);
+
+        // Maximized'ken WindowChrome'un bilinen bir sorunu: pencere, ekranin gercek "calisma
+        // alani" (work area) sinirlarini birkac piksel asiyor, bu da kenarda/ustte native
+        // chrome'un ince bir dilimini (beyaz) acika cikariyor. Kenar bosluguyla telafi etmeye
+        // calismak (onceki deneme) yanlis yontemdi -- asil dogru cozum, WM_GETMINMAXINFO'yu
+        // yakalayip maximize boyut/konumunu dogrudan monitorun work area'sina esitlemek
+        // (bkz. WmGetMinMaxInfo). Bu, tasmayi kokunden ortadan kaldiriyor.
+        var hwndSource = HwndSource.FromHwnd(new WindowInteropHelper(this).Handle);
+        hwndSource?.AddHook(WindowProc);
+
+        StateChanged += (_, _) =>
+        {
+            MaximizeRestoreGlyph.Text = WindowState == WindowState.Maximized ? "" : "";
+            ApplyMaximizedBodyInset();
+        };
 
         // Pencere açma, bilinçli olarak ViewModel'in RelayCommand'ları yerine burada, View
         // katmanında yapılıyor: MainViewModel doğrudan Window tiplerine bağımlı olmasın diye
@@ -45,7 +79,27 @@ public partial class MainWindow : Window
             };
             vm.RequestShowMessage += message => MessageBox.Show(message, "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
 
+            // Uygulama içi (embedded) ROM arama penceresi — kullanıcı tamamen kendi kontrolünde
+            // geziniyor, pencerenin tek otomasyonu WebView2'nin resmi DownloadStarting olayı
+            // üzerinden indirmenin hedef klasörünü oyunun platform klasörüne yönlendirmek (bkz.
+            // RomSearchWindow, MainViewModel.SearchWeb). completedCallback, bir indirme bitince
+            // (Completed) o TEK oyunun "dosya var mı" durumunu tazeliyor.
+            vm.RequestSearchRom += request =>
+            {
+                var (url, targetFolder, game) = request;
+                new RomSearchWindow(url, targetFolder, game.Title, _ => vm.NotifyRomDownloaded(game))
+                {
+                    Owner = this,
+                }.Show();
+            };
+
+            // Kullanıcının kendi ROM arşivinden toplu içe aktarma penceresi (bkz. RomImportWindow/
+            // RomImportViewModel). Kapanmasını beklemeye gerek yok: pencere her başarılı içe
+            // aktarma turunun sonunda kendi içinde vm.ReloadAppSettings'i zaten çağırıyor.
+            vm.RequestOpenRomImport += () => new RomImportWindow(vm) { Owner = this }.Show();
+
             WireColumnVisibility(vm);
+            WireDetailPanelWidth(vm);
         }
 
         // Kapsül menü her açıldığında (Popup.Opened her IsOpen=true geçişinde tetiklenir, ilk
@@ -64,6 +118,104 @@ public partial class MainWindow : Window
         };
     }
 
+    // Özel başlık çubuğundaki üç düğme — sürükleme/çift-tık-büyüt/sağ-tık-sistem-menüsü zaten
+    // WindowChrome.CaptionHeight üzerinden native Win32 mekanizmasıyla çalışıyor (bkz.
+    // MainWindow.xaml), bu üçü sadece düğmelerin kendi eylemlerini gerçekleştiriyor.
+    private void MinimizeButton_Click(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+
+    private void MaximizeRestoreButton_Click(object sender, RoutedEventArgs e) =>
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+
+    private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    // Pencere Maximized iken WindowChrome'un klasik "görünmez resize/frame kenarlığı" sorunu:
+    // WM_GETMINMAXINFO (bkz. WmGetMinMaxInfo) pencerenin DIŞ boyutunu work area'ya birebir
+    // eşitliyor, ama Windows'un kenar sürükleyerek yeniden boyutlandırmak için ayırdığı görünmez
+    // kenarlık (DPI'a göre değişir) WPF içeriği tarafında hâlâ hesaba katılmıyor. Bu telafi SADECE
+    // BodyGrid'e (Grid.Row="4" — pencerenin gerçek sol/sağ/alt kenarlarına değen TEK katman)
+    // uygulanıyor, EN DIŞTAKİ RootLayoutGrid'e DEĞİL ve ÜST kenara DA DEĞİL:
+    //   - RootLayoutGrid'e (veya başlık çubuğuna) margin verildiğinde (denendi, geri alındı)
+    //     Windows'un pencere kenarına çizdiği native accent/border rengi açığa çıkıyordu (üstte
+    //     ince renkli bir çizgi) — RootLayoutGrid ve başlık çubuğu her zaman WM_GETMINMAXINFO'nun
+    //     sığdırdığı gerçek pencere sınırına JİLET GİBİ (0 margin) otursun; sadece bunun bir SEVİYE
+    //     İÇİNDEKİ BodyGrid (RootLayoutGrid'in kendi arkaplanı hâlâ o kenarı kaplarken) geri çekiliyor.
+    //   - BodyGrid'in ÜST kenarı zaten pencerenin fiziksel üst sınırına değmiyor (üstünde başlık
+    //     çubuğu/araç çubukları var), bu yüzden Top her zaman 0.
+    private void ApplyMaximizedBodyInset()
+    {
+        if (WindowState != WindowState.Maximized)
+        {
+            BodyGrid.Margin = new Thickness(0);
+            return;
+        }
+
+        var border = SystemParameters.WindowResizeBorderThickness;
+        var frame = SystemParameters.WindowNonClientFrameThickness;
+        BodyGrid.Margin = new Thickness(
+            border.Left + frame.Left,
+            0,
+            border.Right + frame.Right,
+            border.Bottom + frame.Bottom);
+    }
+
+    // Sağ detay panelinin kenarındaki GridSplitter bırakıldığında (DragCompleted) — sürükleme
+    // sırasında ViewModel'e hiç dokunulmuyor, sadece burada tek seferlik son genişlik kaydediliyor
+    // (bkz. MainWindow.xaml GridSplitter yorumu, MainViewModel.SaveDetailPanelWidth).
+    private void DetailPanelSplitter_DragCompleted(object sender, DragCompletedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+            vm.SaveDetailPanelWidth(DetailPanelColumnDef.ActualWidth);
+    }
+
+    // Sol paneldeki platform listesinde tut-sürükle ile manuel sıralama. Kullanıcı isteği:
+    // sürüklerken CANLI konumlansın, sadece bırakınca değil — bu yüzden her DragOver'da
+    // vm.MoveInPlatformListItems ile görünür liste anında güncelleniyor (bkz. o metodun yorumu).
+    // DragDrop.DoDragDrop KENDİ mesaj döngüsünü pompaladığı için çağrı senkron blok olarak
+    // bırakılana/iptal edilene kadar dönmüyor — döndüğü an sürükleme kesin olarak bitmiştir,
+    // bu yüzden kalıcı kayıt (CommitPlatformOrder) ayrı bir Drop olayı yerine burada yapılıyor.
+    private void PlatformRow_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _platformDragStartPoint = e.GetPosition(null);
+    }
+
+    private void PlatformRow_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed ||
+            sender is not FrameworkElement { DataContext: PlatformListItem { Platform: { } platform } } element)
+            return;
+
+        var currentPosition = e.GetPosition(null);
+        var movedFarEnough =
+            Math.Abs(currentPosition.X - _platformDragStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance ||
+            Math.Abs(currentPosition.Y - _platformDragStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance;
+
+        if (!movedFarEnough)
+            return;
+
+        DragDrop.DoDragDrop(element, platform, DragDropEffects.Move);
+
+        if (DataContext is MainViewModel vm)
+            vm.CommitPlatformOrder();
+    }
+
+    private void PlatformRow_DragOver(object sender, DragEventArgs e)
+    {
+        e.Handled = true;
+
+        if (DataContext is not MainViewModel vm ||
+            e.Data.GetData(typeof(Platform)) is not Platform draggedPlatform ||
+            sender is not FrameworkElement { DataContext: PlatformListItem { Platform: { } targetPlatform } })
+        {
+            e.Effects = DragDropEffects.None;
+            return;
+        }
+
+        e.Effects = DragDropEffects.Move;
+
+        if (draggedPlatform != targetPlatform)
+            vm.MoveInPlatformListItems(draggedPlatform, targetPlatform);
+    }
+
     // DataGrid'in kendi seçim/sağ tık davranışı yok (WPF DataGrid sağ tıkta satırı otomatik
     // seçmez) — bu yüzden tıklanan noktadaki DataGridRow'u görsel ağaçta yukarı doğru arayıp
     // bulunca ViewModel'e "bu oyun için menü aç" deniyor (bkz. MainViewModel.OpenContextMenuFor).
@@ -79,10 +231,12 @@ public partial class MainWindow : Window
         // Herhangi bir sütun başlığına sağ tıklamak, ayrı bir "Sütunlar" düğmesine gerek
         // kalmadan sütun görünürlüğü seçicisini açar (bkz. kullanıcı isteği: "fazladan gereksiz
         // buton olmaz"). Satır kontrolünden ÖNCE kontrol edilmeli — başlık, satırların üstünde
-        // ayrı bir öğe.
-        if (FindVisualParent<DataGridColumnHeader>(e.OriginalSource as DependencyObject) is not null)
+        // ayrı bir öğe. Tıklanan spesifik sütun _lastRightClickedColumn'a kaydediliyor ki popup'ın
+        // üstündeki "Sola/Sağa Sabitle" düğmeleri hangi sütunu hedefleyeceğini bilsin.
+        if (FindVisualParent<DataGridColumnHeader>(e.OriginalSource as DependencyObject) is { Column: { } clickedColumn })
         {
             e.Handled = true;
+            _lastRightClickedColumn = clickedColumn;
             vm.IsColumnPickerOpen = true;
             return;
         }
@@ -100,6 +254,19 @@ public partial class MainWindow : Window
             else
                 vm.OpenContextMenuFor(game);
         }
+    }
+
+    // Sağ paneldeki Sürümler listesinde bir kart çift tıklanınca, o SÜRÜMÜN kendi dosyasını
+    // (genel HasLocalFile'ın aksine, o an tercih edilen sürümle sınırlı değil) tanımlı emülatörle
+    // başlatır (bkz. MainViewModel.LaunchVersionCommand). Tek tık seçimi zaten ListBox'ın kendi
+    // SelectedItem/IsSelected mekanizmasıyla (bkz. MainWindow.xaml ItemContainerStyle) sağlanıyor.
+    private void VersionsList_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        if (sender is ListBox { SelectedItem: GameVersion version })
+            vm.LaunchVersionCommand.Execute(version);
     }
 
     private static T? FindVisualParent<T>(DependencyObject? element) where T : DependencyObject
@@ -170,6 +337,33 @@ public partial class MainWindow : Window
             filterVm.IsPopupOpen = false;
     }
 
+    // Sağ detay panelinin genişliğini ARTIK bir {Binding} değil, elle yönetiyoruz (bkz. MainWindow.xaml
+    // ColumnDefinition yorumu) — GridSplitter'ın kendi sürüklemesi sırasında Width'i doğrudan
+    // SetValue ile değiştirmesi, aktif bir OneWay Binding'i kalıcı olarak koparıyordu (sürükledikten
+    // SONRA "tabloyu tam genişliğe getir" düğmesi bir daha hiç işe yaramıyordu). Bunun yerine
+    // IsDetailPanelExpanded/DetailPanelWidth PropertyChanged'ı dinlenip Width burada set ediliyor;
+    // GridSplitter ile aralarında kalıcı bir bağ olmadığı için birbirlerini bozmuyorlar.
+    private void WireDetailPanelWidth(MainViewModel vm)
+    {
+        // UpdateLayout: sütun genişliği GridSplitter'ın piksel piksel sürüklemesi yerine TEK ANDA
+        // (tam ekran düğmesiyle) büyük bir sıçrama yapınca, DataGrid'in sütun sanallaştırması
+        // (EnableColumnVirtualization) genişlik/scroll hesaplarını hemen tazelemiyor — dikey
+        // scrollbar bir önceki (dar) genişliğe göre konumlanmış kalıp pencere dışına taşıyordu.
+        // Senkron UpdateLayout, DataGrid'i bu sıçramadan hemen sonra zorla yeniden ölçüp diziyor.
+        void ApplyDetailPanelWidth()
+        {
+            DetailPanelColumnDef.Width = new GridLength(vm.IsDetailPanelExpanded ? vm.DetailPanelWidth : 0);
+            GamesGrid.UpdateLayout();
+        }
+
+        ApplyDetailPanelWidth();
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(MainViewModel.IsDetailPanelExpanded) or nameof(MainViewModel.DetailPanelWidth))
+                ApplyDetailPanelWidth();
+        };
+    }
+
     // "Sütunlar" seçicisindeki her satır bir DataGridColumn'a karşılık gelir (Key ile eşleşir).
     // DataGridColumn görsel ağacın parçası olmadığı için Visibility'si XAML'de doğrudan
     // bağlanamıyor — bu yüzden ColumnVisibilityOption.IsVisible değiştiğinde ilgili sütunu burada,
@@ -178,21 +372,19 @@ public partial class MainWindow : Window
     {
         var columnsByKey = new Dictionary<string, DataGridColumn>
         {
+            ["Hide"] = HideColumn,
             ["Matched"] = MatchedColumn,
             ["Logo"] = LogoColumn,
-            ["Favorite"] = FavoriteColumn,
-            ["Search"] = SearchColumn,
+            ["Actions"] = ActionsColumn,
             ["Title"] = TitleColumn,
             ["Box"] = BoxColumn,
             ["Background"] = BackgroundColumn,
             ["Screenshot"] = ScreenshotColumn,
             ["File"] = FileColumn,
             ["Platform"] = PlatformColumn,
-            ["Status"] = StatusColumn,
             ["Genres"] = GenresColumn,
-            ["Developer"] = DeveloperColumn,
             ["Publisher"] = PublisherColumn,
-            ["ReleaseYear"] = ReleaseYearColumn,
+            ["CommunityRating"] = CommunityRatingColumn,
             ["MaxPlayers"] = MaxPlayersColumn,
             ["Region"] = RegionColumn,
             ["Source"] = SourceColumn,
@@ -214,5 +406,281 @@ public partial class MainWindow : Window
                 vm.SaveColumnVisibility();
             };
         }
+
+        WireColumnWidths(vm, columnsByKey);
+
+        // PinColumn/ApplyColumnPinning için Key<->DataGridColumn eşlemesi field'a da kopyalanıyor.
+        foreach (var (key, column) in columnsByKey)
+            _columnsByKey[key] = column;
+        ApplyColumnPinning(vm);
     }
+
+    // Sağ tıklanan sütunu (_lastRightClickedColumn) sola/sağa sabitler ya da sabitlemeyi kaldırır
+    // (pinLeft: true/false/null), sonra son durumu kaydedip pozisyonları yeniden uygular.
+    private void PinColumn(bool? pinLeft)
+    {
+        if (_lastRightClickedColumn is null || DataContext is not MainViewModel vm)
+            return;
+
+        var entry = _columnsByKey.FirstOrDefault(kv => kv.Value == _lastRightClickedColumn);
+        if (entry.Key is not { } key)
+            return;
+
+        _pinnedLeftKeys.Remove(key);
+        _pinnedRightKeys.Remove(key);
+        if (pinLeft == true)
+            _pinnedLeftKeys.Add(key);
+        else if (pinLeft == false)
+            _pinnedRightKeys.Add(key);
+
+        ApplyColumnPinningPositions(vm);
+        vm.SavePinnedColumns(_pinnedLeftKeys.ToList(), _pinnedRightKeys.ToList());
+        vm.IsColumnPickerOpen = false;
+    }
+
+    private void PinColumnLeft_Click(object sender, RoutedEventArgs e) => PinColumn(true);
+    private void PinColumnRight_Click(object sender, RoutedEventArgs e) => PinColumn(false);
+    private void UnpinColumn_Click(object sender, RoutedEventArgs e) => PinColumn(null);
+
+    // Kullanıcı bir sütun başlığını sürükleyip bırakarak sırasını değiştirdiğinde (pinleme dışı, düz
+    // sürükle-bırak) tetiklenir — tam sırayı diske yazar (bkz. AppSettings.ColumnOrder). Bu olmadan
+    // sürükleyerek yapılan sıralama hiç kalıcı olmuyor, uygulama her açılışta ColumnDefinitions'ın
+    // sabit koddaki sırasına dönüyordu ("sütun konumları kapatınca bozuluyor" şikayeti buradan
+    // geliyordu).
+    private void GamesGrid_ColumnReordered(object sender, DataGridColumnEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        // "Gizle" her zaman en solda sabit kalmalı (bkz. ApplyColumnPinningPositions) — kullanıcı
+        // onu sürükleyip başka bir yere taşımışsa hemen geri uygulanıyor.
+        if (_columnsByKey.TryGetValue("Hide", out var hideColumn) && hideColumn.DisplayIndex != 0)
+            ApplyColumnPinningPositions(vm);
+
+        var currentOrder = GamesGrid.Columns
+            .OrderBy(c => c.DisplayIndex)
+            .Select(c => _columnsByKey.FirstOrDefault(kv => kv.Value == c).Key)
+            .Where(k => k is not null)
+            .Select(k => k!)
+            .ToList();
+
+        // WPF'te sabitleme (FrozenColumnCount) tamamen KONUMSAL: "ilk N sütun donuk" — hangi
+        // anahtarların o N konumda durduğu değil, sadece SAYI kalıcı bir kavram. Bu yüzden pinlenmiş
+        // kümeyi anahtar bazlı sabit tutmak yerine, her sürüklemeden sonra sayıyı koruyup içeriği
+        // GÜNCEL sıradan yeniden okuyoruz (Excel/Sheets'teki "bölmeleri dondur" ile aynı zihniyet):
+        // pinli bir sütun N. konumun dışına sürüklenirse doğal olarak sabitlemeden çıkar, pinli
+        // alan İÇİNDE yeniden sıralanırsa (ör. iki pinli sütunun yerini değiştirmek) sabit kalır.
+        // Önceki sürüm "sürüklenen sütun pin listesindeyse direkt kaldır" diyordu — bu, kullanıcının
+        // az önce bilerek sabitleyip sonra pinli alan içinde konumunu ince ayar yapmak için
+        // sürüklediği bir sütunun bile anında sabitlemeden çıkmasına yol açıyordu.
+        var newPinnedLeft = currentOrder.Take(_pinnedLeftKeys.Count).ToList();
+        var newPinnedRight = _pinnedRightKeys.Count > 0
+            ? currentOrder.Skip(currentOrder.Count - _pinnedRightKeys.Count).ToList()
+            : new List<string>();
+
+        if (!newPinnedLeft.SequenceEqual(_pinnedLeftKeys) || !newPinnedRight.SequenceEqual(_pinnedRightKeys))
+        {
+            _pinnedLeftKeys.Clear();
+            _pinnedLeftKeys.AddRange(newPinnedLeft);
+            _pinnedRightKeys.Clear();
+            _pinnedRightKeys.AddRange(newPinnedRight);
+            vm.SavePinnedColumns(_pinnedLeftKeys.ToList(), _pinnedRightKeys.ToList());
+        }
+
+        vm.SaveColumnOrder(currentOrder);
+    }
+
+    // Kayıtlı sabitleme durumunu (bkz. AppSettings.PinnedLeftColumns/PinnedRightColumns) açılışta
+    // uygular — sonraki her değişiklik PinColumn üzerinden ApplyColumnPinningPositions'ı çağırır.
+    private void ApplyColumnPinning(MainViewModel vm)
+    {
+        _pinnedLeftKeys.Clear();
+        _pinnedLeftKeys.AddRange(vm.PinnedLeftColumns);
+        _pinnedRightKeys.Clear();
+        _pinnedRightKeys.AddRange(vm.PinnedRightColumns);
+        ApplyColumnPinningPositions(vm);
+    }
+
+    // Sola sabitlenenler DisplayIndex 0'dan başlayarak sırayla dizilir ve DataGrid.FrozenColumnCount
+    // bu sayıya eşitlenir — gerçekten yatay kaydırmadan bağışık kalırlar (WPF'in native "freeze"
+    // desteği). WPF DataGrid'in SAĞDAN dondurma desteği yok; bu yüzden sağa sabitleme sadece
+    // DisplayIndex'i en sona TAŞIR — kullanıcı yatay kaydırırsa bu sütun da diğerleriyle birlikte
+    // kayar, gerçek bir "sticky" davranış değildir (bilinçli, belgelenmiş bir sınırlama).
+    //
+    // Her çağrıda TÜM sütunların DisplayIndex'i, sabit bir "doğal sıra" (vm.ColumnOptions'ın
+    // tanım sırası) + sol-sabit + sağ-sabit listelerinden BAŞTAN hesaplanıyor. Önceki sürüm sadece
+    // pinlenen sütunları taşıyıp pinlenmeyenlere hiç dokunmuyordu — WPF, bir sütunun DisplayIndex'ini
+    // değiştirince diğerlerini otomatik kaydırdığı için, sabitleme kaldırıldığında sütun eski
+    // (pinlenmeden önceki) konumuna DÖNMÜYOR, kaldığı yerde kalıp komşu sütunların sırasını kalıcı
+    // olarak bozuyordu ("box'ın sabitlemesini kaldırınca başka bir sütun sabitlenmiş gibi görünüyor"
+    // şikayeti buradan geliyordu). Tam yeniden hesaplama bu birikimli kaymayı imkansız kılıyor.
+    private void ApplyColumnPinningPositions(MainViewModel vm)
+    {
+        // Kullanıcının sürükleyerek belirlediği sıra (bkz. AppSettings.ColumnOrder) varsa VE mevcut
+        // sütun anahtar kümesiyle birebir eşleşiyorsa (bir kod güncellemesi sütun eklemediyse/
+        // çıkarmadıysa) o kullanılır; yoksa ColumnDefinitions'daki koddaki varsayılan sıraya dönülür.
+        var defaultOrder = vm.ColumnOptions.Select(o => o.Key).ToList();
+        var savedOrder = vm.ColumnOrder;
+        var naturalOrder = savedOrder.Count > 0 && new HashSet<string>(savedOrder).SetEquals(defaultOrder)
+            ? savedOrder.ToList()
+            : defaultOrder;
+        var validKeys = new HashSet<string>(naturalOrder);
+
+        // Sütun birleştirme/kaldırma sonrası ayarlarda kalmış olabilecek artık var olmayan Key'ler
+        // (ör. eski "Search"/"Status" sütunları) burada süzülüyor — yoksa toplam sütun sayısını aşan
+        // bir DisplayIndex atanıp XAML yüklenirken ArgumentOutOfRangeException fırlatıyordu.
+        var staleRemoved = _pinnedLeftKeys.RemoveAll(k => !validKeys.Contains(k)) > 0;
+        staleRemoved |= _pinnedRightKeys.RemoveAll(k => !validKeys.Contains(k)) > 0;
+        if (staleRemoved)
+            vm.SavePinnedColumns(_pinnedLeftKeys.ToList(), _pinnedRightKeys.ToList());
+
+        // "Gizle" sütunu her zaman en sola sabit (kullanıcı isteği: "en sola sabitle onu değişmesin
+        // yeri") — normal kullanıcı pin/unpin akışının (PinColumn) DIŞINDA, burada zorla en başa
+        // konuyor. Kullanıcı sağ-tıklayıp "Sabitlemeyi Kaldır" seçse bile bu, çağrıldığı her seferde
+        // geri uygulanıyor, yani kalıcı olarak sabit kalıyor.
+        if (validKeys.Contains("Hide"))
+        {
+            _pinnedLeftKeys.Remove("Hide");
+            _pinnedRightKeys.Remove("Hide");
+            _pinnedLeftKeys.Insert(0, "Hide");
+        }
+
+        var middleKeys = naturalOrder.Where(k => !_pinnedLeftKeys.Contains(k) && !_pinnedRightKeys.Contains(k));
+        var orderedKeys = _pinnedLeftKeys.Concat(middleKeys).Concat(_pinnedRightKeys).ToList();
+
+        for (var i = 0; i < orderedKeys.Count; i++)
+        {
+            if (_columnsByKey.TryGetValue(orderedKeys[i], out var column))
+                column.DisplayIndex = i;
+        }
+        GamesGrid.FrozenColumnCount = _pinnedLeftKeys.Count;
+
+        // Sabitlenen bölgenin sınırını ince bir dikey çizgiyle işaretle (bkz. MainWindow.xaml
+        // PinBoundary*CellStyle'lar) — sadece HÜCRELERDE, başlıkta DEĞİL. HeaderStyle'ı buradan
+        // değiştirmek denendi ama "Actions" gibi kendi özel HeaderTemplate'i (birleşik filtre
+        // popup'ı) olan sütunlarda başlığın varsayılan (temasız/beyaz) görünüme dönmesine yol
+        // açtı — bu yüzden başlık bilerek dokunulmadan bırakıldı, sınır çizgisi sadece veri
+        // satırlarında görünüyor (istenen "sabitlenen alanı ayırt etme" amacı için yeterli).
+        // Önce hepsi sıfırlanır ki eski sınır sütunu kalıcı işaretli kalmasın.
+        foreach (var column in _columnsByKey.Values)
+            column.ClearValue(DataGridColumn.CellStyleProperty);
+
+        if (_pinnedLeftKeys.Count > 0 && _columnsByKey.TryGetValue(_pinnedLeftKeys[^1], out var lastLeft))
+            lastLeft.CellStyle = (Style)FindResource("PinBoundaryRightCellStyle");
+
+        if (_pinnedRightKeys.Count > 0 && _columnsByKey.TryGetValue(_pinnedRightKeys[0], out var firstRight))
+            firstRight.CellStyle = (Style)FindResource("PinBoundaryLeftCellStyle");
+    }
+
+    // Kullanıcı bir sütun başlığının kenarını sürükleyip genişliğini değiştirdiğinde son ayarı
+    // kaydeder. WPF DataGrid'in doğrudan bir "sütun genişliği değişti" olayı yok — DataGridColumn.
+    // WidthProperty için bir DependencyPropertyDescriptor ile dinleniyor. Sürükleme sırasında piksel
+    // piksel çok sık tetiklendiği için her defasında diske yazmak yerine DispatcherTimer ile
+    // debounce ediliyor (son değişiklikten ~400ms sonra tek seferlik kayıt, tüm sütunlar birlikte).
+    private void WireColumnWidths(MainViewModel vm, Dictionary<string, DataGridColumn> columnsByKey)
+    {
+        foreach (var (key, column) in columnsByKey)
+        {
+            if (vm.ColumnWidths.TryGetValue(key, out var savedWidth))
+                column.Width = new DataGridLength(savedWidth);
+        }
+
+        var saveTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+        saveTimer.Tick += (_, _) =>
+        {
+            saveTimer.Stop();
+            vm.SaveColumnWidths(columnsByKey.ToDictionary(kv => kv.Key, kv => kv.Value.ActualWidth));
+        };
+
+        var widthDescriptor = DependencyPropertyDescriptor.FromProperty(DataGridColumn.WidthProperty, typeof(DataGridColumn));
+        foreach (var column in columnsByKey.Values)
+        {
+            widthDescriptor?.AddValueChanged(column, (_, _) =>
+            {
+                saveTimer.Stop();
+                saveTimer.Start();
+            });
+        }
+    }
+
+    // --- WindowChrome maximize düzeltmesi (WM_GETMINMAXINFO) ---
+    // WindowChrome kullanan pencerelerde, Windows'un maximize için hesapladığı boyut/konum
+    // varsayılan olarak MONİTÖRÜN TAMAMINI (görev çubuğunun altını da) kapsayabiliyor ve
+    // kenarlarda gerçek "çalışma alanı" sınırını birkaç piksel aşabiliyor — bu da native
+    // chrome'un ince bir diliminin (ör. üstte beyaz bir çizgi) açığa çıkmasına yol açıyor.
+    // Bu, doğru yöntem: WM_GETMINMAXINFO mesajını yakalayıp maximize boyut/konumunu doğrudan
+    // ilgili monitörün work area'sına eşitlemek — kenar boşluğuyla telafi etmeye çalışmaktan
+    // (önceki, terk edilen deneme) çok daha güvenilir.
+    private IntPtr WindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        const int WM_GETMINMAXINFO = 0x0024;
+        if (msg == WM_GETMINMAXINFO)
+            WmGetMinMaxInfo(hwnd, lParam);
+
+        return IntPtr.Zero;
+    }
+
+    private static void WmGetMinMaxInfo(IntPtr hwnd, IntPtr lParam)
+    {
+        const int MonitorDefaultToNearest = 0x00000002;
+
+        var monitor = MonitorFromWindow(hwnd, MonitorDefaultToNearest);
+        if (monitor == IntPtr.Zero)
+            return;
+
+        var monitorInfo = new MonitorInfo { cbSize = Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref monitorInfo))
+            return;
+
+        var workArea = monitorInfo.rcWork;
+        var monitorArea = monitorInfo.rcMonitor;
+
+        var minMaxInfo = Marshal.PtrToStructure<MinMaxInfo>(lParam);
+        minMaxInfo.ptMaxPosition.X = workArea.Left - monitorArea.Left;
+        minMaxInfo.ptMaxPosition.Y = workArea.Top - monitorArea.Top;
+        minMaxInfo.ptMaxSize.X = workArea.Right - workArea.Left;
+        minMaxInfo.ptMaxSize.Y = workArea.Bottom - workArea.Top;
+        Marshal.StructureToPtr(minMaxInfo, lParam, true);
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Point
+    {
+        public int X;
+        public int Y;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MinMaxInfo
+    {
+        public Point ptReserved;
+        public Point ptMaxSize;
+        public Point ptMaxPosition;
+        public Point ptMinTrackSize;
+        public Point ptMaxTrackSize;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Rect
+    {
+        public int Left;
+        public int Top;
+        public int Right;
+        public int Bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo
+    {
+        public int cbSize;
+        public Rect rcMonitor;
+        public Rect rcWork;
+        public int dwFlags;
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr handle, int flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Auto)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MonitorInfo lpmi);
 }

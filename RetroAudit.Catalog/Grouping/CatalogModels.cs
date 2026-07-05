@@ -40,6 +40,21 @@ public class CatalogGame
     public List<string> Genres { get; } = new();
     public bool MatchedMetadata { get; set; }
 
+    // LaunchBox'tan gelen ek zenginleştirme alanları — YouTube/Wikipedia bağlantıları WPF'te
+    // "Oynanış Önizleme" alanındaki tıklanabilir butonları besliyor, geri kalanı sağ detay
+    // panelinde gösteriliyor (bkz. CatalogDatabaseService.GetGames, Game.cs).
+    public DateTime? ReleaseDate { get; set; }
+    public double? CommunityRating { get; set; }
+    public string? VideoUrl { get; set; }
+    public string? WikipediaUrl { get; set; }
+    public long? SteamAppId { get; set; }
+    public bool? Cooperative { get; set; }
+
+    // Eşleştirmede kullanılan AltNameCompareValue'dan farklı olarak burada GÖRÜNTÜLENEBİLİR
+    // isimler tutulur (bkz. AlternateNames tablosu, CatalogSchema.cs) — şu an için sadece
+    // saklanıyor, henüz bir UI ekranı yok.
+    public List<string> AlternateNames { get; } = new();
+
     // Eşleşmenin nasıl bulunduğu (CompareName/ExactName/AlternateName/Fuzzy) ve ne kadar güvenilir
     // olduğu (1.0 = kesin, <1.0 = fuzzy benzerlik oranı). NeedsReview, Confidence
     // FuzzyAcceptThreshold'un altında kaldığında (ama FuzzyReviewFloor'un üstündeyse) true olur —

@@ -14,8 +14,8 @@ public static class CatalogBuilder
     // BuildInfo tablosuna yazılan sabitler. SchemaVersion, Games/GameVersions/Platforms tablo
     // yapısı değiştikçe (ör. bu turda Games.HiddenByDefault eklendi) artırılır; WPF tarafı
     // (Stage B) ileride uyumsuz bir RetroAudit.db'yi bu alana bakarak erkenden reddedebilir.
-    public const string SchemaVersion = "1.2";
-    public const string BuilderVersion = "1.2.0";
+    public const string SchemaVersion = "1.3";
+    public const string BuilderVersion = "1.3.0";
 
     // Ana listede varsayılan olarak gizlenecek (ama SİLİNMEYECEK) LaunchBox tür etiketleri —
     // kullanıcı kararı: gerçek video oyunu sayılmayan Casino/Gambling/Mahjong/Pachinko/Pachislot/
@@ -79,6 +79,13 @@ public static class CatalogBuilder
                     game.Overview = match.Overview;
                     game.MaxPlayers = match.MaxPlayers;
                     game.Genres.AddRange(match.Genres);
+                    game.ReleaseDate = match.ReleaseDate;
+                    game.CommunityRating = match.CommunityRating;
+                    game.VideoUrl = match.VideoUrl;
+                    game.WikipediaUrl = match.WikipediaUrl;
+                    game.SteamAppId = match.SteamAppId;
+                    game.Cooperative = match.Cooperative;
+                    game.AlternateNames.AddRange(match.AlternateNames);
                     game.MatchedMetadata = true;
                     game.MatchMethod = match.MatchMethod;
                     game.MatchConfidence = match.Confidence;
@@ -269,8 +276,8 @@ public static class CatalogBuilder
             {
                 insertGame.Transaction = transaction;
                 insertGame.CommandText = """
-                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview, HiddenByDefault)
-                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview, $hiddenByDefault)
+                    INSERT INTO Games (PlatformId, Title, CompareTitle, DeveloperId, PublisherId, ReleaseYear, Overview, MaxPlayers, ReleaseDate, CommunityRating, VideoUrl, WikipediaUrl, SteamAppId, Cooperative, MatchedMetadata, MatchMethod, MatchConfidence, NeedsReview, HiddenByDefault)
+                    VALUES ($platformId, $title, $compareTitle, $developerId, $publisherId, $releaseYear, $overview, $maxPlayers, $releaseDate, $communityRating, $videoUrl, $wikipediaUrl, $steamAppId, $cooperative, $matchedMetadata, $matchMethod, $matchConfidence, $needsReview, $hiddenByDefault)
                     """;
                 insertGame.Parameters.AddWithValue("$platformId", platformId);
                 insertGame.Parameters.AddWithValue("$title", game.Title);
@@ -280,6 +287,12 @@ public static class CatalogBuilder
                 insertGame.Parameters.AddWithValue("$releaseYear", (object?)game.ReleaseYear ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$overview", (object?)game.Overview ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$maxPlayers", (object?)game.MaxPlayers ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$releaseDate", (object?)game.ReleaseDate?.ToString("O") ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$communityRating", (object?)game.CommunityRating ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$videoUrl", (object?)game.VideoUrl ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$wikipediaUrl", (object?)game.WikipediaUrl ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$steamAppId", (object?)game.SteamAppId ?? DBNull.Value);
+                insertGame.Parameters.AddWithValue("$cooperative", game.Cooperative is { } coop ? (coop ? 1 : 0) : DBNull.Value);
                 insertGame.Parameters.AddWithValue("$matchedMetadata", game.MatchedMetadata ? 1 : 0);
                 insertGame.Parameters.AddWithValue("$matchMethod", (object?)game.MatchMethod ?? DBNull.Value);
                 insertGame.Parameters.AddWithValue("$matchConfidence", (object?)game.MatchConfidence ?? DBNull.Value);
@@ -287,6 +300,16 @@ public static class CatalogBuilder
                 insertGame.Parameters.AddWithValue("$hiddenByDefault", game.HiddenByDefault ? 1 : 0);
                 insertGame.ExecuteNonQuery();
                 gameId = GetLastInsertRowId();
+            }
+
+            foreach (var alternateName in game.AlternateNames.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                using var insertAlternateName = connection.CreateCommand();
+                insertAlternateName.Transaction = transaction;
+                insertAlternateName.CommandText = "INSERT INTO AlternateNames (GameId, Name, Source) VALUES ($gameId, $name, 'LaunchBox')";
+                insertAlternateName.Parameters.AddWithValue("$gameId", gameId);
+                insertAlternateName.Parameters.AddWithValue("$name", alternateName);
+                insertAlternateName.ExecuteNonQuery();
             }
 
             foreach (var genreName in game.Genres)

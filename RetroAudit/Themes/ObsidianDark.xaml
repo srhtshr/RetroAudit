@@ -445,6 +445,25 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+        <!-- ROM'u eksik oyunların hücre içeriğini soluklaştırır (bkz. MainWindow.xaml GamesGrid
+             yorumu — kasıtlı olarak SATIR değil HÜCRE seviyesinde, satırın yatay ayırıcı çizgisi
+             tüm satırlarda aynı tonda kalsın diye). DataGridCell'in DataContext'i her zaman satırın
+             veri öğesi (Game) olduğu için hücrenin içeriği DataGridBoundColumn veya
+             DataGridTemplateColumn olsun fark etmiyor. MultiDataTrigger daha SONRA tanımlı, bu
+             yüzden ikisi de aktifken (ROM da yok, eşleşme de yok) o kazanıp daha silik (0.25) rengi
+             uyguluyor. -->
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding HasLocalFile}" Value="False">
+                <Setter Property="Opacity" Value="0.45" />
+            </DataTrigger>
+            <MultiDataTrigger>
+                <MultiDataTrigger.Conditions>
+                    <Condition Binding="{Binding HasLocalFile}" Value="False" />
+                    <Condition Binding="{Binding StatusOk}" Value="False" />
+                </MultiDataTrigger.Conditions>
+                <Setter Property="Opacity" Value="0.25" />
+            </MultiDataTrigger>
+        </Style.Triggers>
     </Style>
 
     <!-- ===================== TabControl (Ayarlar penceresindeki kategori sekmeleri) ===================== -->

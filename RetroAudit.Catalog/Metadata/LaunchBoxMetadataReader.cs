@@ -12,7 +12,14 @@ public record MetadataMatch(
     int? MaxPlayers,
     string[] Genres,
     double Confidence,
-    string MatchMethod);
+    string MatchMethod,
+    DateTime? ReleaseDate,
+    double? CommunityRating,
+    string? VideoUrl,
+    string? WikipediaUrl,
+    long? SteamAppId,
+    bool? Cooperative,
+    string[] AlternateNames);
 
 // LaunchBox.Metadata.db'ye salt-okunur (Mode=ReadOnly) erişir. Bu, RetroAudit'in tek seferlik
 // zenginleştirme kaynağıdır — Builder bu dosyayı asla değiştirmez ve çalışma zamanındaki RetroAudit
@@ -69,7 +76,8 @@ public class LaunchBoxMetadataReader : IDisposable
         using (var byCompareName = _connection.CreateCommand())
         {
             byCompareName.CommandText =
-                "SELECT Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres " +
+                "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
+                "ReleaseDate, CommunityRating, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
                 "FROM Games WHERE Platform = $platform AND CompareName = $compareName LIMIT 1";
             byCompareName.Parameters.AddWithValue("$platform", resolvedPlatform);
             byCompareName.Parameters.AddWithValue("$compareName", compareTitle);
@@ -84,7 +92,8 @@ public class LaunchBoxMetadataReader : IDisposable
         using (var byExactName = _connection.CreateCommand())
         {
             byExactName.CommandText =
-                "SELECT Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres " +
+                "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
+                "ReleaseDate, CommunityRating, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
                 "FROM Games WHERE Platform = $platform AND Name = $name LIMIT 1";
             byExactName.Parameters.AddWithValue("$platform", resolvedPlatform);
             byExactName.Parameters.AddWithValue("$name", exactTitle);
@@ -99,7 +108,8 @@ public class LaunchBoxMetadataReader : IDisposable
         using (var byAlternateName = _connection.CreateCommand())
         {
             byAlternateName.CommandText = """
-                SELECT g.Name, g.Developer, g.Publisher, g.ReleaseYear, g.Overview, g.MaxPlayers, g.Genres
+                SELECT g.DatabaseID, g.Name, g.Developer, g.Publisher, g.ReleaseYear, g.Overview, g.MaxPlayers, g.Genres,
+                       g.ReleaseDate, g.CommunityRating, g.VideoURL, g.WikipediaURL, g.SteamAppId, g.Cooperative
                 FROM GameAlternateTitles a
                 JOIN Games g ON g.DatabaseID = a.DatabaseID
                 WHERE g.Platform = $platform AND a.AltNameCompareValue = $compareName
@@ -183,7 +193,8 @@ public class LaunchBoxMetadataReader : IDisposable
 
         using var detail = _connection.CreateCommand();
         detail.CommandText =
-            "SELECT Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres " +
+            "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
+            "ReleaseDate, CommunityRating, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
             "FROM Games WHERE Platform = $platform AND Name = $name LIMIT 1";
         detail.Parameters.AddWithValue("$platform", resolvedPlatform);
         detail.Parameters.AddWithValue("$name", bestName);
@@ -233,22 +244,57 @@ public class LaunchBoxMetadataReader : IDisposable
         return resolved;
     }
 
-    private static MetadataMatch ReadMatch(SqliteDataReader reader, double confidence, string matchMethod)
+    // Artık statik değil: eşleşen kaydın DatabaseID'siyle GameAlternateTitles'tan lakap listesini
+    // ayrıca sorgulaması gerekiyor (bkz. GetAlternateNames) — eşleştirmede kullanılan
+    // AltNameCompareValue'dan farklı olarak burada GÖRÜNTÜLENEBİLİR AlternateName alınıyor.
+    private MetadataMatch ReadMatch(SqliteDataReader reader, double confidence, string matchMethod)
     {
-        var genresRaw = reader.IsDBNull(6) ? null : reader.GetString(6);
+        var databaseId = reader.GetInt32(0);
+
+        var genresRaw = reader.IsDBNull(7) ? null : reader.GetString(7);
         var genres = genresRaw?.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                      ?? Array.Empty<string>();
 
+        // LaunchBox ReleaseDate "yyyy-MM-dd HH:mm:ss" biçiminde düz metin — bazı kayıtlarda hiç yok
+        // (NULL) ama ReleaseYear dolu olabilir, bu yüzden ayrı ayrı nullable tutuluyor.
+        var releaseDateRaw = reader.IsDBNull(8) ? null : reader.GetString(8);
+        var releaseDate = releaseDateRaw is not null && DateTime.TryParse(releaseDateRaw, out var parsedDate)
+            ? parsedDate
+            : (DateTime?)null;
+
         return new MetadataMatch(
-            Title: reader.GetString(0),
-            Developer: reader.IsDBNull(1) ? null : reader.GetString(1),
-            Publisher: reader.IsDBNull(2) ? null : reader.GetString(2),
-            ReleaseYear: reader.IsDBNull(3) ? null : reader.GetInt32(3),
-            Overview: reader.IsDBNull(4) ? null : reader.GetString(4),
-            MaxPlayers: reader.IsDBNull(5) ? null : reader.GetInt32(5),
+            Title: reader.GetString(1),
+            Developer: reader.IsDBNull(2) ? null : reader.GetString(2),
+            Publisher: reader.IsDBNull(3) ? null : reader.GetString(3),
+            ReleaseYear: reader.IsDBNull(4) ? null : reader.GetInt32(4),
+            Overview: reader.IsDBNull(5) ? null : reader.GetString(5),
+            MaxPlayers: reader.IsDBNull(6) ? null : reader.GetInt32(6),
             Genres: genres,
             Confidence: confidence,
-            MatchMethod: matchMethod);
+            MatchMethod: matchMethod,
+            ReleaseDate: releaseDate,
+            CommunityRating: reader.IsDBNull(9) ? null : reader.GetDouble(9),
+            VideoUrl: reader.IsDBNull(10) ? null : reader.GetString(10),
+            WikipediaUrl: reader.IsDBNull(11) ? null : reader.GetString(11),
+            SteamAppId: reader.IsDBNull(12) ? null : reader.GetInt64(12),
+            Cooperative: reader.IsDBNull(13) ? null : reader.GetInt32(13) != 0,
+            AlternateNames: GetAlternateNames(databaseId));
+    }
+
+    private string[] GetAlternateNames(int databaseId)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText = "SELECT AlternateName FROM GameAlternateTitles WHERE DatabaseID = $databaseId";
+        cmd.Parameters.AddWithValue("$databaseId", databaseId);
+
+        var names = new List<string>();
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (!reader.IsDBNull(0))
+                names.Add(reader.GetString(0));
+        }
+        return names.ToArray();
     }
 
     public void Dispose() => _connection.Dispose();

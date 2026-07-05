@@ -17,6 +17,7 @@ public partial class MediaProviderWindow : Window
     public MediaProviderWindow()
     {
         InitializeComponent();
+        DarkTitleBarHelper.Apply(this);
 
         // ViewModel MessageBox'a doğrudan bağımlı olmasın diye basit bir bilgi olayı üzerinden haberleşiyoruz.
         if (DataContext is MediaProviderViewModel vm)

@@ -126,7 +126,8 @@ public static class CatalogDatabaseService
         cmd.CommandText = """
             SELECT g.GameId, g.Title, g.CompareTitle, p.Name, g.ReleaseYear, d.Name, pub.Name,
                    g.Overview, g.MaxPlayers, g.MatchedMetadata, g.HiddenByDefault,
-                   g.MatchMethod, g.NeedsReview
+                   g.MatchMethod, g.NeedsReview, g.ReleaseDate, g.CommunityRating, g.VideoUrl,
+                   g.WikipediaUrl, g.SteamAppId, g.Cooperative
             FROM Games g
             JOIN Platforms p ON p.PlatformId = g.PlatformId
             LEFT JOIN Developers d ON d.DeveloperId = g.DeveloperId
@@ -142,6 +143,14 @@ public static class CatalogDatabaseService
             var compareTitle = gameReader.GetString(2);
             var hidden = !gameReader.IsDBNull(10) && gameReader.GetInt32(10) != 0;
             var preferred = preferredByGame.GetValueOrDefault(gameId, (Region: string.Empty, SourceDat: string.Empty, FileName: string.Empty));
+            var cooperative = gameReader.IsDBNull(18) ? (bool?)null : gameReader.GetInt32(18) != 0;
+
+            // LaunchBox'ta ReleaseYear ve ReleaseDate BİRBİRİNDEN BAĞIMSIZ nullable alanlar —
+            // bir oyunda ReleaseDate dolu olup ReleaseYear NULL olabilir (ör. Friday the 13th,
+            // NES). Bu yüzden "Yıl" sütunu/filtresi sadece ham ReleaseYear'a bakarsa yanlışlıkla
+            // 0 gösterir; ReleaseDate varsa ondan çıkarılan yıl devreye giriyor.
+            var releaseDate = gameReader.IsDBNull(13) ? (DateTime?)null : DateTime.Parse(gameReader.GetString(13));
+            var releaseYear = gameReader.IsDBNull(4) ? (releaseDate?.Year ?? 0) : gameReader.GetInt32(4);
 
             games.Add(new Game
             {
@@ -150,7 +159,7 @@ public static class CatalogDatabaseService
                 Title = gameReader.GetString(1),
                 Platform = platformName,
                 PlatformDisplayName = PlatformDisplayNameMap.Resolve(platformName),
-                ReleaseYear = gameReader.IsDBNull(4) ? 0 : gameReader.GetInt32(4),
+                ReleaseYear = releaseYear,
                 Developer = gameReader.IsDBNull(5) ? string.Empty : gameReader.GetString(5),
                 Publisher = gameReader.IsDBNull(6) ? string.Empty : gameReader.GetString(6),
                 Description = gameReader.IsDBNull(7) ? string.Empty : gameReader.GetString(7),
@@ -163,10 +172,21 @@ public static class CatalogDatabaseService
                 SourceDat = preferred.SourceDat,
                 MatchMethod = gameReader.IsDBNull(11) ? string.Empty : gameReader.GetString(11),
                 NeedsReview = !gameReader.IsDBNull(12) && gameReader.GetInt32(12) != 0,
-                // GameMode: RetroAudit.db şemasında henüz karşılığı yok (LaunchBox'ın
-                // Cooperative/ReleaseType alanları Builder'a taşınmadı) — uydurma bir varsayılan
-                // göstermemek için boş bırakılıyor.
-                GameMode = string.Empty,
+                ReleaseDate = releaseDate,
+                CommunityRating = gameReader.IsDBNull(14) ? null : gameReader.GetDouble(14),
+                VideoUrl = gameReader.IsDBNull(15) ? string.Empty : gameReader.GetString(15),
+                WikipediaUrl = gameReader.IsDBNull(16) ? string.Empty : gameReader.GetString(16),
+                SteamAppId = gameReader.IsDBNull(17) ? null : gameReader.GetInt64(17),
+                Cooperative = cooperative,
+                // GameMode: LaunchBox'ın kesin bir "oyun modu" alanı yok, sadece Cooperative
+                // (co-op) bilgisi var — bu yüzden burada tam bir mod adı değil, sadece bu tek
+                // boyutu yansıtıyoruz. Bilinmiyorsa (null) uydurma bir varsayılan göstermiyoruz.
+                GameMode = cooperative switch
+                {
+                    true => "Kooperatif",
+                    false => "Kooperatif Değil",
+                    null => string.Empty,
+                },
             });
         }
 

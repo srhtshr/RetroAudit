@@ -1,0 +1,14 @@
+<Window x:Class="RetroAudit.Views.RomSearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="RetroAudit - ROM Ara" Height="820" Width="1200" WindowStartupLocation="CenterOwner">
+
+    <!-- Sekmeli/gezinme çubuklu tam bir tarayıcı DEĞİL — bilinçli olarak sade: tek bir arama
+         sonucu sayfasına açılır, kullanıcı linkler arasında serbestçe (WebView2'nin kendi
+         gezinme geçmişi ile) dolaşır. Adres çubuğu/geri-ileri düğmesi yok çünkü bu bir genel
+         amaçlı tarayıcı değil, "bu oyun için ara" akışının bir parçası. -->
+    <Grid Background="{StaticResource Brush.Background.Base}">
+        <wv2:WebView2 x:Name="Browser" />
+    </Grid>
+</Window>

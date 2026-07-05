@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Win32;
@@ -12,7 +13,12 @@ namespace RetroAudit.ViewModels;
 // buraya bir alan olarak eklenip Export/Import Config akışına otomatik dahil olacak.
 public partial class SettingsViewModel : ObservableObject
 {
-    // RetroAudit'in kendi veri kök dizini (romlar, medya ve RetroAudit.db bu dizin altında olacak).
+    // RetroAudit'in kendi veri kök dizini (romlar, medya ve RetroAudit.db bu dizin altında aranır —
+    // ROM İçe Aktar ve Arayıp İndir akışlarının ikisi de doğrudan bu yola yazar/okur). Diğer alanların
+    // aksine (Emulators/RegionPriority/Commands sadece Export/Import ile taşınır) bu alan da
+    // ContextMenuDisplayMode/LaunchBoxDbPath/RowHeight gibi her değiştiğinde otomatik kaydedilir
+    // (bkz. SaveInterfaceSettings) — aksi halde MainWindow bu tercihi bir daha hiç okuyamazdı, çünkü
+    // Ayarlar penceresi elle "Kaydet" düğmesi olmayan, Export/Import'a dayanan bir tasarımda.
     [ObservableProperty]
     private string retroAuditDataPath = string.Empty;
 
@@ -25,33 +31,96 @@ public partial class SettingsViewModel : ObservableObject
     private string? selectedRegion;
 
     // --- Arayüz sekmesi ---
-    // Bu ikisi diğer alanların aksine (RetroAuditDataPath/Emulators/... sadece Export/Import ile
-    // taşınır) her değiştiğinde otomatik olarak ConfigService'in sabit varsayılan dosyasına
-    // kaydedilir (bkz. SaveInterfaceSettings) — aksi halde MainWindow bu tercihi bir daha hiç
-    // okuyamazdı, çünkü Ayarlar penceresi elle "Kaydet" düğmesi olmayan, Export/Import'a dayanan
-    // bir tasarımda.
     [ObservableProperty]
     private ContextMenuDisplayMode contextMenuDisplayMode = ContextMenuDisplayMode.IconAndText;
 
     [ObservableProperty]
     private string launchBoxDbPath = string.Empty;
 
+    // DataGrid satır yüksekliği — önceden ana penceredeki araç çubuğunda bir kaydırıcıydı,
+    // kalıcı olmadan her açılışta sıfırlanıyordu. Buraya taşınıp diğer Arayüz alanları gibi
+    // otomatik kaydediliyor (bkz. SaveInterfaceSettings), MainWindow kapanınca
+    // MainViewModel.ReloadAppSettings ile geri okunuyor.
+    [ObservableProperty]
+    private double rowHeight = 30;
+
+    // Sol paneldeki platform listesinin gruplama/görünüm tercihleri (bkz. Ayarlar > Arayüz >
+    // Platform Listesi) — MainViewModel.RebuildPlatformListItems bunları okuyup uygular.
+    [ObservableProperty]
+    private bool groupPlatformsByCategory = true;
+
+    [ObservableProperty]
+    private PlatformListDisplayMode platformListDisplayMode = PlatformListDisplayMode.Text;
+
+    // Her kategori için görünür/gizli tercihi — MainViewModel.CategoryConsoles/Handhelds/... ile
+    // aynı sabit anahtarları kullanır (Key), ColumnVisibilityOption'ın Sütunlar seçicisindeki
+    // rolüyle aynı deseni burada da tekrar kullanıyor.
+    public ObservableCollection<ColumnVisibilityOption> CategoryOptions { get; } = new();
+
+    private static readonly (string Key, string Header)[] CategoryDefinitions =
+    {
+        (MainViewModel.CategoryConsoles, "Konsollar"),
+        (MainViewModel.CategoryHandhelds, "El Konsolları"),
+        (MainViewModel.CategoryArcade, "Arcade"),
+        (MainViewModel.CategoryComputers, "Bilgisayarlar"),
+        (MainViewModel.CategoryClassic, "Klasik"),
+        (MainViewModel.CategoryOthers, "Diğer"),
+    };
+
     public SettingsViewModel()
     {
         var settings = ConfigService.LoadDefault();
+        retroAuditDataPath = settings.RetroAuditDataPath;
         contextMenuDisplayMode = settings.ContextMenuDisplayMode;
         launchBoxDbPath = settings.LaunchBoxDbPath;
+        rowHeight = settings.RowHeight;
+        groupPlatformsByCategory = settings.GroupPlatformsByCategory;
+        platformListDisplayMode = settings.PlatformListDisplayMode;
+        BuildCategoryOptions(settings);
     }
+
+    private void BuildCategoryOptions(AppSettings settings)
+    {
+        CategoryOptions.Clear();
+        foreach (var (key, header) in CategoryDefinitions)
+        {
+            var option = new ColumnVisibilityOption
+            {
+                Key = key,
+                Header = header,
+                IsVisible = settings.CategoryVisibility.GetValueOrDefault(key, true),
+            };
+            option.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(option.IsVisible))
+                    SaveInterfaceSettings();
+            };
+            CategoryOptions.Add(option);
+        }
+    }
+
+    partial void OnRetroAuditDataPathChanged(string value) => SaveInterfaceSettings();
 
     partial void OnContextMenuDisplayModeChanged(ContextMenuDisplayMode value) => SaveInterfaceSettings();
 
     partial void OnLaunchBoxDbPathChanged(string value) => SaveInterfaceSettings();
 
+    partial void OnRowHeightChanged(double value) => SaveInterfaceSettings();
+
+    partial void OnGroupPlatformsByCategoryChanged(bool value) => SaveInterfaceSettings();
+
+    partial void OnPlatformListDisplayModeChanged(PlatformListDisplayMode value) => SaveInterfaceSettings();
+
     private void SaveInterfaceSettings()
     {
         var settings = ConfigService.LoadDefault();
+        settings.RetroAuditDataPath = RetroAuditDataPath;
         settings.ContextMenuDisplayMode = ContextMenuDisplayMode;
         settings.LaunchBoxDbPath = LaunchBoxDbPath;
+        settings.RowHeight = RowHeight;
+        settings.GroupPlatformsByCategory = GroupPlatformsByCategory;
+        settings.PlatformListDisplayMode = PlatformListDisplayMode;
+        settings.CategoryVisibility = CategoryOptions.ToDictionary(o => o.Key, o => o.IsVisible);
         ConfigService.SaveDefault(settings);
     }
 

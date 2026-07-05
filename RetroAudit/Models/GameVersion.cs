@@ -24,4 +24,10 @@ public class GameVersion
     public string SourceDat { get; set; } = string.Empty;
     public string RawDatName { get; set; } = string.Empty;
     public List<GameHash> Hashes { get; set; } = new();
+
+    // Bu sürümün dosyalarından biri (Hashes'teki herhangi bir FileName) diskte var mı — sağ
+    // paneldeki Sürümler listesinde Play/çarpı ikonunu belirler (bkz. MainViewModel.IsVersionOwned).
+    // CatalogDatabaseService.GetVersions'ın döndürdüğü ham veriden bağımsız, MainViewModel tarafından
+    // yükleme sırasında doldurulur.
+    public bool IsOwned { get; set; }
 }
