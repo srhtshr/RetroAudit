@@ -128,6 +128,38 @@ public static class CatalogDatabaseService
             }
         }
 
+        // Bir oyunun TÜM sürümlerinin bölgesi — sadece tercih edilenin değil. Toolbar'daki USA/EU/
+        // Japan bayrak filtreleri (bkz. MainViewModel) bir oyunun görünür kalıp kalmayacağına ve
+        // hangi sürümün "gösterilecek" bilgi olarak seçileceğine bunun üzerinden karar veriyor —
+        // ör. tercih edilen sürüm USA olsa bile oyunun ayrıca bir Japan sürümü varsa (özellikle
+        // MergeRegionVariants'ın birleştirdiği, farklı isimli bölge varyantlarında) bu bilgi
+        // olmadan sadece USA'nın var olduğu bilinirdi.
+        var allVersionsByGame = new Dictionary<int, List<GameVersionSummary>>();
+        using (var versionsCmd = connection.CreateCommand())
+        {
+            versionsCmd.CommandText = """
+                SELECT gv.GameId, r.Name, gv.SourceDat, gh.FileName, MIN(gh.GameHashId)
+                FROM GameVersions gv
+                JOIN GameHashes gh ON gh.GameVersionId = gv.GameVersionId
+                LEFT JOIN Regions r ON r.RegionId = gv.RegionId
+                GROUP BY gv.GameVersionId
+                """;
+            using var reader = versionsCmd.ExecuteReader();
+            while (reader.Read())
+            {
+                var gid = reader.GetInt32(0);
+                if (!allVersionsByGame.TryGetValue(gid, out var list))
+                {
+                    list = new List<GameVersionSummary>();
+                    allVersionsByGame[gid] = list;
+                }
+                list.Add(new GameVersionSummary(
+                    reader.IsDBNull(1) ? "Unknown" : reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3)));
+            }
+        }
+
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             SELECT g.GameId, g.Title, g.CompareTitle, p.Name, g.ReleaseYear, d.Name, pub.Name,
@@ -197,6 +229,7 @@ public static class CatalogDatabaseService
                     false => "Kooperatif Değil",
                     null => string.Empty,
                 },
+                AllVersions = allVersionsByGame.GetValueOrDefault(gameId, new List<GameVersionSummary>()),
             });
         }
 
@@ -344,5 +377,26 @@ public static class CatalogDatabaseService
         }
 
         return versions;
+    }
+
+    // Sağ paneldeki başlığa tıklanınca açılan menü için: LaunchBox'ın GameAlternateTitles
+    // tablosundan Builder tarafından kopyalanan alternatif isimler (bkz. CatalogBuilder.cs
+    // AlternateNames INSERT, Schema/CatalogSchema.cs AlternateNames tablosu). SelectedGame
+    // değiştiğinde değil, sadece menü açıldığında talep üzerine sorgulanır — Versions listesiyle
+    // aynı "talep üzerine" prensibi.
+    public static List<GameAlternateName> GetAlternateNames(int gameId)
+    {
+        var names = new List<GameAlternateName>();
+        if (!DatabaseExists)
+            return names;
+
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Name, Region FROM AlternateNames WHERE GameId = $gameId ORDER BY Name";
+        cmd.Parameters.AddWithValue("$gameId", gameId);
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            names.Add(new GameAlternateName(reader.GetString(0), reader.IsDBNull(1) ? string.Empty : reader.GetString(1)));
+        return names;
     }
 }

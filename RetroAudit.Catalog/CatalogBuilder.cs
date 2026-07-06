@@ -14,8 +14,8 @@ public static class CatalogBuilder
     // BuildInfo tablosuna yazılan sabitler. SchemaVersion, Games/GameVersions/Platforms tablo
     // yapısı değiştikçe (ör. bu turda Games.HiddenByDefault eklendi) artırılır; WPF tarafı
     // (Stage B) ileride uyumsuz bir RetroAudit.db'yi bu alana bakarak erkenden reddedebilir.
-    public const string SchemaVersion = "1.5";
-    public const string BuilderVersion = "1.5.0";
+    public const string SchemaVersion = "1.6";
+    public const string BuilderVersion = "1.6.2";
 
     // Ana listede varsayılan olarak gizlenecek (ama SİLİNMEYECEK) LaunchBox tür etiketleri —
     // kullanıcı kararı: gerçek video oyunu sayılmayan Casino/Gambling/Mahjong/Pachinko/Pachislot/
@@ -30,6 +30,20 @@ public static class CatalogBuilder
 
     private static bool IsHiddenByGenre(IEnumerable<string> genres) =>
         genres.Any(g => HiddenGenreKeywords.Any(k => g.Contains(k, StringComparison.OrdinalIgnoreCase)));
+
+    // LaunchBox.Metadata.db'nin kendi Games.ReleaseType alanı — DAT başlığındaki parantez
+    // etiketlerinden (DatNameParser.ExcludedParenKeywords) BAĞIMSIZ, ikinci bir sinyal: bazı
+    // ROM'lar DAT'ta düz bir isimle geçip LaunchBox'ta eşleşiyor ama LaunchBox'ın kendi küratörlüğü
+    // bunun Homebrew/ROM Hack/Unlicensed/Unreleased/DLC/Early Access olduğunu zaten biliyor.
+    // Kullanıcı kararı: ana listede sadece "Released" görünsün, geri kalanı Junk'a düşsün (veri
+    // kaybı yok, HiddenByDefault=1 — Released/Junk toolbar anahtarıyla hâlâ görülebilir).
+    private static readonly HashSet<string> NonReleasedTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Homebrew", "ROM Hack", "Unlicensed", "Unreleased", "DLC", "Early Access",
+    };
+
+    private static bool IsHiddenByReleaseType(string? releaseType) =>
+        releaseType is not null && NonReleasedTypes.Contains(releaseType);
 
     public static BuildReport Run(BuildOptions options)
     {
@@ -89,7 +103,6 @@ public static class CatalogBuilder
                     game.AlternateNames.AddRange(match.AlternateNames);
                     game.MetadataSourceId = match.MetadataSourceId;
                     game.BoxImageFileName = match.BoxImageFileName;
-                    game.BackgroundImageFileName = match.BackgroundImageFileName;
                     game.ScreenshotImageFileName = match.ScreenshotImageFileName;
                     game.ClearLogoImageFileName = match.ClearLogoImageFileName;
                     game.MatchedMetadata = true;
@@ -108,6 +121,12 @@ public static class CatalogBuilder
                         game.HiddenByDefault = true;
                         report.HiddenByDefaultCount++;
                     }
+
+                    if (IsHiddenByReleaseType(match.ReleaseType))
+                    {
+                        game.HiddenByDefault = true;
+                        report.HiddenByReleaseTypeCount++;
+                    }
                 }
                 else
                 {
@@ -118,6 +137,8 @@ public static class CatalogBuilder
                 }
             }
         }
+
+        games = MergeRegionVariants(games, report);
 
         WriteDatabase(options, games, report);
 
@@ -142,6 +163,65 @@ public static class CatalogBuilder
         report.BuildDuration = stopwatch.Elapsed;
 
         return report;
+    }
+
+    // LaunchBox eşleştirmesinden SONRA çalışır: aynı platformda aynı MetadataSourceId'ye çıkan
+    // (yani LaunchBox'ın zaten aynı oyun saydığı) ayrı CatalogGame'leri TEK oyunda birleştirir.
+    // Bu, VersionResolver.Group'un yakalayamadığı durumu çözer: DAT başlıklarının bölgeye göre
+    // TAMAMEN FARKLI olduğu oyunlar (ör. "Street Fighter Alpha 2" [USA/EU] ile "Street Fighter
+    // Zero 2" [Japan] — CompareTitle'ları farklı olduğu için VersionResolver bunları iki ayrı oyun
+    // sanıyordu, ama LaunchBox ikisinin de aynı DatabaseID'ye bağlı olduğunu zaten biliyor —
+    // GameAlternateTitles üzerinden AlternateName eşleşmesiyle, bkz. LaunchBoxMetadataReader).
+    // Sadece MetadataSourceId'si OLAN (LaunchBox'ta eşleşmiş) oyunlar için çalışır — eşleşmemiş
+    // oyunlar arasında yanlış birleştirme riski yok.
+    private static List<CatalogGame> MergeRegionVariants(List<CatalogGame> games, BuildReport report)
+    {
+        var result = new List<CatalogGame>();
+
+        foreach (var platformGroup in games.GroupBy(g => g.PlatformName, StringComparer.OrdinalIgnoreCase))
+        {
+            foreach (var sourceGroup in platformGroup.GroupBy(g => g.MetadataSourceId))
+            {
+                if (sourceGroup.Key is null || sourceGroup.Count() == 1)
+                {
+                    result.AddRange(sourceGroup);
+                    continue;
+                }
+
+                var merged = sourceGroup.First();
+                foreach (var extra in sourceGroup.Skip(1))
+                {
+                    merged.Versions.AddRange(extra.Versions);
+                    foreach (var altName in extra.AlternateNames)
+                        if (!merged.AlternateNames.Any(a => a.Name.Equals(altName.Name, StringComparison.OrdinalIgnoreCase)))
+                            merged.AlternateNames.Add(altName);
+                    merged.HiddenByDefault |= extra.HiddenByDefault;
+                }
+
+                // Birleşik sürüm listesinden tek bir "tercih edilen" seç — eskiden her alt-grup
+                // kendi içinde birer IsPreferred=true taşıyordu, birleşince hepsi sıfırlanıp
+                // VersionResolver.ResolvePreferred ile AYNI öncelik sırasıyla yeniden hesaplanıyor.
+                foreach (var version in merged.Versions)
+                    version.IsPreferred = false;
+
+                var best = merged.Versions
+                    .OrderBy(v => VersionResolver.RegionRank(v.Regions))
+                    .ThenBy(v => v.RawDatName.Length)
+                    .ThenBy(v => v.RawDatName, StringComparer.OrdinalIgnoreCase)
+                    .FirstOrDefault();
+                if (best is not null)
+                {
+                    best.IsPreferred = true;
+                    merged.Title = best.CleanTitle;
+                    merged.CompareTitle = VersionResolver.NormalizeForCompare(best.CleanTitle);
+                }
+
+                result.Add(merged);
+                report.RegionVariantMergeCount += sourceGroup.Count() - 1;
+            }
+        }
+
+        return result;
     }
 
     private static void WriteDatabase(BuildOptions options, List<CatalogGame> games, BuildReport report)
@@ -310,23 +390,24 @@ public static class CatalogBuilder
                 gameId = GetLastInsertRowId();
             }
 
-            foreach (var alternateName in game.AlternateNames.Distinct(StringComparer.OrdinalIgnoreCase))
+            foreach (var alternateName in game.AlternateNames.DistinctBy(a => a.Name, StringComparer.OrdinalIgnoreCase))
             {
                 using var insertAlternateName = connection.CreateCommand();
                 insertAlternateName.Transaction = transaction;
-                insertAlternateName.CommandText = "INSERT INTO AlternateNames (GameId, Name, Source) VALUES ($gameId, $name, 'LaunchBox')";
+                insertAlternateName.CommandText = "INSERT INTO AlternateNames (GameId, Name, Region, Source) VALUES ($gameId, $name, $region, 'LaunchBox')";
                 insertAlternateName.Parameters.AddWithValue("$gameId", gameId);
-                insertAlternateName.Parameters.AddWithValue("$name", alternateName);
+                insertAlternateName.Parameters.AddWithValue("$name", alternateName.Name);
+                insertAlternateName.Parameters.AddWithValue("$region", string.IsNullOrEmpty(alternateName.Region) ? DBNull.Value : alternateName.Region);
                 insertAlternateName.ExecuteNonQuery();
             }
 
-            // Tür adları grid'in kendi sütun etiketleriyle (Box/BG/Logo/SS) birebir aynı — bu
+            // Tür adları grid'in kendi sütun etiketleriyle (Box/Logo/SS) birebir aynı — bu
             // değer aynı zamanda WPF tarafında klasör adı olarak da kullanılıyor (bkz.
-            // ArtworkService.BuildLocalPath), tek bir isim her yerde geçerli.
+            // ArtworkService.BuildLocalPath), tek bir isim her yerde geçerli. Fanart (BG)
+            // kullanıcı isteğiyle tamamen kaldırıldı (bkz. CatalogSchema.cs yorumu).
             var artworkByType = new (string Type, string? FileName)[]
             {
                 ("Box", game.BoxImageFileName),
-                ("BG", game.BackgroundImageFileName),
                 ("SS", game.ScreenshotImageFileName),
                 ("Logo", game.ClearLogoImageFileName),
             };

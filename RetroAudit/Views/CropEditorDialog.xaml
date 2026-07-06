@@ -2,17 +2,36 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:RetroAudit.ViewModels"
-        Title="Crop Editor" Height="560" Width="640" WindowStartupLocation="CenterOwner"
+        Title="Crop Editor" Height="620" Width="640" WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
 
     <Window.DataContext>
         <vm:CropEditorViewModel />
     </Window.DataContext>
 
+    <Window.Resources>
+        <!-- Köşe tutamaçları: küçük, dolgun kare Thumb'lar — sürüklenince
+             CropEditorDialog.xaml.cs'teki CornerThumb_DragDelta çalışır. -->
+        <Style x:Key="CornerHandle" TargetType="Thumb">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Cursor" Value="SizeNWSE" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Ellipse Fill="{StaticResource Brush.Accent.SelectedBorder}"
+                                 Stroke="White" StrokeThickness="1.5" />
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
     <Grid Background="{StaticResource Brush.Background.Base}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
@@ -41,15 +60,62 @@
             </ListBox>
         </Border>
 
-        <!-- Preview area -->
+        <!-- Preview + kırpma alanı: Image Stretch=Uniform ile Canvas'a tam sığdırılıyor (letterbox
+             olabilir), üzerinde yarı saydam bir "maske" (kırpma alanı dışını karartır) + kırpma
+             dikdörtgeni (gövdesi sürüklenebilir Thumb, 4 köşesi ayrı birer boyutlandırma Thumb'ı)
+             var. Gerçek ölçüm/koordinat dönüşümü CropEditorDialog.xaml.cs'te yapılıyor (bkz.
+             SourceImage_SizeChanged, CropBody_DragDelta, CornerThumb_DragDelta). -->
         <Border Grid.Row="1" Margin="20" Background="{StaticResource Brush.Background.Elevated}"
-                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
-            <TextBlock Text="Görsel Önizleme" HorizontalAlignment="Center" VerticalAlignment="Center"
-                       Foreground="{StaticResource Brush.Text.Secondary}" />
+                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1" ClipToBounds="True">
+            <Canvas x:Name="ImageCanvas" SizeChanged="ImageCanvas_SizeChanged">
+                <Image x:Name="SourceImage" Source="{Binding ImagePath}" Stretch="Uniform" />
+
+                <!-- Kırpma dikdörtgeni gövdesi: yarı saydam dolgu + kesikli çerçeve, sürükleyince
+                     konum değişir (boyut değişmez). -->
+                <Thumb x:Name="CropBody" Canvas.Left="{Binding CropLeft, Mode=OneWay}" Canvas.Top="{Binding CropTop, Mode=OneWay}"
+                       Width="{Binding CropWidth, Mode=OneWay}" Height="{Binding CropHeight, Mode=OneWay}"
+                       Cursor="SizeAll" DragDelta="CropBody_DragDelta">
+                    <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                            <Border Background="#33FFFFFF" BorderBrush="{StaticResource Brush.Accent.SelectedBorder}"
+                                    BorderThickness="2" />
+                        </ControlTemplate>
+                    </Thumb.Template>
+                </Thumb>
+
+                <!-- 4 köşe tutamacı — kırpma dikdörtgeninin tam köşe noktalarında (Thumb'ın kendi
+                     yarı boyutu kadar dışa taşırılmış, tam köşeye ortalansın diye; bkz.
+                     CropEditorViewModel.TopLeftHandleLeft vb. hesaplanmış property'ler). -->
+                <Thumb x:Name="TopLeftHandle" Style="{StaticResource CornerHandle}"
+                       Canvas.Left="{Binding TopLeftHandleLeft, Mode=OneWay}"
+                       Canvas.Top="{Binding TopLeftHandleTop, Mode=OneWay}"
+                       DragDelta="TopLeftHandle_DragDelta" />
+                <Thumb x:Name="TopRightHandle" Style="{StaticResource CornerHandle}"
+                       Canvas.Left="{Binding TopRightHandleLeft, Mode=OneWay}"
+                       Canvas.Top="{Binding TopRightHandleTop, Mode=OneWay}"
+                       DragDelta="TopRightHandle_DragDelta" />
+                <Thumb x:Name="BottomLeftHandle" Style="{StaticResource CornerHandle}"
+                       Canvas.Left="{Binding BottomLeftHandleLeft, Mode=OneWay}"
+                       Canvas.Top="{Binding BottomLeftHandleTop, Mode=OneWay}"
+                       DragDelta="BottomLeftHandle_DragDelta" />
+                <Thumb x:Name="BottomRightHandle" Style="{StaticResource CornerHandle}"
+                       Canvas.Left="{Binding BottomRightHandleLeft, Mode=OneWay}"
+                       Canvas.Top="{Binding BottomRightHandleTop, Mode=OneWay}"
+                       DragDelta="BottomRightHandle_DragDelta" />
+            </Canvas>
+        </Border>
+
+        <!-- Pixel küçültme: kaydedilecek maksimum genişlik. -->
+        <Border Grid.Row="2" Background="{StaticResource Brush.Background.Panel}"
+                BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0" Padding="10,8">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                <TextBlock Text="Maks. Genişlik (pixel küçültme):" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <ComboBox ItemsSource="{Binding MaxWidthOptions}" SelectedItem="{Binding SelectedMaxWidth}" Width="100" />
+            </StackPanel>
         </Border>
 
         <!-- Actions -->
-        <Border Grid.Row="2" Background="{StaticResource Brush.Background.Panel}"
+        <Border Grid.Row="3" Background="{StaticResource Brush.Background.Panel}"
                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0" Padding="10">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Cancel" Command="{Binding CancelCommand}" Width="90" Margin="0,0,8,0" />

@@ -20,12 +20,12 @@ public record MetadataMatch(
     string? WikipediaUrl,
     long? SteamAppId,
     bool? Cooperative,
-    string[] AlternateNames,
+    (string Name, string Region)[] AlternateNames,
     int MetadataSourceId,
     string? BoxImageFileName,
-    string? BackgroundImageFileName,
     string? ScreenshotImageFileName,
-    string? ClearLogoImageFileName);
+    string? ClearLogoImageFileName,
+    string? ReleaseType);
 
 // LaunchBox.Metadata.db'ye salt-okunur (Mode=ReadOnly) erişir. Bu, RetroAudit'in tek seferlik
 // zenginleştirme kaynağıdır — Builder bu dosyayı asla değiştirmez ve çalışma zamanındaki RetroAudit
@@ -83,7 +83,7 @@ public class LaunchBoxMetadataReader : IDisposable
         {
             byCompareName.CommandText =
                 "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
-                "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
+                "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative, ReleaseType " +
                 "FROM Games WHERE Platform = $platform AND CompareName = $compareName LIMIT 1";
             byCompareName.Parameters.AddWithValue("$platform", resolvedPlatform);
             byCompareName.Parameters.AddWithValue("$compareName", compareTitle);
@@ -99,7 +99,7 @@ public class LaunchBoxMetadataReader : IDisposable
         {
             byExactName.CommandText =
                 "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
-                "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
+                "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative, ReleaseType " +
                 "FROM Games WHERE Platform = $platform AND Name = $name LIMIT 1";
             byExactName.Parameters.AddWithValue("$platform", resolvedPlatform);
             byExactName.Parameters.AddWithValue("$name", exactTitle);
@@ -115,7 +115,7 @@ public class LaunchBoxMetadataReader : IDisposable
         {
             byAlternateName.CommandText = """
                 SELECT g.DatabaseID, g.Name, g.Developer, g.Publisher, g.ReleaseYear, g.Overview, g.MaxPlayers, g.Genres,
-                       g.ReleaseDate, g.CommunityRating, g.CommunityRatingCount, g.VideoURL, g.WikipediaURL, g.SteamAppId, g.Cooperative
+                       g.ReleaseDate, g.CommunityRating, g.CommunityRatingCount, g.VideoURL, g.WikipediaURL, g.SteamAppId, g.Cooperative, g.ReleaseType
                 FROM GameAlternateTitles a
                 JOIN Games g ON g.DatabaseID = a.DatabaseID
                 WHERE g.Platform = $platform AND a.AltNameCompareValue = $compareName
@@ -200,7 +200,7 @@ public class LaunchBoxMetadataReader : IDisposable
         using var detail = _connection.CreateCommand();
         detail.CommandText =
             "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
-            "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative " +
+            "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative, ReleaseType " +
             "FROM Games WHERE Platform = $platform AND Name = $name LIMIT 1";
         detail.Parameters.AddWithValue("$platform", resolvedPlatform);
         detail.Parameters.AddWithValue("$name", bestName);
@@ -290,24 +290,25 @@ public class LaunchBoxMetadataReader : IDisposable
             AlternateNames: GetAlternateNames(databaseId),
             MetadataSourceId: databaseId,
             BoxImageFileName: artwork.Box,
-            BackgroundImageFileName: artwork.Background,
             ScreenshotImageFileName: artwork.Screenshot,
-            ClearLogoImageFileName: artwork.ClearLogo);
+            ClearLogoImageFileName: artwork.ClearLogo,
+            ReleaseType: reader.IsDBNull(15) ? null : reader.GetString(15));
     }
 
-    // Görsel türü başına (Box/Background/Screenshot/ClearLogo) en fazla bir dosya adı döner —
-    // bölge önceliği ROM sürüm seçiminde kullanılanla birebir aynı (bkz. VersionResolver.RegionRank:
-    // USA > Europe > World > Japan > diğer). Hiç bölge bilgisi olmayan bir görsel de kabul edilir
-    // (kişisel koleksiyon aracı için "hiç yok"tan iyi). Sonuç doğrudan RetroAudit.db'ye yazılıyor,
-    // çalışma zamanında bu kaynağa bir daha hiç erişilmiyor.
-    private (string? Box, string? Background, string? Screenshot, string? ClearLogo) GetArtwork(int databaseId)
+    // Görsel türü başına (Box/Screenshot/ClearLogo) en fazla bir dosya adı döner — bölge önceliği
+    // ROM sürüm seçiminde kullanılanla birebir aynı (bkz. VersionResolver.RegionRank: USA > Europe
+    // > World > Japan > diğer). Hiç bölge bilgisi olmayan bir görsel de kabul edilir (kişisel
+    // koleksiyon aracı için "hiç yok"tan iyi). Sonuç doğrudan RetroAudit.db'ye yazılıyor, çalışma
+    // zamanında bu kaynağa bir daha hiç erişilmiyor. Fanart (Background) kullanıcı isteğiyle
+    // tamamen kaldırıldı, artık hiç sorgulanmıyor/indirilmiyor.
+    private (string? Box, string? Screenshot, string? ClearLogo) GetArtwork(int databaseId)
     {
         using var cmd = _connection.CreateCommand();
         cmd.CommandText = "SELECT FileName, Type, Region FROM GameImages WHERE DatabaseId = $databaseId " +
-                           "AND Type IN ('Box - Front', 'Fanart - Background', 'Screenshot - Gameplay', 'Clear Logo')";
+                           "AND Type IN ('Box - Front', 'Screenshot - Gameplay', 'Clear Logo')";
         cmd.Parameters.AddWithValue("$databaseId", databaseId);
 
-        string? box = null, background = null, screenshot = null, clearLogo = null;
+        string? box = null, screenshot = null, clearLogo = null;
         var bestRank = new Dictionary<string, int>(StringComparer.Ordinal);
 
         using var reader = cmd.ExecuteReader();
@@ -325,13 +326,12 @@ public class LaunchBoxMetadataReader : IDisposable
             switch (type)
             {
                 case "Box - Front": box = fileName; break;
-                case "Fanart - Background": background = fileName; break;
                 case "Screenshot - Gameplay": screenshot = fileName; break;
                 case "Clear Logo": clearLogo = fileName; break;
             }
         }
 
-        return (box, background, screenshot, clearLogo);
+        return (box, screenshot, clearLogo);
     }
 
     private static int RegionRank(string region)
@@ -343,18 +343,21 @@ public class LaunchBoxMetadataReader : IDisposable
         return 4;
     }
 
-    private string[] GetAlternateNames(int databaseId)
+    // Ekranda ("ALTERNATE NAMES" popup'ı) LaunchBox'ın kendi web sitesindeki gibi her alternatif
+    // ismin yanında hangi bölgeye ait olduğu da gösterildiği için (kullanıcı isteği: "launchbox ın
+    // sitesinde böyle gözüküyor") Region da GameAlternateTitles'tan ayrıca okunuyor.
+    private (string Name, string Region)[] GetAlternateNames(int databaseId)
     {
         using var cmd = _connection.CreateCommand();
-        cmd.CommandText = "SELECT AlternateName FROM GameAlternateTitles WHERE DatabaseID = $databaseId";
+        cmd.CommandText = "SELECT AlternateName, Region FROM GameAlternateTitles WHERE DatabaseID = $databaseId";
         cmd.Parameters.AddWithValue("$databaseId", databaseId);
 
-        var names = new List<string>();
+        var names = new List<(string, string)>();
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
             if (!reader.IsDBNull(0))
-                names.Add(reader.GetString(0));
+                names.Add((reader.GetString(0), reader.IsDBNull(1) ? string.Empty : reader.GetString(1)));
         }
         return names.ToArray();
     }

@@ -99,7 +99,9 @@ public static class VersionResolver
         game.Title = best.CleanTitle;
     }
 
-    private static int RegionRank(string[] regions)
+    // internal: CatalogBuilder.MergeRegionVariants de (birleştirilmiş bir oyunun sürümleri arasından
+    // yeni bir "tercih edilen" seçerken) aynı öncelik sırasını kullanıyor — tek bir yerde tanımlı.
+    internal static int RegionRank(string[] regions)
     {
         if (regions.Contains("USA", StringComparer.OrdinalIgnoreCase)) return 0;
         if (regions.Contains("Europe", StringComparer.OrdinalIgnoreCase)) return 1;
@@ -108,11 +110,35 @@ public static class VersionResolver
         return 4;
     }
 
-    // LaunchBox.Metadata.db'nin kendi CompareName üretim kuralını taklit eder (örneklerle doğrulandı:
-    // "Kirby's Adventure" -> "KIRBYS ADVENTURE" [kesme işareti SİLİNİR, boşluk eklenmez],
-    // "Super Mario All-Stars NES" -> "SUPER MARIO ALL STARS NES" [tire BOŞLUĞA çevrilir]).
-    // Bu yüzden kesme işareti tamamen atılırken diğer tüm noktalama işaretleri boşluğa çevrilir;
-    // birebir aynı algoritma olmayabilir ama gözlemlenen örneklerle eşleşiyor.
+    // "The"/"A"/"An"/"And" gibi bağlaç/tanımlıkları ayrı birer TOKEN olarak (kelime sınırı gözetilerek)
+    // atar — LaunchBox'ın gerçek CompareName üretiminde bu kelimeler her yerde (sadece başlıkta değil,
+    // ":" sonrası alt başlıklarda da) siliniyor. Kısaltmaların içindeki tek harfler (ör. "H.A.W.X"
+    // -> "HAWX") token olarak AYRI SAYILMADIĞI için (nokta zaten aşağıda boşluksuz siliniyor) burada
+    // yanlışlıkla elenmezler.
+    private static readonly HashSet<string> CompareStopWords = new(StringComparer.Ordinal)
+    {
+        "THE", "A", "AN", "AND",
+    };
+
+    // Sadece "X" harfi İÇERMEYEN Roma rakamları (II-VIII / 2-8) rakama çevrilir — LaunchBox
+    // gözlemlerinde IX/X/XI/XII/XIII/XIV/XX hep Roma rakamı olarak KALIYOR (muhtemelen "X" harfi
+    // oyun başlıklarında o kadar yaygın bir stilistik harf ki (Mega Man X, X-Men, Final Fantasy X)
+    // içinde X geçen herhangi bir rakamı çevirmek yanlış pozitif riskini çok artırırdı).
+    private static readonly Dictionary<string, string> CompareRomanNumerals = new(StringComparer.Ordinal)
+    {
+        ["II"] = "2", ["III"] = "3", ["IV"] = "4", ["V"] = "5", ["VI"] = "6", ["VII"] = "7", ["VIII"] = "8",
+    };
+
+    // LaunchBox.Metadata.db'nin kendi CompareName üretim kuralını taklit eder — gerçek LaunchBox
+    // veritabanındaki 183 bin Name/CompareName çiftinin TAMAMI karşılaştırılarak doğrulandı (bkz.
+    // oturum notları): kesme işareti VE nokta (ör. "S.T.A.L.K.E.R." -> "STALKER", "R.C. Pro-Am" ->
+    // "RC PRO AM") boşluksuz silinir; diğer noktalama boşluğa çevrilir; "The"/"A"/"An"/"And" ayrı
+    // birer kelime olarak (başlığın HERHANGİ bir yerinde, sadece başında değil) atılır; sadece "X"
+    // harfi içermeyen Roma rakamları (II-VIII) rakama çevrilir. Bu, örneğin "1943 - The Battle of
+    // Valhalla" (DAT) ile LaunchBox'ın "1943 BATTLE OF VALHALLA" AltNameCompareValue'sinin
+    // eşleşmesini sağlıyor — eski algoritma "The"yi attırmadığı için bu eşleşme SESSİZCE
+    // başarısız oluyordu (kullanıcı tarafından fark edildi: "Valhalla" tabloda ayrı, eşleşmemiş
+    // bir satır olarak duruyordu).
     public static string NormalizeForCompare(string title)
     {
         var sb = new System.Text.StringBuilder();
@@ -120,13 +146,25 @@ public static class VersionResolver
         {
             if (char.IsLetterOrDigit(c))
                 sb.Append(c);
-            else if (c is '\'' or '’')
-                continue; // kesme işareti: sil, boşluk ekleme
+            else if (c is '\'' or '’' or '.')
+                continue; // kesme işareti VE nokta: sil, boşluk ekleme
             else
                 sb.Append(' '); // diğer tüm noktalama: boşluğa çevir
         }
 
-        var collapsed = System.Text.RegularExpressions.Regex.Replace(sb.ToString(), @"\s+", " ").Trim();
-        return collapsed.ToUpperInvariant();
+        var collapsed = System.Text.RegularExpressions.Regex.Replace(sb.ToString(), @"\s+", " ").Trim().ToUpperInvariant();
+        if (collapsed.Length == 0)
+            return collapsed;
+
+        var tokens = collapsed.Split(' ');
+        var result = new List<string>(tokens.Length);
+        foreach (var token in tokens)
+        {
+            if (CompareStopWords.Contains(token))
+                continue;
+            result.Add(CompareRomanNumerals.TryGetValue(token, out var digit) ? digit : token);
+        }
+
+        return string.Join(' ', result);
     }
 }

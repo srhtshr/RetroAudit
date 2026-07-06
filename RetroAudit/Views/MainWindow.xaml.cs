@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -10,7 +11,9 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
+using Microsoft.Web.WebView2.Core;
 using RetroAudit.Models;
+using RetroAudit.Services;
 using RetroAudit.ViewModels;
 
 namespace RetroAudit.Views;
@@ -29,6 +32,12 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, DataGridColumn> _columnsByKey = new();
     private readonly List<string> _pinnedLeftKeys = new();
     private readonly List<string> _pinnedRightKeys = new();
+
+    // Gameplay alanındaki embedded YouTube player'ın sanal host eşlemesi bir kez kurulduktan
+    // sonra tekrar kurulmaya çalışılırsa SetVirtualHostNameToFolderMapping istisna fırlatıyor —
+    // bu yüzden sadece ilk PlayYouTubeEmbedAsync çağrısında kuruluyor (bkz. o metot).
+    private bool _youTubeVirtualHostMapped;
+    private const string YouTubeVirtualHost = "retroaudit.embed";
 
     public MainWindow()
     {
@@ -55,12 +64,53 @@ public partial class MainWindow : Window
         // ViewModel sadece bir olay (event) tetikliyor, gerçek "new Window().Show()" çağrısı burada.
         if (DataContext is MainViewModel vm)
         {
+            // Gameplay screenshot alanındaki embedded YouTube player (bkz. MainWindow.xaml
+            // Grid.Row="4", YouTubePlayer). WebView2.Navigate imperatif bir çağrı olduğu için
+            // saf XAML binding ile ifade edilemiyor — MainViewModel.IsPlayingVideo değişince
+            // burada gerçek navigasyon/durdurma yapılıyor.
+            vm.PropertyChanged += async (_, e) =>
+            {
+                if (e.PropertyName != nameof(MainViewModel.IsPlayingVideo))
+                    return;
+
+                if (vm.IsPlayingVideo)
+                    await PlayYouTubeEmbedAsync(vm.SelectedGame);
+                else
+                    StopYouTubeEmbed();
+            };
+
             vm.RequestOpenMediaProvider += () => new MediaProviderWindow { Owner = this }.Show();
             vm.RequestOpenCropEditor += () => new CropEditorDialog { Owner = this }.ShowDialog();
             vm.RequestOpenSettings += () =>
             {
                 var settingsWindow = new SettingsWindow { Owner = this };
-                settingsWindow.Closed += (_, _) => vm.ReloadAppSettings();
+
+                // Ayarlar penceresi açıkken yapılan her değişikliği (Kaydet'e basmadan) canlı
+                // olarak ana pencereye yansıtır — kullanıcı isteği: "değişikliklerin yansımasını
+                // live yap". Kategori görünürlüğü checkbox'ları SettingsViewModel'in kendi
+                // property'si değil, CategoryOptions koleksiyonundaki ayrı öğeler olduğu için
+                // ayrıca dinleniyor.
+                if (settingsWindow.DataContext is SettingsViewModel settingsVm)
+                {
+                    settingsVm.PropertyChanged += (_, _) => vm.ApplyLiveSettings(settingsVm);
+                    foreach (var option in settingsVm.CategoryOptions)
+                        option.PropertyChanged += (_, _) => vm.ApplyLiveSettings(settingsVm);
+                }
+
+                // "Kaydet" sonrası MessageBox.Show(this /* SettingsWindow */, ...) ile gösterilen
+                // "Ayarlar kaydedildi." bilgi kutusu kapatılıp ardından Ayarlar penceresi X ile
+                // kapatılınca, WindowChrome tabanlı özel başlık çubuğu (bkz. DarkTitleBarHelper)
+                // ile sahip (Owner) zincirindeki bir etkileşim yüzünden MainWindow bazen
+                // aktifleşmek yerine simge durumuna küçülüyor/arkada kalıyor (kullanıcı: "çarpıya
+                // basınca minimize yapıyor"). Kapanışta MainWindow'u açıkça eski haline getirip
+                // öne almak bunu güvenilir şekilde düzeltiyor.
+                settingsWindow.Closed += (_, _) =>
+                {
+                    vm.ReloadAppSettings();
+                    if (WindowState == WindowState.Minimized)
+                        WindowState = WindowState.Normal;
+                    Activate();
+                };
                 settingsWindow.Show();
             };
             vm.RequestPermanentDeleteConfirmation += game =>
@@ -78,6 +128,14 @@ public partial class MainWindow : Window
                     vm.ApplyFilter(); // Title/Genre/... ObservableProperty değil, satırı tazelemek gerekiyor
             };
             vm.RequestShowMessage += message => MessageBox.Show(message, "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
+
+            // "Görsel Getir" öncesi hangi türlerin (Box/Clear Logo/Gameplay) indirileceğini
+            // sorar (kullanıcı isteği) — iptal edilirse null döner, indirme hiç başlamaz.
+            vm.RequestArtworkTypeSelection += () =>
+            {
+                var dialog = new ArtworkTypeSelectionDialog { Owner = this };
+                return dialog.ShowDialog() == true ? dialog.SelectedTypes : null;
+            };
 
             // Uygulama içi (embedded) ROM arama penceresi — kullanıcı tamamen kendi kontrolünde
             // geziniyor, pencerenin tek otomasyonu WebView2'nin resmi DownloadStarting olayı
@@ -260,12 +318,140 @@ public partial class MainWindow : Window
             vm.LaunchVersionCommand.Execute(version);
     }
 
+    // Sürümler (Region) tek-kart popup'ındaki listede bir karta TEK tıklanınca (bkz. MainWindow.xaml
+    // OtherVersionCards ListBox'ı) o sürümü tek-kart alanına taşır, popup'ı kapatır. Çift tık zaten
+    // VersionsList_MouseDoubleClick ile doğrudan başlatıyor (aynı ListBox'a her ikisi de bağlı).
+    private void OtherVersionsList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        if (sender is ListBox { SelectedItem: GameVersion version })
+            vm.SelectVersionCardCommand.Execute(version);
+    }
+
     // Detay panelindeki platform logosu rozetine tıklanınca o platformun ROM klasörünü açar
     // (bkz. MainWindow.xaml Border.MouseLeftButtonDown, MainViewModel.OpenPlatformFolderCommand).
     private void PlatformLogoBadge_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (DataContext is MainViewModel { SelectedGame: { } game } vm)
             vm.OpenPlatformFolderCommand.Execute(game);
+    }
+
+    // Detay panelindeki Box art'a sol tıklanınca (kullanıcı isteği: "kapağa sol tık ... media
+    // provider tool u açar kırpma kesme pixel küçültme işleri yapılır ordan") gerçek Crop Editor'ü
+    // açar — SADECE gerçek bir Box art varsa (HasBox=false ise gösterilen Images/NoImage/Cover.png
+    // paylaşılan bir yer tutucu dosya, onu kırpmak tüm oyunları etkiler, bu yüzden hiçbir şey
+    // yapılmaz). Kaydetme başarılı olursa (bkz. CropEditorViewModel.Saved) Game.
+    // RefreshImageDisplayPaths ile detay paneli restart olmadan yeni (kırpılmış) görseli gösterir.
+    private void BoxArt_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainViewModel { SelectedGame: { HasBox: true } game })
+            return;
+
+        OpenCropEditor(game.BoxPath, game);
+    }
+
+    // Clear Logo için aynı davranış (kullanıcı isteği: "clear logo içinde aynı şekilde").
+    private void ClearLogo_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainViewModel { SelectedGame: { HasClearLogo: true } game })
+            return;
+
+        OpenCropEditor(game.ClearLogoPath, game);
+    }
+
+    private void OpenCropEditor(string imagePath, Game game)
+    {
+        var dialog = new CropEditorDialog { Owner = this };
+        dialog.LoadImage(imagePath);
+        if (dialog.DataContext is CropEditorViewModel vm)
+            vm.Saved += game.RefreshImageDisplayPaths;
+        dialog.ShowDialog();
+    }
+
+    // player.html + Plyr (plyr.css/plyr.js) STATİK dosyalar (bkz. AppPaths.YouTubePlayerAssets,
+    // RetroAudit/Assets/YouTubePlayer/) — SetVirtualHostNameToFolderMapping ile "https://retroaudit.embed/"
+    // sanal adresi altında sunuluyor. YouTube'un embed doğrulaması gerçek (biçimsel) bir https
+    // origin'i şart koşuyor, "null" origin'e (ör. NavigateToString) "Hata 153" ile reddediyor.
+    // Plyr, YouTube'un kendi arayüzünü (başlık/kanal logosu/öneriler) tamamen kaldırıp kendi sade
+    // kontrollerini gösteriyor (kullanıcı isteği). Video ID'si player.html'e ?v= query string'iyle
+    // geçiliyor (bkz. Navigate çağrısı aşağıda).
+    //
+    // Chromium'un varsayılan autoplay politikası sesli oynatma için gerçek bir DOM tıklaması
+    // şartı koşuyor; Play overlay'imiz WebView2'nin DOM'u dışında bir WPF Button olduğu için bu
+    // şart hiç karşılanmıyordu. --autoplay-policy=no-user-gesture-required bu şartı tarayıcı
+    // seviyesinde kaldırıyor. Ayrı bir UserDataFolder kullanılıyor ki bu özel argüman
+    // RomSearchWindow'un kendi (varsayılan ortamlı) WebView2'siyle çakışmasın — aynı user data
+    // folder'ı paylaşan WebView2'ler aynı tarayıcı sürecini (ve argümanlarını) paylaşmak zorunda.
+    private CoreWebView2Environment? _youTubeWebViewEnvironment;
+
+    private async Task<CoreWebView2Environment> GetYouTubeEnvironmentAsync()
+    {
+        if (_youTubeWebViewEnvironment is not null)
+            return _youTubeWebViewEnvironment;
+
+        var userDataFolder = Path.Combine(Path.GetTempPath(), "RetroAudit", "YouTubePlayerWebView2");
+        var options = new CoreWebView2EnvironmentOptions
+        {
+            AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required",
+        };
+        _youTubeWebViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
+        return _youTubeWebViewEnvironment;
+    }
+
+    // Gameplay screenshot alanındaki embedded YouTube player (bkz. MainWindow.xaml
+    // Grid.Row="4", YouTubePlayer, MainViewModel.IsPlayingVideo/PlayVideoCommand). Video
+    // İNDİRİLMİYOR — WebView2 sadece youtube.com/embed/... adresini gösteriyor (kullanıcı
+    // isteği: "sadece YouTube embed olarak oynatılacak").
+    private async Task PlayYouTubeEmbedAsync(Game? game)
+    {
+        if (game?.YouTubeVideoId is not { } videoId)
+            return;
+
+        try
+        {
+            var environment = await GetYouTubeEnvironmentAsync();
+            await YouTubePlayer.EnsureCoreWebView2Async(environment);
+        }
+        catch
+        {
+            // WebView2 Runtime kurulu değilse: gameplay alanı boş kalmasın diye "Open on
+            // YouTube" fallback'i tetikle (bkz. MainViewModel.VideoEmbedFailed).
+            if (DataContext is MainViewModel vm)
+                vm.VideoEmbedFailed = true;
+            return;
+        }
+
+        if (!_youTubeVirtualHostMapped)
+        {
+            YouTubePlayer.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                YouTubeVirtualHost, AppPaths.YouTubePlayerAssets, CoreWebView2HostResourceAccessKind.Allow);
+            _youTubeVirtualHostMapped = true;
+        }
+
+        YouTubePlayer.CoreWebView2.NavigationCompleted -= YouTubePlayer_NavigationCompleted;
+        YouTubePlayer.CoreWebView2.NavigationCompleted += YouTubePlayer_NavigationCompleted;
+        YouTubePlayer.CoreWebView2.Navigate($"https://{YouTubeVirtualHost}/player.html?v={videoId}");
+    }
+
+    // Sadece SARMALAYICI player.html sayfasının kendisi yüklenemezse (iframe değil) fallback
+    // gösterilir. İçindeki YouTube iframe'inin kendi hatalarını (video kaldırılmış/bölge kısıtlı
+    // gibi) bu olay yakalamıyor — kabul edilen bir sınırlama, o durumda kullanıcı sadece siyah/boş
+    // bir oynatıcı görür.
+    private void YouTubePlayer_NavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm)
+            vm.VideoEmbedFailed = !e.IsSuccess;
+    }
+
+    // Kapat butonuna basılınca VEYA başka bir oyun seçilince (bkz. MainViewModel.OnSelectedGameChanged)
+    // çağrılır. Sadece WebView2'yi gizlemek yetmez — video sesi/oynatması Visibility=Collapsed
+    // olsa bile arka planda devam eder, bu yüzden about:blank'e navigasyon ile gerçekten durduruluyor.
+    private void StopYouTubeEmbed()
+    {
+        if (YouTubePlayer.CoreWebView2 is not null)
+            YouTubePlayer.CoreWebView2.Navigate("about:blank");
     }
 
     // VersionsList'in kendi iç kaydırması bilinçli olarak kapalı (bkz. MainWindow.xaml
@@ -401,7 +587,6 @@ public partial class MainWindow : Window
             ["Actions"] = ActionsColumn,
             ["Title"] = TitleColumn,
             ["Box"] = BoxColumn,
-            ["Background"] = BackgroundColumn,
             ["Screenshot"] = ScreenshotColumn,
             ["File"] = FileColumn,
             ["Platform"] = PlatformColumn,
@@ -464,6 +649,45 @@ public partial class MainWindow : Window
     private void PinColumnLeft_Click(object sender, RoutedEventArgs e) => PinColumn(true);
     private void PinColumnRight_Click(object sender, RoutedEventArgs e) => PinColumn(false);
     private void UnpinColumn_Click(object sender, RoutedEventArgs e) => PinColumn(null);
+
+    // Detay panelindeki Tür rozeti (bkz. XAML): tek türü olan bir oyunda tıklama doğrudan o türe
+    // göre filtreler; birden fazla türü olan bir oyunda ise Button.ContextMenu'yü (XAML'de tanımlı,
+    // her tür için bir MenuItem) manuel açar. ContextMenu normalde sadece sağ tıkta kendiliğinden
+    // açıldığı için buradaki asıl amaç SOL tıkla da (rozete "tıklamak" doğal beklenti) açılmasını
+    // sağlamak — PlacementTarget'ı burada set etmek şart, XAML'deki bindingler (PlacementTarget.
+    // DataContext...) buna bağlı.
+    private void GenreBadge_Click(object sender, RoutedEventArgs e)
+    {
+        var button = (Button)sender;
+        if (button.DataContext is not MainViewModel { SelectedGame: { } game } vm)
+            return;
+
+        if (game.HasMultipleGenres)
+        {
+            if (button.ContextMenu is { } menu)
+            {
+                menu.PlacementTarget = button;
+                menu.IsOpen = true;
+            }
+        }
+        else
+        {
+            vm.FilterByGenreTokenCommand.Execute(game.PrimaryGenre);
+        }
+    }
+
+    // ALTERNATE NAMES bölümündeki "▾ diğerleri" düğmesi (bkz. XAML) — ilk 2'nin ötesindeki
+    // alternatif isimleri listeleyen ContextMenu'yü açar (2 satır sınırının üzerinde her zaman
+    // en az 1 öğe olduğu için burada tek/çoklu ayrımı yok, her tıklama menüyü açar).
+    private void AlternateNamesOverflowToggle_Click(object sender, RoutedEventArgs e)
+    {
+        var button = (Button)sender;
+        if (button.ContextMenu is { } menu)
+        {
+            menu.PlacementTarget = button;
+            menu.IsOpen = true;
+        }
+    }
 
     // Kullanıcı bir sütun başlığını sürükleyip bırakarak sırasını değiştirdiğinde (pinleme dışı, düz
     // sürükle-bırak) tetiklenir — tam sırayı diske yazar (bkz. AppSettings.ColumnOrder). Bu olmadan

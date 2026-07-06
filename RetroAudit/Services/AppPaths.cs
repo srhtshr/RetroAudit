@@ -29,6 +29,17 @@ public static class AppPaths
     // eagerly oluşturulmuyor, Games/Images/Metadata/Emulation'ın aksine.
     public static string NoImageCover { get; } = Path.Combine(Images, "NoImage", "Cover.png");
     public static string NoImageBackground { get; } = Path.Combine(Images, "NoImage", "Background.png");
+    public static string NoImageLogo { get; } = Path.Combine(Images, "NoImage", "Logo.png");
+
+    // LaunchBox'ın gamesdb.launchbox-app.com/img/flags/ kaynağından indirilen region/dil bayrakları
+    // (bkz. FlagResolver) — Images/Flags altında elle eklenmiş hazır dosyalar, diğer NoImage*
+    // gibi burada eagerly oluşturulmuyor.
+    public static string Flags { get; } = Path.Combine(Images, "Flags");
+
+    // Gameplay ekranındaki embedded YouTube oynatıcısının statik dosyaları (player.html + Plyr
+    // kütüphanesi, bkz. MainWindow.xaml.cs PlayYouTubeEmbedAsync) — repoyla birlikte gelen,
+    // hiç değişmeyen dosyalar, NoImage*/Flags gibi burada eagerly oluşturulmuyor.
+    public static string YouTubePlayerAssets { get; } = Path.Combine(Root, "Assets", "YouTubePlayer");
 
     static AppPaths()
     {

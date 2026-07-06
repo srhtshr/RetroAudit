@@ -89,7 +89,7 @@ public static class CatalogSchema
         -- "hangi görsel mevcut" bilgisini taşır, gerçek görsel verisini asla içermez.
         CREATE TABLE ArtworkAssets (
             GameId INTEGER NOT NULL REFERENCES Games(GameId),
-            Type TEXT NOT NULL, -- 'Box' | 'Background' | 'Screenshot' | 'ClearLogo'
+            Type TEXT NOT NULL, -- 'Box' | 'Screenshot' | 'ClearLogo' (Fanart/Background kaldırıldı)
             FileName TEXT NOT NULL,
             PRIMARY KEY (GameId, Type)
         );
@@ -98,6 +98,7 @@ public static class CatalogSchema
             AlternateNameId INTEGER PRIMARY KEY AUTOINCREMENT,
             GameId INTEGER NOT NULL REFERENCES Games(GameId),
             Name TEXT NOT NULL,
+            Region TEXT,
             Source TEXT
         );
 

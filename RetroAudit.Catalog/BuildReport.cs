@@ -29,10 +29,21 @@ public class BuildReport
     public int PreferredVersionMissing { get; set; }
     public int DuplicateHashCollisions { get; set; }
 
+    // Farklı DAT başlıkları (ör. "Street Fighter Alpha 2" / "Street Fighter Zero 2") ama aynı
+    // LaunchBox MetadataSourceId'sine sahip olduğu için tek oyunda birleştirilen kayıt sayısı
+    // (bkz. CatalogBuilder.MergeRegionVariants). Birleşen HER FAZLA kayıt sayılır — 3 kaydın
+    // birleşmesi bu sayacı 2 artırır (3 kayıt -> 1 oyun).
+    public int RegionVariantMergeCount { get; set; }
+
     // Casino/Gambling/Mahjong/Pachinko/Pachislot/Quiz/Board Game/Tabletop/Card Game/Educational
     // türlerinden biriyle eşleşen ve bu yüzden Games.HiddenByDefault=1 yazılan oyun sayısı —
     // satırlar silinmiyor, sadece WPF'in varsayılan ana listesinde gizleniyor.
     public int HiddenByDefaultCount { get; set; }
+
+    // LaunchBox.Metadata.db'nin kendi Games.ReleaseType alanı Homebrew/ROM Hack/Unlicensed/
+    // Unreleased/DLC/Early Access dediği için Games.HiddenByDefault=1 yazılan oyun sayısı —
+    // bkz. CatalogBuilder.IsHiddenByReleaseType. Bu da HiddenByDefaultCount gibi veri kaybı değil.
+    public int HiddenByReleaseTypeCount { get; set; }
     public List<string> SkippedDatFiles { get; } = new();
 
     // Platformun TAMAMI LaunchBox'ta hiç tanınamadı (isim eşleşmesi yok) — tek tek oyunların
@@ -75,6 +86,8 @@ public class BuildReport
         sb.AppendLine($"Preferred version missing:  {PreferredVersionMissing}");
         sb.AppendLine($"Duplicate hash collisions:  {DuplicateHashCollisions}");
         sb.AppendLine($"Hidden by default (genre):  {HiddenByDefaultCount}");
+        sb.AppendLine($"Hidden by default (release type): {HiddenByReleaseTypeCount}");
+        sb.AppendLine($"Region variants merged:     {RegionVariantMergeCount}");
 
         sb.AppendLine("Games by source:");
         foreach (var (source, count) in GamesBySource.OrderByDescending(kv => kv.Value))

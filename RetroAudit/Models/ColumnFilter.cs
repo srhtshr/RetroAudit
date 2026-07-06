@@ -52,6 +52,13 @@ public partial class ColumnFilterViewModel : ObservableObject
 
     public event Action? FilterChanged;
 
+    // Popup her açılmadan HEMEN önce (bkz. Open) tetiklenir — MainViewModel bunu dinleyip
+    // Options'taki değer/sayıları GÜNCEL kapsama (seçili chip/platform/arama) göre yeniden
+    // hesaplıyor. Önceden Options sadece uygulama açılışında, TÜM kütüphaneden bir kere
+    // kuruluyordu; bir playlist/chip içindeyken (ör. "Top 25") filtre hâlâ tüm kütüphanenin
+    // sayılarını gösteriyordu (kullanıcı geri bildirimi: "playliste göre vermiyor sayıları").
+    public event Action? RequestRefreshOptions;
+
     public HashSet<string> SelectedValues => Options.Where(o => o.IsChecked).Select(o => o.Value).ToHashSet();
 
     // Alttaki düğmenin o anki etiketi/işlevi: tüm değerler işaretliyse "Temizle" (hepsini
@@ -132,6 +139,8 @@ public partial class ColumnFilterViewModel : ObservableObject
     [RelayCommand]
     private void Open()
     {
+        if (!IsSearchOnly)
+            RequestRefreshOptions?.Invoke();
         _snapshotChecked = Options.Where(o => o.IsChecked).Select(o => o.Value).ToHashSet();
         if (!IsSearchOnly)
             SearchText = string.Empty;

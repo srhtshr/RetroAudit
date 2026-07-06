@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="plyr.css">
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #000; height: 100%; }
+
+  /* Dış kapsayıcı: taşan (scale edilmiş) iframe'i görünmez şekilde kırpar. */
+  .plyr, .plyr__video-wrapper, .plyr__video-embed {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  /* Plyr'ın KENDİ stil dosyası (plyr.css), ".plyr--full-ui .plyr__video-embed__container" için
+     kendi zoom'unu (padding-bottom:240% + transform:translateY(-38.28%) — Plyr'ın YouTube
+     markasını gizleme yöntemi) bağımsız olarak uyguluyor; aşağıdaki kendi kırpma yöntemimizle
+     çakışmaması için burada nötrleniyor. */
+  .plyr__video-embed__container {
+    padding-bottom: 0 !important;
+    transform: none !important;
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  /* Kullanıcı kararı: YouTube'un logosunu/başlığını GİZLEMEYE çalışmıyoruz artık (dikey scale
+     ile "üst hiç kırpılmasın" VE "alt hiç kaybolmasın" aynı anda sağlanamıyordu — sabit
+     yükseklikte dikey büyütmenin taşması matematiksel olarak ya üstten ya alttan ya da
+     ikisinden birden olmak ZORUNDA). Burada SADECE yan pillarbox bantlarını (4:3 video / daha
+     geniş çerçeve) kapatmak için YATAYDA (scaleX) geriyoruz — dikeyde hiç büyütme yok, üst VE
+     alt %100 korunuyor, hiç kırpılmıyor. */
+  .plyr__video-embed iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    transform: scaleX(1.45);
+    transform-origin: center;
+  }
+</style>
+</head>
+<body>
+<div id="player" data-plyr-provider="youtube" data-plyr-embed-id=""></div>
+<script src="plyr.js"></script>
+<script>
+  var id = new URLSearchParams(location.search).get('v');
+  var el = document.getElementById('player');
+  el.setAttribute('data-plyr-embed-id', id);
+
+  new Plyr('#player', {
+    autoplay: true,
+    clickToPlay: true,
+    // start: 60 -> video 1. dakikadan başlar (kullanıcı isteği: genelde ilk saniyeler
+    // logo/intro içerdiği için oynanışın gerçekten başladığı yerden açılsın).
+    youtube: { rel: 0, modestbranding: 1, iv_load_policy: 3, start: 60 },
+  });
+</script>
+</body>
+</html>

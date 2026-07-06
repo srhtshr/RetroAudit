@@ -60,14 +60,13 @@ public class CatalogGame
     // bu kaynağa bir daha erişilmiyor; sadece Builder'ın kendi görsel araması için gerekli.
     public int? MetadataSourceId { get; set; }
     public string? BoxImageFileName { get; set; }
-    public string? BackgroundImageFileName { get; set; }
     public string? ScreenshotImageFileName { get; set; }
     public string? ClearLogoImageFileName { get; set; }
 
     // Eşleştirmede kullanılan AltNameCompareValue'dan farklı olarak burada GÖRÜNTÜLENEBİLİR
-    // isimler tutulur (bkz. AlternateNames tablosu, CatalogSchema.cs) — şu an için sadece
-    // saklanıyor, henüz bir UI ekranı yok.
-    public List<string> AlternateNames { get; } = new();
+    // isimler + bölgeleri tutulur (bkz. AlternateNames tablosu, CatalogSchema.cs) — sağ paneldeki
+    // başlığa tıklanınca açılan "ALTERNATE NAMES" menüsünde gösteriliyor.
+    public List<(string Name, string Region)> AlternateNames { get; } = new();
 
     // Eşleşmenin nasıl bulunduğu (CompareName/ExactName/AlternateName/Fuzzy) ve ne kadar güvenilir
     // olduğu (1.0 = kesin, <1.0 = fuzzy benzerlik oranı). NeedsReview, Confidence

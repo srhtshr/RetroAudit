@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.20)
+## Mevcut durum (v0.21)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
@@ -19,9 +19,13 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 - Favori/Ara-Başlat birleşik **Actions** sütunu ve her zaman en solda sabit ayrı bir **Gizle** sütunu; playlist chip şeridinde Favorites/Hidden/Recycle Bin'in yanında **Ready to Play** / **Needs Search** hızlı filtreleri.
 - ROM'u eksik bir oyun için tabloda doğrudan **uygulama içi (WebView2) arama penceresi** açılıyor; kullanıcının başlattığı indirme otomatik olarak oyunun platform klasörüne iniyor. Kendi ROM arşivinizi (farklı bir klasör düzeninde) **toplu içe aktarma** penceresiyle tarayıp Taşı/Kopyala/Referans modlarından biriyle (opsiyonel CRC32 doğrulamayla) tek seferde ekleyebilirsiniz.
 - LaunchBox'tan Release Date, Topluluk Puanı (+ oy sayısı), YouTube/Wikipedia bağlantıları, Steam App ID ve Cooperative bilgisi de okunup detay panelinde gösteriliyor.
-- **Görsel Getir**: eksik Box/Background/Screenshot/Clear Logo görselleri tekli veya toplu olarak indirilip yerel `Images\` klasörüne yazılıyor (otomatik küçültme + sıkıştırma, Ayarlar'dan boyut seçilebilir). Platform logoları sol panelde değil, detay panelinde (tıklanınca ROM klasörünü açan bir rozet olarak) gösteriliyor.
+- **Görsel Getir**: eksik Box/Screenshot/Clear Logo görselleri tekli veya toplu olarak indirilip yerel `Images\` klasörüne yazılıyor (otomatik küçültme + sıkıştırma, Ayarlar'dan boyut seçilebilir). Fanart/Background artwork türü tamamen kaldırıldı. Platform logoları sol panelde değil, detay panelinde (tıklanınca ROM klasörünü açan bir rozet olarak) gösteriliyor.
+- **Kırpma/yeniden boyutlandırma**: Box art ve Clear Logo'ya sol tıklayınca gerçek bir kırpma editörü açılıyor (sürüklenebilir kırpma dikdörtgeni, isteğe bağlı en-boy kilidi, piksel küçültme seçenekleri); sağ tık ile o görselin dosya konumu açılabiliyor.
 - **Top 250 / Top 100 / Top 25**: her platform için LaunchBox oy sayısına göre ağırlıklandırılmış (IMDb tarzı) sıralama; playlist chip'i olarak filtrelenebiliyor, uygun oyunlarda detay panelinde rozet olarak görünüyor.
-- Sağ detay paneli: başlık + YouTube/Wikipedia ikon butonları üstte, altında Clear Logo, fanart üzerinde platform rozeti + Topluluk Puanı, görseli olmayan alanlar için sabit yer tutucular. Panel genişliği sabit — sadece toolbar düğmesiyle açılıp kapanıyor, bir oyun seçilene kadar gizli.
+- Sağ detay paneli: başlık + YouTube/Wikipedia ikon butonları üstte, altında Clear Logo, gameplay screenshot alanının altında Topluluk Puanı, görseli olmayan alanlar için sabit yer tutucular. Panel genişliği sabit — sadece toolbar düğmesiyle açılıp kapanıyor, bir oyun seçilene kadar gizli.
+- **Embedded YouTube oynatıcı**: bir oyunun YouTube linki varsa gameplay screenshot alanında bir Play overlay'i beliriyor; tıklanınca dış tarayıcı AÇILMADAN aynı alanda (WebView2 + Plyr.io) video oynatılıyor, kapat butonuna basılınca veya başka oyun seçilince otomatik duruyor.
+- Bölge/ülke bayrakları (LaunchBox kaynaklı) tabloda Region sütununda, Sürümler kartlarında ve Alternate Names satırlarında gösteriliyor; Region sütununun görünümü (Bayrak+Text/Text+Bayrak/Sadece Bayrak/Sadece Text) Ayarlar > Arayüz'den seçilebiliyor.
+- Ayarlar penceresindeki değişiklikler artık **canlı** yansıyor (Kaydet'e basmadan ana pencerede anında görünüyor); Kaydet hâlâ sadece diske kalıcı yazmak için gerekli.
 - Sağ tık ile açılan kapsül biçimli komut menüsü (Ayarlar > Arayüz'den İkon / İkon+Metin seçilebilir): Sil (önce çöp kutusuna taşır), Gizle, Metadata Düzenle, Dosya Konumunu Aç, Web'de Ara, Sürüm listesinden "Preferred yap", Metadata'yı Yeniden Eşleştir. Çoklu seçimde sadece çakışmayan toplu eylemler (favori/gizle/sil/playlist) gösterilir.
 - Kullanıcının oluşturduğu sınırsız playlist + sabit Favorites/Hidden/Recycle Bin, tümü tablonun üstünde tıklanabilir chip/etiket olarak.
 - Sağ detay panelinde seçili oyunun tüm sürümleri (bölge/kaynak/hash) ve tercih edilen sürümü değiştirme; Ayarlar > Emülatörler'de platform başına tanımlanan emülatörle BAŞLAT butonu üzerinden doğrudan oynatma.
@@ -49,9 +53,9 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 dotnet run --project RetroAudit.Builder -- --dat-folder "<DAT klasörü yolu>" --launchbox-db "<LaunchBox.Metadata.db yolu>"
 ```
 
-Argümanlar verilmezse Builder bu makinedeki varsayılan yolları dener; `--platform "Nintendo - Nintendo Entertainment System"` ile tek platform, `--output <yol>` ile çıktı konumu override edilebilir. Varsayılan çıktı `%LOCALAPPDATA%\RetroAudit\RetroAudit.db`.
+Argümanlar verilmezse Builder bu makinedeki varsayılan yolları dener; `--platform "Nintendo - Nintendo Entertainment System"` ile tek platform, `--output <yol>` ile çıktı konumu override edilebilir. Varsayılan çıktı, taşınabilir veri düzeni gereği WPF uygulamasının kendi `.exe`'sinin yanındaki `Metadata\RetroAudit.db` (bkz. `AppPaths`).
 
-Sonra WPF uygulamasını çalıştır (aynı `%LOCALAPPDATA%\RetroAudit\RetroAudit.db`'yi okur):
+Sonra WPF uygulamasını çalıştır (aynı `Metadata\RetroAudit.db`'yi okur):
 
 ```bash
 dotnet build

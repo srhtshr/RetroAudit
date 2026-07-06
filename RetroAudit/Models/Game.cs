@@ -57,21 +57,20 @@ public partial class Game : ObservableObject
     private string boxPath = string.Empty;
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasBackground))]
-    [NotifyPropertyChangedFor(nameof(BackgroundDisplayPath))]
-    private string backgroundPath = string.Empty;
-
-    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasScreenshot))]
     [NotifyPropertyChangedFor(nameof(ScreenshotDisplayPath))]
+    [NotifyPropertyChangedFor(nameof(ClearLogoDisplayPath))]
+    [NotifyPropertyChangedFor(nameof(ShowClearLogoArea))]
     private string screenshotPath = string.Empty;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasClearLogo))]
+    [NotifyPropertyChangedFor(nameof(ClearLogoDisplayPath))]
+    [NotifyPropertyChangedFor(nameof(ClearLogoThumbnailPath))]
+    [NotifyPropertyChangedFor(nameof(ShowClearLogoArea))]
     private string clearLogoPath = string.Empty;
 
     public bool HasBox => !string.IsNullOrWhiteSpace(BoxPath);
-    public bool HasBackground => !string.IsNullOrWhiteSpace(BackgroundPath);
     public bool HasScreenshot => !string.IsNullOrWhiteSpace(ScreenshotPath);
     public bool HasClearLogo => !string.IsNullOrWhiteSpace(ClearLogoPath);
 
@@ -80,8 +79,34 @@ public partial class Game : ObservableObject
     // alanlar SADECE görüntüleme amaçlı: görsel yoksa Images/NoImage altındaki sabit yer
     // tutucuya düşer (bkz. AppPaths.NoImageCover/NoImageBackground).
     public string BoxDisplayPath => HasBox ? BoxPath : AppPaths.NoImageCover;
-    public string BackgroundDisplayPath => HasBackground ? BackgroundPath : AppPaths.NoImageBackground;
     public string ScreenshotDisplayPath => HasScreenshot ? ScreenshotPath : AppPaths.NoImageBackground;
+
+    // Kullanıcı isteği (düzeltildi — "clearlogosunu indirdim var ama background.png'yi
+    // gösteriyor... karıştırdın heralde"): Clear Logo VARSA gameplay olsun ya da olmasın HER ZAMAN
+    // gerçek Clear Logo gösterilir. Yoksa: gameplay varsa Logo.png, gameplay de yoksa alan
+    // tamamen gizlenir (bkz. ShowClearLogoArea).
+    public bool ShowClearLogoArea => HasScreenshot || HasClearLogo;
+
+    public string ClearLogoDisplayPath => HasClearLogo
+        ? ClearLogoPath
+        : (HasScreenshot ? AppPaths.NoImageLogo : AppPaths.NoImageBackground);
+
+    // Tablodaki (DataGrid) Logo sütunu için — detay panelindeki ClearLogoDisplayPath'in aksine
+    // gameplay'e bağlı değil (kullanıcı isteği: "tabloda clear logosu olmayanlarda da bizim
+    // logo.png gözükecek"): sadece gerçek logo var mı yok mu, yoksa her zaman Logo.png.
+    public string ClearLogoThumbnailPath => HasClearLogo ? ClearLogoPath : AppPaths.NoImageLogo;
+
+    // Crop Editor'da kırpıp AYNI dosya yoluna kaydettikten sonra çağrılır (bkz. MainWindow.xaml.cs
+    // BoxArt/ClearLogo click handler'ları, CropEditorViewModel.Saved) — path'in KENDİSİ
+    // değişmediği için [ObservableProperty]'nin ürettiği setter hiçbir şey yapmaz (eşit değer,
+    // PropertyChanged tetiklenmez); ThumbnailImageConverter.Invalidate zaten çağrıldığı için burada
+    // sadece WPF'e "yeniden oku" demek yeterli.
+    public void RefreshImageDisplayPaths()
+    {
+        OnPropertyChanged(nameof(BoxDisplayPath));
+        OnPropertyChanged(nameof(ClearLogoDisplayPath));
+        OnPropertyChanged(nameof(ClearLogoThumbnailPath));
+    }
 
     // Zenginleştirme kaynağındaki bu oyunun sayısal kimliği — eşleşme yoksa null. "Görsel Getir"
     // butonunun etkin olup olmadığını belirler (bkz. MainViewModel.FetchArtwork).
@@ -121,9 +146,57 @@ public partial class Game : ObservableObject
 
     public string ReleaseDateDisplay => ReleaseDate is { } date ? date.ToString("d") : (ReleaseYear > 0 ? ReleaseYear.ToString() : string.Empty);
     public bool HasVideoUrl => !string.IsNullOrWhiteSpace(VideoUrl);
+
+    // LaunchBox'tan gelen VideoUrl genelde standart bir "watch?v=" linki ama youtu.be/embed/
+    // shorts formatları da görülüyor — hepsinden 11 karakterlik video ID'sini çıkarır. Gameplay
+    // alanındaki embedded YouTube player (bkz. MainWindow.xaml Grid.Row="4", MainWindow.xaml.cs
+    // PlayYouTubeEmbedAsync) bunu kullanır; ID çıkarılamazsa (bilinmeyen/bozuk bir URL) embed
+    // hiç denenmez, buton pasif kalır.
+    private static readonly System.Text.RegularExpressions.Regex YouTubeIdPattern =
+        new(@"(?:v=|youtu\.be/|embed/|shorts/)([A-Za-z0-9_-]{11})", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public string? YouTubeVideoId
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(VideoUrl))
+                return null;
+
+            var match = YouTubeIdPattern.Match(VideoUrl);
+            return match.Success ? match.Groups[1].Value : null;
+        }
+    }
+
+    public bool HasYouTubeEmbed => YouTubeVideoId is not null;
     public bool HasWikipediaUrl => !string.IsNullOrWhiteSpace(WikipediaUrl);
     public bool HasCommunityRating => CommunityRating.HasValue;
     public bool HasSteamAppId => SteamAppId.HasValue;
+    public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
+    public bool HasReleaseYear => ReleaseYear > 0;
+
+    // Kullanıcı isteği: "yayıncı ve yıl boşta olsa gözüksün hepsinde... bilinmiyor veya boşsa
+    // Unknown yılda - yazsın şablon sabit" — satır artık HİÇ gizlenmiyor, boşken bu yer tutucular
+    // gösteriliyor (Steam AppID gibi diğer koşullu satırların aksine, burada "şablon sabit" kalsın
+    // diye tercih böyle).
+    public string PublisherDisplay => HasPublisher ? Publisher : "Unknown";
+    public string ReleaseYearDisplay => HasReleaseYear ? ReleaseYear.ToString() : "-";
+
+    // Detay panelindeki Tür rozeti için: Genres tek bir virgülle-ayrılmış string (bkz. yukarıdaki
+    // Genres alanı), rozet + açılır menü bunun ayrıştırılmış tek tek parçalarını kullanır.
+    public string[] GenreTokens => string.IsNullOrWhiteSpace(Genres)
+        ? Array.Empty<string>()
+        : Genres.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    public bool HasGenres => GenreTokens.Length > 0;
+    public bool HasMultipleGenres => GenreTokens.Length > 1;
+    public string PrimaryGenre => GenreTokens.Length > 0 ? GenreTokens[0] : string.Empty;
+
+    // Oyun modu rozeti: LaunchBox'ın kesin bir "oyun modu" alanı yok (bkz. Cooperative alanı ve
+    // CatalogDatabaseService.GetGames'teki yorum) — sadece MaxPlayers + Cooperative (ikili:
+    // kooperatif var/yok) alanlarından türetilebiliyor. Bu yüzden sadece Single/Co-op/Multiplayer
+    // ayrımı yapılabiliyor; Versus/Alternating için hiç veri yok, o yüzden bilinçli olarak
+    // üretilmiyor (yanlış bilgi vermektense üç kategoriyle sınırlı kalmak tercih edildi).
+    public string GameModeIcon => MaxPlayers <= 1 ? "👤" : (Cooperative == true ? "🤝" : "👥");
+    public string GameModeLabel => MaxPlayers <= 1 ? "Single" : (Cooperative == true ? "Co-op" : "Multiplayer");
 
     // 5 yıldız üzerinden dolu/boş yıldız gösterimi (Favori yıldızıyla aynı görsel dil, ★/☆) +
     // sayısal değer. LaunchBox'ın CommunityRating'i zaten 0-5 aralığında.
@@ -139,14 +212,21 @@ public partial class Game : ObservableObject
         }
     }
 
-    // Tercih edilen (preferred) sürümün bölgesi ve kaynağı — DataGrid'de sütun/filtre olarak
-    // gösterilebilsin diye Game seviyesine taşındı (GameVersion listesi sadece seçili oyun için
-    // ayrıca sorgulanıyor, DataGrid'de tüm oyunlar için tek bakışta bölge/kaynak lazım). Sürüm
-    // etiketi (Rev A, Beta vb.) bilinçli olarak burada yok — sağ paneldeki Sürümler listesinde
-    // (GameVersion.VersionLabel) zaten her sürüm için ayrı ayrı gösteriliyor, Game seviyesinde
-    // tekilleştirmek (sadece preferred sürümü yansıtır) yanıltıcı olur.
+    // Başlangıçta tercih edilen (preferred) sürümün bölgesi ve kaynağı — DataGrid'de sütun/filtre
+    // olarak gösterilebilsin diye Game seviyesine taşındı. Toolbar'daki USA/EU/Japan bayrak
+    // filtresi işaretli region'lara göre bunları YENİDEN hesaplayıp değiştirebilir (bkz.
+    // MainViewModel.RecomputeRegionDisplay) — ör. sadece Japan işaretliyken ve oyunun Japan
+    // sürümü varsa, Region/SourceDat/File o sürümün bilgisine döner. Sürüm etiketi (Rev A, Beta
+    // vb.) bilinçli olarak burada yok — sağ paneldeki Sürümler listesinde (GameVersion.
+    // VersionLabel) zaten her sürüm için ayrı ayrı gösteriliyor.
     public string Region { get; set; } = string.Empty;
     public string SourceDat { get; set; } = string.Empty;
+
+    // Bu oyunun TÜM sürümlerinin (Region/SourceDat/FileName) özet listesi — bkz.
+    // CatalogDatabaseService.GetGames, sadece toolbar'daki USA/EU/Japan bayrak filtresinin
+    // görünürlük/görüntüleme kararı için kullanılıyor (RecomputeRegionDisplay). Detay panelindeki
+    // tam Sürümler listesi (hash/CRC dahil) hâlâ ayrıca, talep üzerine sorgulanıyor.
+    public List<GameVersionSummary> AllVersions { get; set; } = new();
 
     // LaunchBox metadata eşleşme bilgisi — "CompareName"/"ExactName"/"AlternateName"/"Fuzzy" veya
     // eşleşme yoksa boş.

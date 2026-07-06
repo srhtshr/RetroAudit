@@ -16,6 +16,16 @@ public enum PlatformListDisplayMode
     Logo,
 }
 
+// Tablodaki (DataGrid) "Bölge" sütununun gösterim biçimi — Ayarlar > Arayüz'den değiştirilir
+// (kullanıcı isteği: "Bayrak Text / Text Bayrak / Bayrak / Sadece Text seçeneği koy").
+public enum RegionColumnDisplayMode
+{
+    FlagAndText,
+    TextAndFlag,
+    FlagOnly,
+    TextOnly,
+}
+
 // "Görsel Getir" ile indirilen Box/BG/SS görsellerinin en uzun kenarının küçültüleceği maksimum
 // piksel boyutu (bkz. ArtworkService.ResizeAndEncode) — Ayarlar > Genel'den değiştirilir.
 // Original: hiç küçültme yapılmaz, kaynak dosya boyutu aynen korunur.
@@ -81,6 +91,12 @@ public class AppSettings
     // araç çubuğunda bir kaydırıcıydı ve hiç kalıcı değildi; kullanıcı isteğiyle Ayarlar'a taşındı.
     public double RowHeight { get; set; } = 30;
 
+    // Detay panelindeki "Sürümler (Region)" bölümü: true = tek kart + birden fazlaysa "▾" ile
+    // sağ-tık kapsül menüsündekiyle aynı popup'tan seçim; false = eskisi gibi tüm sürümler alt
+    // alta tam liste (bkz. Ayarlar > Arayüz, kullanıcı isteği: "ister bu şekilde açılır liste
+    // isterse full açık olarak gösterebilme ayarı olsun").
+    public bool ShowVersionsAsSingleCard { get; set; } = true;
+
     // Her sütunun son kullanıcı tarafından sürüklenerek ayarlanmış genişliği (Key -> piksel).
     // Kayıtlı değeri olmayan sütunlar MainWindow.xaml'deki sabit Width'i kullanmaya devam eder
     // (bkz. MainWindow.xaml.cs WireColumnWidths).
@@ -112,6 +128,9 @@ public class AppSettings
 
     // Platform satırlarının Yazı mı Logo mu gösterileceği (bkz. PlatformListDisplayMode).
     public PlatformListDisplayMode PlatformListDisplayMode { get; set; } = PlatformListDisplayMode.Text;
+
+    // Tablodaki "Bölge" sütununun gösterim biçimi (bkz. RegionColumnDisplayMode).
+    public RegionColumnDisplayMode RegionColumnDisplayMode { get; set; } = RegionColumnDisplayMode.FlagAndText;
 
     // "Görsel Getir" indirmelerinin küçültüleceği maksimum boyut (bkz. Ayarlar > Genel).
     public ArtworkMaxDimension ArtworkMaxDimension { get; set; } = ArtworkMaxDimension.Px600;

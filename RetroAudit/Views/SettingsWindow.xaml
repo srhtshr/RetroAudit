@@ -20,6 +20,7 @@
             </CollectionViewSource.GroupDescriptions>
         </CollectionViewSource>
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
+        <conv:InverseBooleanConverter x:Key="InverseBoolean" />
     </Window.Resources>
 
     <Grid Background="{StaticResource Brush.Background.Base}">
@@ -39,6 +40,7 @@
 
             <!-- ===================== Genel ===================== -->
             <TabItem Header="Genel">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="4,16,4,4">
                     <TextBlock Text="Veri Klasörü" FontWeight="Bold" Margin="0,0,0,4" />
                     <TextBlock Text="Games (romlar), Images (görseller) ve Metadata (veritabanları) her zaman uygulamanın kendi klasörünün yanında saklanır — taşınabilirlik için bu konum değiştirilemez."
@@ -56,21 +58,21 @@
                     <TextBlock Text="Görsel İndirme Boyutu" FontWeight="Bold" Margin="0,16,0,4" />
                     <TextBlock Text="'Görsel Getir' ile indirilen Box/BG/Screenshot görsellerinin en uzun kenarı bu boyuta küçültülür — uygulama hiçbir yerde bundan büyük göstermediği için netlik kaybı gözle görülmez, sadece dosya boyutu azalır."
                                Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
-                    <RadioButton Margin="0,0,0,8" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Px600}">
+                    <RadioButton Margin="0,0,0,8" GroupName="ArtworkMaxDimension" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Px600}">
                         <StackPanel Margin="4,0,0,0">
                             <TextBlock Text="600px (Önerilen)" />
                             <TextBlock Text="En küçük dosya boyutu — uygulamadaki gösterim alanları için fazlasıyla yeterli netlik."
                                        Foreground="{StaticResource Brush.Text.Secondary}" FontSize="10" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton Margin="0,0,0,8" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Px800}">
+                    <RadioButton Margin="0,0,0,8" GroupName="ArtworkMaxDimension" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Px800}">
                         <StackPanel Margin="4,0,0,0">
                             <TextBlock Text="800px" />
                             <TextBlock Text="Biraz daha büyük dosyalar, pencere büyütülüp yakınlaştırılırsa fazladan netlik payı bırakır."
                                        Foreground="{StaticResource Brush.Text.Secondary}" FontSize="10" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton Margin="0,0,0,8" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Original}">
+                    <RadioButton Margin="0,0,0,8" GroupName="ArtworkMaxDimension" IsChecked="{Binding ArtworkMaxDimension, Converter={StaticResource EnumToBool}, ConverterParameter=Original}">
                         <StackPanel Margin="4,0,0,0">
                             <TextBlock Text="Original Size (küçültme yok)" />
                             <TextBlock Text="Kaynak dosya boyutu aynen korunur — çok daha büyük dosyalar kaplar."
@@ -91,17 +93,19 @@
                         <Button Grid.Column="1" Content="Gözat..." Width="90" Command="{Binding BrowseLaunchBoxDbCommand}" />
                     </Grid>
                 </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- ===================== Arayüz ===================== -->
             <TabItem Header="Arayüz">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
                 <StackPanel Margin="4,16,4,4">
                     <TextBlock Text="Sağ Tık Menüsü" FontWeight="Bold" Margin="0,0,0,4" />
                     <TextBlock Text="Oyun satırına sağ tıklandığında açılan kapsül menünün görünüm modu."
                                Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
-                    <RadioButton Content="Icon + Text (ikon altında etiket metni)" Margin="0,0,0,6"
+                    <RadioButton Content="Icon + Text (ikon altında etiket metni)" Margin="0,0,0,6" GroupName="ContextMenuDisplayMode"
                                  IsChecked="{Binding ContextMenuDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=IconAndText}" />
-                    <RadioButton Content="Icon Only (sadece ikon, daha kompakt)"
+                    <RadioButton Content="Icon Only (sadece ikon, daha kompakt)" GroupName="ContextMenuDisplayMode"
                                  IsChecked="{Binding ContextMenuDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=IconOnly}" />
 
                     <!-- Önceden ana penceredeki araç çubuğunda bir kaydırıcıydı ve hiç kalıcı
@@ -114,6 +118,16 @@
                         <Slider Minimum="20" Maximum="60" Width="200" VerticalAlignment="Center" Value="{Binding RowHeight}" />
                         <TextBlock Text="{Binding RowHeight, StringFormat={}{0:0}}" Width="24" VerticalAlignment="Center" Margin="8,0,0,0" />
                     </StackPanel>
+
+                    <!-- Kullanıcı isteği: "detaylardaki sürümleri ister bu şekilde açılır liste
+                         isterse full açık olarak gösterebilme ayarı olsun". -->
+                    <TextBlock Text="Detay Paneli" FontWeight="Bold" Margin="0,20,0,4" />
+                    <TextBlock Text="Detay panelindeki 'Sürümler (Region)' bölümünün gösterim biçimi."
+                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <RadioButton Content="Tek kart (birden fazlaysa açılır listeden seç)" Margin="0,0,0,6" GroupName="ShowVersionsAsSingleCard"
+                                 IsChecked="{Binding ShowVersionsAsSingleCard}" />
+                    <RadioButton Content="Tam liste (tüm sürümler alt alta)" GroupName="ShowVersionsAsSingleCard"
+                                 IsChecked="{Binding ShowVersionsAsSingleCard, Converter={StaticResource InverseBoolean}}" />
 
                     <!-- Şu an değiştirilebilir bir tema seçici yok (tek tema var) — bu sadece
                          bilgilendirme amaçlı; ileride birden fazla tema eklenirse buraya bir
@@ -133,10 +147,22 @@
                               IsChecked="{Binding GroupPlatformsByCategory}" Margin="0,0,0,10" />
 
                     <TextBlock Text="Satır Görünümü" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4" />
-                    <RadioButton Content="Yazı (platform adı)" Margin="0,0,0,4"
+                    <RadioButton Content="Yazı (platform adı)" Margin="0,0,0,4" GroupName="PlatformListDisplayMode"
                                  IsChecked="{Binding PlatformListDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=Text}" />
-                    <RadioButton Content="Logo (sadece kısa ikon, adı üzerine gelince görünür)" Margin="0,0,0,10"
+                    <RadioButton Content="Logo (sadece kısa ikon, adı üzerine gelince görünür)" Margin="0,0,0,10" GroupName="PlatformListDisplayMode"
                                  IsChecked="{Binding PlatformListDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=Logo}" />
+
+                    <!-- Kullanıcı isteği: "tablodaki Region'da Bayrak Text / Text Bayrak / Bayrak /
+                         Sadece Text seçeneği koy seçilebilsin". -->
+                    <TextBlock Text="Tablodaki Bölge Sütunu Görünümü" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4" />
+                    <RadioButton Content="Bayrak + Text" Margin="0,0,0,4" GroupName="RegionColumnDisplayMode"
+                                 IsChecked="{Binding RegionColumnDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=FlagAndText}" />
+                    <RadioButton Content="Text + Bayrak" Margin="0,0,0,4" GroupName="RegionColumnDisplayMode"
+                                 IsChecked="{Binding RegionColumnDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=TextAndFlag}" />
+                    <RadioButton Content="Sadece Bayrak" Margin="0,0,0,4" GroupName="RegionColumnDisplayMode"
+                                 IsChecked="{Binding RegionColumnDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=FlagOnly}" />
+                    <RadioButton Content="Sadece Text" Margin="0,0,0,10" GroupName="RegionColumnDisplayMode"
+                                 IsChecked="{Binding RegionColumnDisplayMode, Converter={StaticResource EnumToBool}, ConverterParameter=TextOnly}" />
 
                     <TextBlock Text="Görünür Kategoriler" FontWeight="SemiBold" FontSize="11" Margin="0,0,0,4">
                         <TextBlock.Style>
@@ -158,6 +184,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
+                </ScrollViewer>
             </TabItem>
 
             <!-- ===================== Emülatörler ===================== -->

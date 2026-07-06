@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RetroAudit.Catalog.Grouping;
@@ -38,16 +39,30 @@ public partial class MainViewModel : ObservableObject
     // geldiğinden, IsOthersExpanded=false iken o kategorinin platform satırları listede hiç yer almaz.
     public ObservableCollection<PlatformListItem> PlatformListItems { get; } = new();
 
-    // DataGrid'e bağlanan, filtreleme sonrası görünen oyun listesi.
-    public ObservableCollection<Game> Games { get; } = new();
+    // DataGrid'e bağlanan, filtreleme sonrası görünen oyun listesi. [ObservableProperty] —
+    // ApplyFilter platform değişince/vb. BÜTÜN koleksiyonu tek seferde değiştiriyor (bkz. orada),
+    // eskiden Clear()+binlerce tekil Add() yapıyordu; her Add WPF DataGrid'e ayrı bir
+    // CollectionChanged bildirimi olarak gidip büyük bir platforma (veya "All Platforms"a)
+    // geçerken gözle görülür bir donmaya yol açıyordu (kullanıcı geri bildirimi: "platform
+    // geçişleri akıcı olsun"). Tek bir PropertyChanged, DataGrid'in ItemsSource'u toptan
+    // yenilemesini (Reset) sağlıyor — çok daha ucuz.
+    [ObservableProperty]
+    private ObservableCollection<Game> games = new();
 
     // Sağ paneldeki Versions listesi: SelectedGame değiştiğinde CatalogDatabaseService.GetVersions
     // ile talep üzerine doldurulur (67 bin oyunun tamamının sürüm verisini baştan yüklemek yerine).
     public ObservableCollection<GameVersion> SelectedGameVersions { get; } = new();
 
+    // Detay panelinde başlığın altında her zaman açık gösterilen "ALTERNATE NAMES" listesi —
+    // Versions listesiyle aynı "talep üzerine" prensibi: SelectedGame değiştiğinde
+    // LoadSelectedGameVersions ile birlikte doldurulur (bkz. OnSelectedGameChanged). Kullanıcı
+    // isteği: LaunchBox'ın kendi sitesindeki gösterim (isim + bölge), tıklanınca açılan bir menü
+    // DEĞİL, doğrudan görünür olsun.
+    public ObservableCollection<GameAlternateName> SelectedGameAlternateNames { get; } = new();
+
     // Toolbar'daki "Tools" açılır menüsünün öğeleri; seçim, gerçek bir seçili durum değil
     // bir "eylem tetikleyici" gibi davranır (bkz. OnSelectedToolActionChanged).
-    public ObservableCollection<string> ToolMenuItems { get; } = new() { "Tools", "Media Provider...", "Crop Editor...", "Ayarlar..." };
+    public ObservableCollection<string> ToolMenuItems { get; } = new() { "Tools", "Media Provider...", "Crop Editor..." };
 
     // İkincil pencereleri açma isteğini View katmanına (MainWindow.xaml.cs) ileten olaylar.
     // ViewModel, Window tiplerine doğrudan bağımlı olmasın diye pencere açma işi View'da yapılır.
@@ -75,7 +90,25 @@ public partial class MainViewModel : ObservableObject
 
     // DataGrid'de seçili oyun; sağ detay panelinin tüm alanları buna bağlıdır.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPlayOverlay))]
     private Game? selectedGame;
+
+    // Gameplay screenshot alanının embedded YouTube player'a mı yoksa normal screenshot'a mı
+    // döneceğini belirler (bkz. MainWindow.xaml Grid.Row="4", MainWindow.xaml.cs
+    // PlayYouTubeEmbedAsync/StopYouTubeEmbed). Kullanıcı isteği: "dış tarayıcı açılmasın, aynı
+    // alan WebView2 ile gömülü player'a dönüşsün".
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowPlayOverlay))]
+    private bool isPlayingVideo;
+
+    // WebView2 navigasyonu başarısız olursa (bkz. MainWindow.xaml.cs YouTubePlayer_NavigationCompleted)
+    // SADECE o durumda dış tarayıcıya düşen bir fallback buton gösterilir (bkz. OpenVideoUrlCommand).
+    [ObservableProperty]
+    private bool videoEmbedFailed;
+
+    // Play overlay'i (gameplay alanının ortasındaki büyük ikon) sadece bir YouTube linki VE
+    // henüz oynatılmıyorken görünür — video oynarken kapanır, kapat butonuna basılınca geri döner.
+    public bool ShowPlayOverlay => SelectedGame?.HasYouTubeEmbed == true && !IsPlayingVideo;
 
     // Arama kutusu metni; her değişiklikte oyun listesi yeniden filtrelenir.
     [ObservableProperty]
@@ -89,11 +122,38 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool showJunk;
 
+    // Toolbar'daki USA/EU/Japan bayrak filtreleri (kullanıcı isteği, çoklu seçim) — sol paneldeki
+    // platform ve üstteki playlist/chip'ten SONRA gelen 3. bir süzgeç. Bir oyunun HİÇ USA/EU/Japan
+    // etiketli sürümü yoksa (sadece World/Unknown/diğer bölgelerdeyse) bu filtreden etkilenmez,
+    // her zaman görünür kalır — sadece gerçekten USA/EU/Japan'da çıkmış ama işaretli region'ların
+    // hiçbirinde bulunmayan oyunlar gizlenir (bkz. GetFilterScopePopulation, RecomputeRegionDisplay).
+    [ObservableProperty]
+    private bool showUsaRegion = true;
+
+    [ObservableProperty]
+    private bool showEuRegion = true;
+
+    [ObservableProperty]
+    private bool showJapanRegion = true;
+
+    // Toolbar'daki USA/EU/Japan düğmelerinin bayrak ikonları (bkz. FlagResolver) — sabit/statik
+    // olduğu için (hangi oyun seçili olursa olsun hep aynı) bir kere hesaplanıp property olarak
+    // sunuluyor, XAML'de doğrudan bağlanabilsin diye.
+    public string? UsaFlagPath { get; } = FlagResolver.Resolve("USA");
+    public string? EuFlagPath { get; } = FlagResolver.Resolve("Europe");
+    public string? JapanFlagPath { get; } = FlagResolver.Resolve("Japan");
+
     // DataGrid.RowHeight ile iki yönlü (TwoWay) bağlıdır. Değeri artık Ayarlar > Arayüz'de
     // ayarlanıyor (bkz. _appSettings.RowHeight); başlangıç değeri constructor'da,
     // güncellemesi ReloadAppSettings'te okunuyor.
     [ObservableProperty]
     private double rowHeight = 30;
+
+    // Ayarlar > Arayüz'deki "Sürümler tek kart / tam liste" tercihi (bkz. AppSettings.
+    // ShowVersionsAsSingleCard) — başlangıç değeri constructor'da, güncellemesi
+    // ReloadAppSettings'te okunuyor.
+    [ObservableProperty]
+    private bool showVersionsAsSingleCard = true;
 
     // Sağ detay panelinin sabit genişliği — kullanıcı kararıyla artık elle (GridSplitter ile)
     // ayarlanamıyor, sadece IsDetailPanelExpanded ile 0/bu değer arasında açılıp kapanıyor (bkz.
@@ -118,6 +178,12 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private PlatformListDisplayMode platformListDisplayMode = PlatformListDisplayMode.Text;
+
+    // Tablodaki "Bölge" sütununun gösterim biçimi (bkz. Ayarlar > Arayüz, AppSettings.
+    // RegionColumnDisplayMode) — başlangıç değeri constructor'da, güncellemesi
+    // ReloadAppSettings'te okunuyor.
+    [ObservableProperty]
+    private RegionColumnDisplayMode regionColumnDisplayMode = RegionColumnDisplayMode.FlagAndText;
 
     // Sağ detay panelinin açık/kapalı (sürgülü) durumu — DataGrid'e daha fazla yatay yer
     // bırakmak için kapatılabilir (bkz. MainWindow.xaml: ColumnDefinition Width, BoolToGridLength).
@@ -173,7 +239,6 @@ public partial class MainViewModel : ObservableObject
     public ColumnFilterViewModel HasLocalFileFilter { get; }
     public ActionsColumnFilterViewModel ActionsFilter { get; }
     public ColumnFilterViewModel BoxFilter { get; }
-    public ColumnFilterViewModel BackgroundFilter { get; }
     public ColumnFilterViewModel ScreenshotFilter { get; }
 
     // "Sütunlar" düğmesiyle açılan seçici — hangi DataGrid sütununun görünür olacağını belirler.
@@ -195,9 +260,11 @@ public partial class MainViewModel : ObservableObject
         _appSettings = ConfigService.LoadDefault();
         BuildColumnOptions();
         rowHeight = _appSettings.RowHeight;
+        showVersionsAsSingleCard = _appSettings.ShowVersionsAsSingleCard;
         detailPanelWidth = _appSettings.DetailPanelWidth;
         groupPlatformsByCategory = _appSettings.GroupPlatformsByCategory;
         platformListDisplayMode = _appSettings.PlatformListDisplayMode;
+        regionColumnDisplayMode = _appSettings.RegionColumnDisplayMode;
 
         _allGames = CatalogDatabaseService.GetGames();
         BuildLocalFileIndex();
@@ -233,7 +300,6 @@ public partial class MainViewModel : ObservableObject
         HasLocalFileFilter = BuildColumnFilter("Durum", _allGames.Select(g => g.HasLocalFile ? "Oynanabilir" : "Eksik"));
         ActionsFilter = new ActionsColumnFilterViewModel(FavoriteFilter, HasLocalFileFilter);
         BoxFilter = BuildColumnFilter("Box", _allGames.Select(g => g.HasBox ? "Evet" : "Hayır"));
-        BackgroundFilter = BuildColumnFilter("BG", _allGames.Select(g => g.HasBackground ? "Evet" : "Hayır"));
         ScreenshotFilter = BuildColumnFilter("SS", _allGames.Select(g => g.HasScreenshot ? "Evet" : "Hayır"));
 
         var allColumnFilters = new[]
@@ -241,10 +307,27 @@ public partial class MainViewModel : ObservableObject
             PlatformFilter, GenresFilter, PublisherFilter, CommunityRatingFilter,
             RegionFilter, SourceFilter, MatchMethodFilter, MaxPlayersFilter,
             TitleFilter, FileFilter, MatchedFilter, FavoriteFilter, HasLocalFileFilter,
-            BoxFilter, BackgroundFilter, ScreenshotFilter,
+            BoxFilter, ScreenshotFilter,
         };
         foreach (var filter in allColumnFilters)
             filter.FilterChanged += ApplyFilter;
+
+        // Popup açılmadan hemen önce Options'ı güncel kapsama göre tazeler (bkz.
+        // RefreshColumnFilterOptions) — Title/File IsSearchOnly olduğu için Options hiç kurmuyor,
+        // bu yüzden burada yok (ColumnFilterViewModel.Open zaten onlar için tetiklemiyor).
+        PlatformFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(PlatformFilter, g => g.PlatformDisplayName);
+        GenresFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(GenresFilter, g => g.Genres);
+        PublisherFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(PublisherFilter, g => g.Publisher);
+        CommunityRatingFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(CommunityRatingFilter, g => g.CommunityRating.HasValue ? g.CommunityRating.Value.ToString("0.0") : string.Empty);
+        RegionFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(RegionFilter, g => g.Region);
+        SourceFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(SourceFilter, g => g.SourceDat);
+        MatchMethodFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(MatchMethodFilter, g => g.MatchMethod);
+        MaxPlayersFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(MaxPlayersFilter, g => g.MaxPlayers == 0 ? string.Empty : g.MaxPlayers.ToString());
+        MatchedFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(MatchedFilter, g => g.StatusOk ? "Eşleşti" : "Eşleşmedi");
+        FavoriteFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(FavoriteFilter, g => g.IsFavorite ? "Evet" : "Hayır");
+        HasLocalFileFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(HasLocalFileFilter, g => g.HasLocalFile ? "Oynanabilir" : "Eksik");
+        BoxFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(BoxFilter, g => g.HasBox ? "Evet" : "Hayır");
+        ScreenshotFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(ScreenshotFilter, g => g.HasScreenshot ? "Evet" : "Hayır");
 
         RebuildPlaylistChips();
 
@@ -259,29 +342,42 @@ public partial class MainViewModel : ObservableObject
         LoadSelectedGameVersions();
     }
 
-    // Ayarlar penceresi kapanınca MainWindow.xaml.cs bunu çağırır — ContextMenuDisplayMode gibi
-    // canlı-yansıması-gereken tercihler disk'ten yeniden okunup güncellenir (bkz. plan: Ayarlar
-    // ayrı bir pencere/ViewModel olduğu için değişiklik doğrudan burayı etkilemiyor).
+    // Ayarlar penceresi kapanınca MainWindow.xaml.cs bunu çağırır — diskteki (en son "Kaydet" ile
+    // yazılmış) hali okuyup uygular. Ayarlar penceresi AÇIKKEN yapılan canlı önizleme (bkz.
+    // ApplyLiveSettings) burada YOK SAYILIR: kullanıcı "Kaydet"e basmadan kapatırsa arayüz
+    // sessizce en son kaydedilmiş ayarlara geri döner — standart bir ayarlar penceresi davranışı.
+    // NOT: eskiden burada BuildLocalFileIndex + tüm oyunlar için artwork/HasLocalFile yeniden
+    // hesabı da yapılıyordu; Games/Images kökü artık Ayarlar'dan hiç değiştirilemediği
+    // (bkz. AppPaths, "portable data layout") için bu tarama gereksizdi ve ~45 bin oyun üzerinde
+    // gözle görülür bir donmaya/"kapanıp açılıyor" hissine yol açıyordu — kaldırıldı.
     public void ReloadAppSettings()
     {
         _appSettings = ConfigService.LoadDefault();
         ContextMenuDisplayMode = _appSettings.ContextMenuDisplayMode;
         RowHeight = _appSettings.RowHeight;
+        ShowVersionsAsSingleCard = _appSettings.ShowVersionsAsSingleCard;
         DetailPanelWidth = _appSettings.DetailPanelWidth;
         GroupPlatformsByCategory = _appSettings.GroupPlatformsByCategory;
         PlatformListDisplayMode = _appSettings.PlatformListDisplayMode;
-        // Kategori görünürlüğü/platform sırası değişmiş olabilir (Ayarlar'dan veya sürükle-bırakla)
-        // ve GroupPlatformsByCategory değeri aynı kalsa bile (OnChanged tetiklenmez) yeniden
-        // kurulması gerekir — bu yüzden burada açıkça çağrılıyor.
+        RegionColumnDisplayMode = _appSettings.RegionColumnDisplayMode;
         RebuildPlatformListItems();
+    }
 
-        BuildLocalFileIndex();
-        foreach (var game in _allGames)
-        {
-            game.HasLocalFile = HasLocalFile(game);
-            NotifyArtworkDownloaded(game);
-        }
-        ApplyFilter();
+    // Ayarlar penceresi AÇIKKEN her değişiklikte (Kaydet'e basılmadan) çağrılır — kullanıcının
+    // "değişiklik kaydetmeden görünmüyor" isteği üzerine eklendi. SettingsViewModel'in o anki
+    // (henüz diske yazılmamış) değerlerini doğrudan okuyup MainWindow'a yansıtır; kalıcı hale
+    // gelmesi hâlâ "Kaydet"e bağlı (bkz. ReloadAppSettings, SettingsViewModel.SaveSettings).
+    public void ApplyLiveSettings(SettingsViewModel s)
+    {
+        ContextMenuDisplayMode = s.ContextMenuDisplayMode;
+        RowHeight = s.RowHeight;
+        ShowVersionsAsSingleCard = s.ShowVersionsAsSingleCard;
+        PlatformListDisplayMode = s.PlatformListDisplayMode;
+        RegionColumnDisplayMode = s.RegionColumnDisplayMode;
+
+        GroupPlatformsByCategory = s.GroupPlatformsByCategory;
+        _appSettings.CategoryVisibility = s.CategoryOptions.ToDictionary(o => o.Key, o => o.IsVisible);
+        RebuildPlatformListItems();
     }
 
     // Sütun anahtarı -> varsayılan (kayıtlı tercih yoksa kullanılacak) görünürlük ve başlık.
@@ -294,7 +390,6 @@ public partial class MainViewModel : ObservableObject
         ("Actions", "Actions", true),
         ("Title", "Başlık", true),
         ("Box", "Box", true),
-        ("Background", "BG", true),
         ("Screenshot", "SS", true),
         ("File", "File", true),
         ("Platform", "Platform", true),
@@ -390,8 +485,6 @@ public partial class MainViewModel : ObservableObject
             OpenMediaProvider();
         else if (value == "Crop Editor...")
             OpenCropEditor();
-        else if (value == "Ayarlar...")
-            OpenSettings();
 
         if (value != "Tools")
             SelectedToolAction = "Tools";
@@ -575,7 +668,6 @@ public partial class MainViewModel : ObservableObject
     // gerçek bir küçük resim gösteriliyor); diğer üçü sadece var/yok kontrolü için kullanılıyor
     // ama aynı yapıyı paylaşmak kodu tekilleştiriyor.
     private Dictionary<string, Dictionary<string, string>> _boxByPlatform = new(StringComparer.OrdinalIgnoreCase);
-    private Dictionary<string, Dictionary<string, string>> _backgroundByPlatform = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, Dictionary<string, string>> _screenshotByPlatform = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, Dictionary<string, string>> _clearLogoByPlatform = new(StringComparer.OrdinalIgnoreCase);
 
@@ -585,7 +677,6 @@ public partial class MainViewModel : ObservableObject
 
         _filesByPlatform = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
         _boxByPlatform = BuildMediaTypeIndex("Box");
-        _backgroundByPlatform = BuildMediaTypeIndex("BG");
         _screenshotByPlatform = BuildMediaTypeIndex("SS");
         _clearLogoByPlatform = BuildMediaTypeIndex("Logo");
 
@@ -628,7 +719,6 @@ public partial class MainViewModel : ObservableObject
     }
 
     private string GetBoxPath(Game game) => TryGetMediaPath(_boxByPlatform, game) ?? string.Empty;
-    private string GetBackgroundPath(Game game) => TryGetMediaPath(_backgroundByPlatform, game) ?? string.Empty;
     private string GetScreenshotPath(Game game) => TryGetMediaPath(_screenshotByPlatform, game) ?? string.Empty;
     private string GetClearLogoPath(Game game) => TryGetMediaPath(_clearLogoByPlatform, game) ?? string.Empty;
 
@@ -642,7 +732,6 @@ public partial class MainViewModel : ObservableObject
         var byPlatform = type switch
         {
             "Box" => _boxByPlatform,
-            "BG" => _backgroundByPlatform,
             "SS" => _screenshotByPlatform,
             "Logo" => _clearLogoByPlatform,
             _ => null,
@@ -665,7 +754,6 @@ public partial class MainViewModel : ObservableObject
     public void NotifyArtworkDownloaded(Game game)
     {
         game.BoxPath = GetBoxPath(game);
-        game.BackgroundPath = GetBackgroundPath(game);
         game.ScreenshotPath = GetScreenshotPath(game);
         game.ClearLogoPath = GetClearLogoPath(game);
     }
@@ -745,6 +833,24 @@ public partial class MainViewModel : ObservableObject
         var folder = Path.Combine(AppPaths.Games, game.PlatformDisplayName);
         Directory.CreateDirectory(folder);
         Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+    }
+
+    // Detay panelindeki Box art'a/Clear Logo'ya sağ tıklayınca çıkan küçük kapsül menüsündeki
+    // "Klasöre Git" düğmeleri — gerçek görsel yoksa (yer tutucu gösteriliyorsa) hiçbir şey yapmaz.
+    [RelayCommand]
+    private void OpenBoxArtFolder(Game game)
+    {
+        if (!game.HasBox)
+            return;
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{game.BoxPath}\"") { UseShellExecute = true });
+    }
+
+    [RelayCommand]
+    private void OpenClearLogoFolder(Game game)
+    {
+        if (!game.HasClearLogo)
+            return;
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{game.ClearLogoPath}\"") { UseShellExecute = true });
     }
 
     // --- Hide / Recycle Bin ---
@@ -1039,6 +1145,18 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private double artworkDownloadProgress;
 
+    // "Görsel Getir" başlamadan önce hangi türlerin (Box/Clear Logo/Gameplay) indirileceğini
+    // sormak için View'a bırakılan istek (bkz. ArtworkTypeSelectionDialog, MainWindow.xaml.cs).
+    // Kullanıcı iptal ederse veya hiç tür seçmezse null/boş küme döner, indirme hiç başlamaz.
+    public event Func<HashSet<string>?>? RequestArtworkTypeSelection;
+
+    // MainWindow.xaml'deki "Durdur" düğmesi bunu Cancel() ile tetikler (bkz. CancelArtworkDownload).
+    // Tekli/toplu indirme başlarken yeniden oluşturulur, bitince/iptal olunca Dispose edilir.
+    private CancellationTokenSource? _artworkDownloadCts;
+
+    [RelayCommand]
+    private void CancelArtworkDownload() => _artworkDownloadCts?.Cancel();
+
     [RelayCommand]
     private async Task FetchArtwork(Game game)
     {
@@ -1050,25 +1168,39 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        var selectedTypes = RequestArtworkTypeSelection?.Invoke();
+        if (selectedTypes is null || selectedTypes.Count == 0)
+            return;
+
+        _artworkDownloadCts = new CancellationTokenSource();
         IsArtworkDownloadInProgress = true;
         ArtworkDownloadProgress = 0;
-        (int Succeeded, int Total) result;
+        (int Succeeded, int Total) result = (0, 0);
+        var cancelled = false;
         try
         {
-            result = await DownloadArtworkAsync(game, (completed, total) =>
+            result = await DownloadArtworkAsync(game, selectedTypes, _artworkDownloadCts.Token, (completed, total) =>
                 ArtworkDownloadProgress = total == 0 ? 100 : (double)completed / total * 100);
+        }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
         }
         finally
         {
             IsArtworkDownloadInProgress = false;
+            _artworkDownloadCts?.Dispose();
+            _artworkDownloadCts = null;
         }
 
         NotifyArtworkDownloaded(game);
         ApplyFilter();
 
         // Başarılı indirmede bilgi mesajı gösterilmiyor (kullanıcı kararı: "gereksiz") — sadece
-        // hiç görsel bulunamadığında veya bir kısmı indirilemediğinde uyarılıyor.
-        if (result.Total == 0)
+        // durdurulduğunda, hiç görsel bulunamadığında veya bir kısmı indirilemediğinde uyarılıyor.
+        if (cancelled)
+            RequestShowMessage?.Invoke("İndirme durduruldu.");
+        else if (result.Total == 0)
             RequestShowMessage?.Invoke("Bu oyun için indirilebilecek görsel bulunamadı.");
         else if (result.Succeeded < result.Total)
             RequestShowMessage?.Invoke($"{result.Total - result.Succeeded} görsel indirilemedi.");
@@ -1086,33 +1218,48 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        var selectedTypes = RequestArtworkTypeSelection?.Invoke();
+        if (selectedTypes is null || selectedTypes.Count == 0)
+            return;
+
+        _artworkDownloadCts = new CancellationTokenSource();
         IsBulkArtworkFetching = true;
         IsArtworkDownloadInProgress = true;
         ArtworkDownloadProgress = 0;
         var totalDownloaded = 0;
         var totalAssets = 0;
+        var cancelled = false;
         try
         {
             for (var i = 0; i < targets.Count; i++)
             {
-                var result = await DownloadArtworkAsync(targets[i]);
+                _artworkDownloadCts.Token.ThrowIfCancellationRequested();
+                var result = await DownloadArtworkAsync(targets[i], selectedTypes, _artworkDownloadCts.Token);
                 totalDownloaded += result.Succeeded;
                 totalAssets += result.Total;
                 NotifyArtworkDownloaded(targets[i]);
                 ArtworkDownloadProgress = (double)(i + 1) / targets.Count * 100;
             }
         }
+        catch (OperationCanceledException)
+        {
+            cancelled = true;
+        }
         finally
         {
             IsBulkArtworkFetching = false;
             IsArtworkDownloadInProgress = false;
+            _artworkDownloadCts?.Dispose();
+            _artworkDownloadCts = null;
         }
 
         ApplyFilter();
 
         // Başarılı indirmede bilgi mesajı gösterilmiyor (kullanıcı kararı: "gereksiz") — sadece
-        // hiçbir görsel bulunamadığında veya bir kısmı indirilemediğinde uyarılıyor.
-        if (totalAssets == 0)
+        // durdurulduğunda, hiçbir görsel bulunamadığında veya bir kısmı indirilemediğinde uyarılıyor.
+        if (cancelled)
+            RequestShowMessage?.Invoke($"İndirme durduruldu ({totalDownloaded} görsel indirildi).");
+        else if (totalAssets == 0)
             RequestShowMessage?.Invoke("Seçilen oyunlar için indirilebilecek görsel bulunamadı.");
         else if (totalDownloaded < totalAssets)
             RequestShowMessage?.Invoke($"{totalAssets - totalDownloaded} görsel indirilemedi.");
@@ -1121,12 +1268,17 @@ public partial class MainViewModel : ObservableObject
     // FetchArtwork/BulkFetchArtwork'ün paylaştığı indirme mantığı — mevcut olan (en fazla 4)
     // görsel varlığı sıralı (paralel değil) indirir, (başarı sayısı, toplam) döner — çağıran taraf
     // buna bakarak sadece eksik/başarısız durumda uyarı gösteriyor (bkz. RequestShowMessage
-    // çağrıları, kullanıcı kararı: başarılı indirmede mesaj gösterilmiyor). onProgress: her görsel
-    // denemesinden sonra (completed, total) ile çağrılır — sadece tekli indirmede kullanılıyor
-    // (bkz. FetchArtwork), toplu indirme kendi ilerlemesini oyun bazında ayrıca hesaplıyor.
-    private async Task<(int Succeeded, int Total)> DownloadArtworkAsync(Game game, Action<int, int>? onProgress = null)
+    // çağrıları, kullanıcı kararı: başarılı indirmede mesaj gösterilmiyor). selectedTypes:
+    // kullanıcının ArtworkTypeSelectionDialog'da işaretlediği türler (Box/BG/Logo/SS) — dışındakiler
+    // hiç indirilmez. onProgress: her görsel denemesinden sonra (completed, total) ile çağrılır —
+    // sadece tekli indirmede kullanılıyor (bkz. FetchArtwork), toplu indirme kendi ilerlemesini
+    // oyun bazında ayrıca hesaplıyor. cancellationToken: "Durdur" düğmesi tetiklenirse
+    // OperationCanceledException fırlatır, çağıran taraf bunu yakalayıp döngüyü temiz kapatır.
+    private async Task<(int Succeeded, int Total)> DownloadArtworkAsync(Game game, HashSet<string> selectedTypes, CancellationToken cancellationToken, Action<int, int>? onProgress = null)
     {
-        var assets = CatalogDatabaseService.GetArtworkAssets(game.GameId);
+        var assets = CatalogDatabaseService.GetArtworkAssets(game.GameId)
+            .Where(kv => selectedTypes.Contains(kv.Key))
+            .ToList();
         if (assets.Count == 0)
             return (0, 0);
 
@@ -1139,7 +1291,7 @@ public partial class MainViewModel : ObservableObject
             // (bkz. ArtworkService, kullanıcı kararı: dosya boyutunu azalt).
             var preserveTransparency = type == "Logo";
             var destination = ArtworkService.BuildLocalPath(AppPaths.Images, game.PlatformDisplayName, type, baseFileName, preserveTransparency);
-            if (await ArtworkService.DownloadAsync(fileName, destination, preserveTransparency, GetArtworkMaxDimensionPixels()))
+            if (await ArtworkService.DownloadAsync(fileName, destination, preserveTransparency, GetArtworkMaxDimensionPixels(), cancellationToken))
             {
                 RegisterDownloadedMedia(type, game.PlatformDisplayName, baseFileName, destination);
                 succeeded++;
@@ -1179,22 +1331,112 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedGameChanged(Game? value)
     {
         LoadSelectedGameVersions();
+        LoadSelectedGameAlternateNames();
         if (value is not null)
             IsDetailPanelExpanded = true;
+
+        // Başka oyun seçilince embedded video otomatik dursun ve screenshot moduna dönsün
+        // (kullanıcı isteği) — asıl durdurma (WebView2.Navigate("about:blank")) IsPlayingVideo
+        // false'a düşünce MainWindow.xaml.cs'teki PropertyChanged aboneliğinde yapılıyor.
+        IsPlayingVideo = false;
+        VideoEmbedFailed = false;
     }
 
     // Sağ paneldeki Versions listesini seçili oyuna göre yeniden doldurur.
     private void LoadSelectedGameVersions()
     {
         SelectedGameVersions.Clear();
-        if (SelectedGame is null)
-            return;
-
-        foreach (var version in CatalogDatabaseService.GetVersions(SelectedGame.GameId, SelectedGame.GameKey))
+        if (SelectedGame is not null)
         {
-            version.IsOwned = IsVersionOwned(SelectedGame, version);
-            SelectedGameVersions.Add(version);
+            foreach (var version in CatalogDatabaseService.GetVersions(SelectedGame.GameId, SelectedGame.GameKey))
+            {
+                version.IsOwned = IsVersionOwned(SelectedGame, version);
+                SelectedGameVersions.Add(version);
+            }
         }
+
+        // Sürümler (Region) artık tek kart gösteriyor (kullanıcı isteği: "sürümlerde tek kart
+        // gözükecek şekilde yapalım") — varsayılan olarak Preferred işaretli sürüm (yoksa ilki).
+        SelectedVersionCard = SelectedGameVersions.FirstOrDefault(v => v.IsPreferred) ?? SelectedGameVersions.FirstOrDefault();
+        OnPropertyChanged(nameof(HasMultipleVersionCards));
+        OnPropertyChanged(nameof(OtherVersionCards));
+        OnPropertyChanged(nameof(SingleVersionCard));
+        IsVersionCardMenuOpen = false;
+    }
+
+    // Sürümler (Region) tek-kart alanı: o an gösterilen tek sürüm + birden fazlaysa "▾" ile
+    // sağ-tık kapsül menüsündekiyle AYNI popup'tan seçilebilen diğerleri.
+    [ObservableProperty]
+    private GameVersion? selectedVersionCard;
+
+    partial void OnSelectedVersionCardChanged(GameVersion? value)
+    {
+        OnPropertyChanged(nameof(OtherVersionCards));
+        OnPropertyChanged(nameof(SingleVersionCard));
+    }
+
+    // Tek-kart ListBox'ının ItemsSource'u — ListBox bir koleksiyon beklediği için tek nesne
+    // doğrudan bağlanamıyor, 0 ya da 1 elemanlı bir dizi olarak sarmalanıyor.
+    public IEnumerable<GameVersion> SingleVersionCard => SelectedVersionCard is null
+        ? Array.Empty<GameVersion>()
+        : new[] { SelectedVersionCard };
+
+    [ObservableProperty]
+    private bool isVersionCardMenuOpen;
+
+    public bool HasMultipleVersionCards => SelectedGameVersions.Count > 1;
+
+    public IEnumerable<GameVersion> OtherVersionCards => SelectedGameVersions.Where(v => v != SelectedVersionCard);
+
+    // Sürümler (Region) tek-kart alanının açılır popup'ında bir karta tıklanınca çalışır — o
+    // sürümü tek-kart alanına taşır ve popup'ı kapatır.
+    [RelayCommand]
+    private void SelectVersionCard(GameVersion version)
+    {
+        SelectedVersionCard = version;
+        IsVersionCardMenuOpen = false;
+    }
+
+    // Detay panelindeki "ALTERNATE NAMES" listesini seçili oyuna göre yeniden doldurur.
+    private void LoadSelectedGameAlternateNames()
+    {
+        SelectedGameAlternateNames.Clear();
+        if (SelectedGame is not null)
+        {
+            foreach (var alt in CatalogDatabaseService.GetAlternateNames(SelectedGame.GameId))
+                SelectedGameAlternateNames.Add(alt);
+        }
+
+        // İlk 2 alternatif isim her zaman doğrudan (statik satırlar olarak) gösterilir — kullanıcı
+        // isteği: "alternative names minimum satır gösterme sınırını 2 satır yap". 2'den fazlaysa
+        // geri kalanlar (3., 4., ...) "▾" ile açılan bir listede gösterilir.
+        OnPropertyChanged(nameof(VisibleAlternateNames));
+        OnPropertyChanged(nameof(OverflowAlternateNames));
+        OnPropertyChanged(nameof(HasOverflowAlternateNames));
+        OnPropertyChanged(nameof(HasNoAlternateNames));
+    }
+
+    // Box art'ın altındaki sabit alanda her zaman doğrudan gösterilen ilk 2 alternatif isim.
+    public IEnumerable<GameAlternateName> VisibleAlternateNames => SelectedGameAlternateNames.Take(2);
+
+    // Alternatif ismi olmayan oyunlarda "-" göstermek için (kullanıcı isteği: "Alternate name
+    // yazsın gene - işareti olsun sadece") — blok artık HİÇ gizlenmiyor (bkz. XAML yorumu), bu
+    // yüzden boşken de 2 satırlık alanın içinde bir şey (kısa çizgi) görünür.
+    public bool HasNoAlternateNames => SelectedGameAlternateNames.Count == 0;
+
+    // 2'den fazla alternatif isim varsa, ilk 2'nin ötesindeki geri kalanı — "▾" açılır listesinde
+    // gösterilir (bkz. MainWindow.xaml AlternateNamesOverflowToggle).
+    public IEnumerable<GameAlternateName> OverflowAlternateNames => SelectedGameAlternateNames.Skip(2);
+
+    public bool HasOverflowAlternateNames => SelectedGameAlternateNames.Count > 2;
+
+    // Başlık/alternatif isim menüsündeki "kopyala" tıklamaları — kullanıcı isteği: "isim
+    // kopyalanabilir olsun".
+    [RelayCommand]
+    private void CopyText(string? text)
+    {
+        if (!string.IsNullOrEmpty(text))
+            System.Windows.Clipboard.SetText(text);
     }
 
     // Bir sürümün Hashes listesindeki dosya adlarından herhangi biri diskte (ya da "Şu anki yoldan
@@ -1284,19 +1526,109 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnShowJunkChanged(bool value) => ApplyFilter();
 
-    // Platform, arama metni, Released/Junk anahtarları ve sütun başlıklarındaki joystick
-    // filtrelerine göre _allGames üzerinden Games koleksiyonunu yeniden oluşturur. Basitlik için
-    // tüm listeyi temizleyip yeniden dolduruyoruz; 67 bin oyun için bu hâlâ anlık.
+    // Bayrak filtreleri hem görünürlüğü (bkz. GetFilterScopePopulation) HEM DE tablodaki
+    // Region/SourceDat/File bilgisinin hangi sürümden geleceğini etkiliyor — ikincisi ApplyFilter'ın
+    // kendisinden ayrı, çünkü _allGames'in İÇERİĞİNİ (Game.Region vb.) değiştiriyor, sadece hangi
+    // oyunların göründüğünü değil.
+    partial void OnShowUsaRegionChanged(bool value) => OnRegionFlagsChanged();
+    partial void OnShowEuRegionChanged(bool value) => OnRegionFlagsChanged();
+    partial void OnShowJapanRegionChanged(bool value) => OnRegionFlagsChanged();
+
+    private void OnRegionFlagsChanged()
+    {
+        RecomputeRegionDisplay();
+        SyncPlatformGameCounts();
+        ApplyFilter();
+    }
+
+    // "USA"/"Europe"/"World"/"Japan"/diğer ham region string'ini 3 bayrak kovasından birine
+    // eşler — VersionResolver.RegionRank ile aynı sınıflandırma mantığı (World, USA/EU/Japan'ın
+    // hiçbirine düşmüyor, kasıtlı olarak "diğer" sayılıyor: bir World sürümü zaten bölgelerin
+    // hiçbirine özel değil, bayrak filtresi onu dışlamamalı).
+    private static RegionFlag ClassifyRegion(string region) => region switch
+    {
+        "USA" => RegionFlag.Usa,
+        "Europe" => RegionFlag.Eu,
+        "Japan" => RegionFlag.Japan,
+        _ => RegionFlag.Other,
+    };
+
+    private bool IsRegionFlagChecked(RegionFlag flag) => flag switch
+    {
+        RegionFlag.Usa => ShowUsaRegion,
+        RegionFlag.Eu => ShowEuRegion,
+        RegionFlag.Japan => ShowJapanRegion,
+        _ => true,
+    };
+
+    // Bir oyunun HİÇ USA/EU/Japan etiketli sürümü yoksa (sadece World/Unknown/diğer bölgelerdeyse)
+    // bayrak filtresinden hiç etkilenmemesi gerekiyor — aksi halde ör. sadece Almanya'da çıkmış bir
+    // oyun, kullanıcı "sadece USA" seçtiğinde haksız yere kaybolurdu (bu, Region SÜTUN FİLTRESİNİN
+    // işi, toolbar bayrakları sadece USA/EU/Japan'ı kapsıyor).
+    private bool MatchesRegionFlags(Game game)
+    {
+        var buckets = game.AllVersions.Select(v => ClassifyRegion(v.Region)).Where(b => b != RegionFlag.Other).ToList();
+        return buckets.Count == 0 || buckets.Any(IsRegionFlagChecked);
+    }
+
+    // Toolbar'daki USA/EU/Japan bayrakları değiştiğinde, birden fazla sürümü olan (bkz.
+    // Game.AllVersions) her oyunun Region/SourceDat/File alanlarını İŞARETLİ region'lar arasından
+    // yeniden seçer — kullanıcı isteği: "USA'yı seçtiğimde tablodaki bilgiler USA'nın bilgileri
+    // olsun". Tek sürümlü oyunlara dokunmuyor (değişecek bir şey yok, gereksiz iş). Title bilinçli
+    // olarak DEĞİŞTİRİLMİYOR — CatalogBuilder.MergeRegionVariants ile birleşen oyunlarda bile
+    // (ör. Alpha 2/Zero 2) ana başlık hep RegionPriority'nin global tercihinde kalır, sadece
+    // hangi FİZİKSEL dosyanın/region'ın gösterileceği değişir.
+    private void RecomputeRegionDisplay()
+    {
+        foreach (var game in _allGames)
+        {
+            if (game.AllVersions.Count <= 1)
+                continue;
+
+            var eligible = game.AllVersions.Where(v => IsRegionFlagChecked(ClassifyRegion(v.Region))).ToList();
+            if (eligible.Count == 0)
+                continue; // hiçbiri işaretli değil -> zaten görünürlükten düşecek, mevcut değeri koru
+
+            var best = eligible
+                .OrderBy(v => ClassifyRegion(v.Region) switch
+                {
+                    RegionFlag.Usa => 0,
+                    RegionFlag.Eu => 1,
+                    RegionFlag.Japan => 3,
+                    _ => 2, // World/Unknown/diğer: USA/EU'dan sonra ama Japan'dan önce (mevcut RegionRank sırasıyla tutarlı)
+                })
+                .First();
+
+            game.Region = best.Region;
+            game.SourceDat = best.SourceDat;
+            game.File = best.FileName;
+
+            // File değiştiği için ona bağlı her şey (ROM'un yerelde olup olmadığı, Box/BG/SS/Logo
+            // önizlemeleri) da yeniden hesaplanmalı — aksi halde ör. USA'ya geçince Japan sürümünün
+            // eski medya/ROM eşleşmesi bir süre daha ekranda kalırdı.
+            game.HasLocalFile = HasLocalFile(game);
+            NotifyArtworkDownloaded(game);
+        }
+    }
+
+    private enum RegionFlag
+    {
+        Usa,
+        Eu,
+        Japan,
+        Other,
+    }
+
+    // Chip/platform/arama'ya göre TABAN popülasyon — Top 250/100/25 için henüz ağırlıklı sıralama/
+    // kesme (Take N) UYGULANMAMIŞ hâlidir. Hem ApplyFilter'ın kendisi hem de filtre dropdown'larının
+    // (bkz. RefreshColumnFilterOptions) sayıları AYNI bu popülasyondan hesaplanır — böylece "USA
+    // (1400)" gibi bir sayı top-25'e kesilmeden ÖNCEKİ gerçek aday havuzunu yansıtır.
     //
-    // Bir chip seçiliyse (Favorites/kullanıcı playlist'i/Hidden/Recycle Bin) bu, normal
-    // Platform+Arama+Released-Junk+sütun-filtre hattının YERİNE geçer — chip'ler "ayrı bir görünüm"
-    // (bkz. plan), üst üste bindirilmiyor. Normal görünümde ise gizli/çöp kutusundaki oyunlar
-    // hiç gösterilmez (onları görmek için ilgili chip'e tıklanır).
-    //
-    // public: Edit Metadata penceresi kapandıktan sonra MainWindow.xaml.cs bunu çağırıp
-    // DataGrid'in güncellenen değerleri (Title/Genre/... ObservableProperty olmadığı için)
-    // göstermesini sağlıyor.
-    public void ApplyFilter()
+    // Sol paneldeki platform seçimi HER ZAMAN 1. süzgeç, üstteki playlist/chip şeridi 2. süzgeç
+    // (kullanıcı kararı) — bu yüzden SelectedPlatform daraltması chip seçili olsun olmasın aynı
+    // şekilde uygulanıyor: "Ready to Play" gibi bir chip artık seçili platforma özel, önceden
+    // platformdan bağımsız tüm kütüphaneyi gösteriyordu (kullanıcı geri bildirimi).
+    private IEnumerable<Game> GetFilterScopePopulation()
     {
         IEnumerable<Game> query;
 
@@ -1308,13 +1640,14 @@ public partial class MainViewModel : ObservableObject
                 PlaylistChipKind.RecycleBin => _allGames.Where(g => g.IsDeleted),
                 PlaylistChipKind.ReadyToPlay => _allGames.Where(g => g.HasLocalFile),
                 PlaylistChipKind.NeedsSearch => _allGames.Where(g => !g.HasLocalFile),
-                // Seçili platforma göre (bkz. SelectedPlatform) — "All Platforms" iken tüm
-                // kütüphane üzerinden hesaplanır.
-                PlaylistChipKind.Top250 => ComputeTopRated(GetTopRatedPopulation(), 250),
-                PlaylistChipKind.Top100 => ComputeTopRated(GetTopRatedPopulation(), 100),
-                PlaylistChipKind.Top25 => ComputeTopRated(GetTopRatedPopulation(), 25),
+                // Sıralama/kesme burada DEĞİL, ApplyFilter'da sütun filtrelerinden SONRA
+                // uygulanıyor (bkz. orada).
+                PlaylistChipKind.Top250 or PlaylistChipKind.Top100 or PlaylistChipKind.Top25 => GetTopRatedPopulation(),
                 _ => _allGames.Where(g => _selectedChipMembership.Contains(g.GameKey)),
             };
+
+            if (SelectedPlatform is { IsAllPlatforms: false })
+                query = query.Where(g => g.Platform == SelectedPlatform.Name);
         }
         else
         {
@@ -1323,35 +1656,96 @@ public partial class MainViewModel : ObservableObject
             if (SelectedPlatform is { IsAllPlatforms: false })
                 query = query.Where(g => g.Platform == SelectedPlatform.Name);
 
-            if (!string.IsNullOrWhiteSpace(SearchText))
-                query = query.Where(g => g.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
-
             query = query.Where(g => (ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk"));
-
-            query = ApplyColumnFilter(query, PlatformFilter, g => g.PlatformDisplayName);
-            query = ApplyColumnFilter(query, GenresFilter, g => g.Genres);
-            query = ApplyColumnFilter(query, PublisherFilter, g => g.Publisher);
-            query = ApplyColumnFilter(query, CommunityRatingFilter, g => g.CommunityRating.HasValue ? g.CommunityRating.Value.ToString("0.0") : string.Empty);
-            query = ApplyColumnFilter(query, RegionFilter, g => g.Region);
-            query = ApplyColumnFilter(query, SourceFilter, g => g.SourceDat);
-            query = ApplyColumnFilter(query, MatchMethodFilter, g => g.MatchMethod);
-            query = ApplyColumnFilter(query, MaxPlayersFilter, g => g.MaxPlayers == 0 ? string.Empty : g.MaxPlayers.ToString());
-            query = ApplyColumnFilter(query, TitleFilter, g => g.Title);
-            query = ApplyColumnFilter(query, FileFilter, g => g.File);
-            query = ApplyColumnFilter(query, MatchedFilter, g => g.StatusOk ? "Eşleşti" : "Eşleşmedi");
-            query = ApplyColumnFilter(query, FavoriteFilter, g => g.IsFavorite ? "Evet" : "Hayır");
-            query = ApplyColumnFilter(query, HasLocalFileFilter, g => g.HasLocalFile ? "Oynanabilir" : "Eksik");
-            query = ApplyColumnFilter(query, BoxFilter, g => g.HasBox ? "Evet" : "Hayır");
-            query = ApplyColumnFilter(query, BackgroundFilter, g => g.HasBackground ? "Evet" : "Hayır");
-            query = ApplyColumnFilter(query, ScreenshotFilter, g => g.HasScreenshot ? "Evet" : "Hayır");
         }
 
-        Games.Clear();
-        foreach (var game in query)
-            Games.Add(game);
+        if (!string.IsNullOrWhiteSpace(SearchText))
+            query = query.Where(g => g.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+
+        query = query.Where(MatchesRegionFlags);
+
+        return query;
+    }
+
+    // Platform, arama metni, Released/Junk anahtarları ve sütun başlıklarındaki joystick
+    // filtrelerine göre _allGames üzerinden Games koleksiyonunu yeniden oluşturur. Basitlik için
+    // tüm listeyi temizleyip yeniden dolduruyoruz; 67 bin oyun için bu hâlâ anlık.
+    //
+    // Bir chip seçiliyse (Favorites/kullanıcı playlist'i/Hidden/Recycle Bin/Ready to Play/Needs
+    // Search/Top 250-100-25) o chip'in kendi popülasyonu TABAN olarak kullanılır (bkz.
+    // GetFilterScopePopulation); arama metni ve sütun başlığı filtreleri (Platform/Genres/...
+    // popup'ları) bunun ÜSTÜNE, HER ZAMAN uygulanır (kullanıcı geri bildirimi: "filtreler her
+    // playlistte çalışsın" — önceden chip seçiliyken bu filtreler tamamen atlanıyordu).
+    //
+    // Top 250/100/25 için ağırlıklı sıralama VE kesme (Take N) sütun filtrelerinden SONRA
+    // uygulanır — "Top 25" gerçekten "şu an filtrelenmiş kümenin ilk 25'i" anlamına gelsin diye
+    // (kullanıcı isteği: "USA'nın top 25'ini görmek istiyorum, USA+EU seçiliyken ikisi arasından
+    // top 25, hepsi seçiliyken hepsi arasından top 25 — seçilenlere göre göstermesi lazım"). Filtre
+    // ÖNCE, sıralama/kesme SONRA uygulanmazsa, "Top 25" sabit bir 25'lik listeyi filtreleyip 25'ten
+    // az sonuç verirdi; bu sırayla her zaman (yeterli aday varsa) tam 25 sonuç, filtrelenmiş
+    // kümenin GERÇEK ilk 25'i olarak dönüyor.
+    //
+    // public: Edit Metadata penceresi kapandıktan sonra MainWindow.xaml.cs bunu çağırıp
+    // DataGrid'in güncellenen değerleri (Title/Genre/... ObservableProperty olmadığı için)
+    // göstermesini sağlıyor.
+    public void ApplyFilter()
+    {
+        var query = GetFilterScopePopulation();
+
+        query = ApplyColumnFilter(query, PlatformFilter, g => g.PlatformDisplayName);
+        query = ApplyColumnFilter(query, GenresFilter, g => g.Genres);
+        query = ApplyColumnFilter(query, PublisherFilter, g => g.Publisher);
+        query = ApplyColumnFilter(query, CommunityRatingFilter, g => g.CommunityRating.HasValue ? g.CommunityRating.Value.ToString("0.0") : string.Empty);
+        query = ApplyColumnFilter(query, RegionFilter, g => g.Region);
+        query = ApplyColumnFilter(query, SourceFilter, g => g.SourceDat);
+        query = ApplyColumnFilter(query, MatchMethodFilter, g => g.MatchMethod);
+        query = ApplyColumnFilter(query, MaxPlayersFilter, g => g.MaxPlayers == 0 ? string.Empty : g.MaxPlayers.ToString());
+        query = ApplyColumnFilter(query, TitleFilter, g => g.Title);
+        query = ApplyColumnFilter(query, FileFilter, g => g.File);
+        query = ApplyColumnFilter(query, MatchedFilter, g => g.StatusOk ? "Eşleşti" : "Eşleşmedi");
+        query = ApplyColumnFilter(query, FavoriteFilter, g => g.IsFavorite ? "Evet" : "Hayır");
+        query = ApplyColumnFilter(query, HasLocalFileFilter, g => g.HasLocalFile ? "Oynanabilir" : "Eksik");
+        query = ApplyColumnFilter(query, BoxFilter, g => g.HasBox ? "Evet" : "Hayır");
+        query = ApplyColumnFilter(query, ScreenshotFilter, g => g.HasScreenshot ? "Evet" : "Hayır");
+
+        query = SelectedChip?.Kind switch
+        {
+            PlaylistChipKind.Top250 => ComputeTopRated(query, 250),
+            PlaylistChipKind.Top100 => ComputeTopRated(query, 100),
+            PlaylistChipKind.Top25 => ComputeTopRated(query, 25),
+            _ => query,
+        };
+
+        Games = new ObservableCollection<Game>(query);
 
         OnPropertyChanged(nameof(VisibleCount));
         OnPropertyChanged(nameof(TotalCount));
+    }
+
+    // Bir sütun filtresi popup'ı açılmadan HEMEN önce (bkz. ColumnFilterViewModel.
+    // RequestRefreshOptions) çağrılır — Options listesindeki değer/sayıları GÜNCEL kapsama (chip/
+    // platform/arama, bkz. GetFilterScopePopulation) göre yeniden hesaplar. Kullanıcının o an
+    // işaretli/işaretsiz bıraktığı değerler KORUNUR, sadece değer kümesi ve sayılar tazelenir.
+    private void RefreshColumnFilterOptions(ColumnFilterViewModel filter, Func<Game, string> selector)
+    {
+        var previousChecked = filter.Options.ToDictionary(o => o.Value, o => o.IsChecked, StringComparer.OrdinalIgnoreCase);
+
+        var freshOptions = GetFilterScopePopulation()
+            .Select(selector)
+            .Select(NormalizeForFilter)
+            .GroupBy(v => v, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new FilterOption
+            {
+                Value = g.Key,
+                Count = g.Count(),
+                IsChecked = !previousChecked.TryGetValue(g.Key, out var wasChecked) || wasChecked,
+            });
+
+        filter.Options.Clear();
+        foreach (var option in freshOptions)
+            filter.Options.Add(option);
     }
 
     // "Top 250/100/25" chip'leri için ağırlıklı ortalama (IMDb'nin kendi Top 250'sinde kullandığı
@@ -1386,11 +1780,9 @@ public partial class MainViewModel : ObservableObject
     private static IEnumerable<Game> ComputeTopRated(IEnumerable<Game> population, int take) =>
         RankByWeightedRating(population).Take(take);
 
-    // Top 250/100/25 chip'lerinin filtre popülasyonu — seçili platforma göre daralır, "All
-    // Platforms" iken tüm kütüphaneyi kapsar (bkz. ApplyFilter).
-    private IEnumerable<Game> GetTopRatedPopulation() => SelectedPlatform is { IsAllPlatforms: false }
-        ? _allGames.Where(g => g.Platform == SelectedPlatform.Name && !g.IsHidden && !g.IsDeleted)
-        : _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
+    // Top 250/100/25 chip'lerinin filtre popülasyonu. Platform daraltması artık burada değil,
+    // GetFilterScopePopulation'da TÜM chip'ler için tek/ortak bir yerde uygulanıyor (bkz. orada).
+    private IEnumerable<Game> GetTopRatedPopulation() => _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
 
     // Uygulama açılışında BİR KEZ hesaplanır (bkz. constructor) — her oyunun KENDİ platformu
     // içindeki ağırlıklı sıralamaya göre en yüksek rozeti (Top25 > Top100 > Top250) belirlenir.
@@ -1432,6 +1824,11 @@ public partial class MainViewModel : ObservableObject
     // Her platformun rozetindeki sayıyı _allGames içinde o platforma ait kaç kayıt olduğuna göre
     // hesaplar ("All Platforms" toplam sayıyı gösterir). GetPlatforms()'taki sabit GameCount
     // değerleri sadece ilk yapım aşamasının kalıntısıydı; artık tek doğru kaynak gerçek oyun listesi.
+    // BİLİNÇLİ TASARIM: bu sayı toolbar'daki USA/EU/Japan bayrak filtresinden VE Released/Junk
+    // butonlarından etkilenmez — sol menü her zaman "bu platformda toplam kaç oyun var" sorusuna
+    // cevap veren sabit bir referanstır. "Görünen" sayacı ise o an aktif olan TÜM filtrelerin
+    // (region bayrağı + Released/Junk + arama + sütun filtreleri + playlist) sonucudur; ikisinin
+    // bilerek ayrışması normaldir (rozet asla filtrelenmiş bir alt kümeyi göstermez).
     private void SyncPlatformGameCounts()
     {
         foreach (var platform in Platforms)
@@ -1568,15 +1965,9 @@ public partial class MainViewModel : ObservableObject
     private void ToggleOthers() => IsOthersExpanded = !IsOthersExpanded;
 
     // --- Toolbar komutları ---
-    // Aşağıdaki komutların çoğu bu aşamada bilinçli olarak boş (no-op): gerçek dosya taraması,
-    // metadata indirme vb. mantık henüz yazılmadı. Buton/binding altyapısı hazır olduğu için
-    // ileride sadece metod gövdelerinin doldurulması yeterli olacak.
 
     [RelayCommand]
     private void Import() => RequestOpenRomImport?.Invoke();
-
-    [RelayCommand]
-    private void Rescan() { }
 
     // "Temizle" butonu: arama metnini, platform seçimini ve filtre anahtarlarını varsayılana döndürür.
     [RelayCommand]
@@ -1588,17 +1979,40 @@ public partial class MainViewModel : ObservableObject
         ShowJunk = false;
     }
 
+    // Detay panelindeki Tür rozetine (tek tür) veya açılır menüsündeki bir seçeneğe (birden fazla
+    // tür) tıklanınca çalışır — YENİ bir filtre sistemi DEĞİL, sütun başlığındaki filtre popup'ıyla
+    // BİREBİR AYNI GenresFilter'ı kullanır (bkz. Models/ColumnFilter.cs). GenresFilter.Options her
+    // oyunun TAM (virgülle ayrılmış) Genres string'ini tek bir seçenek olarak tutuyor; burada tek
+    // bir token'a (ör. sadece "Shooter") göre birden fazla seçeneği aynı anda işaretleyebiliyoruz
+    // çünkü o token'ı İÇEREN her kombinasyon aranıyor. "ALL" tüm seçenekleri işaretleyip filtreyi
+    // sıfırlar (dropdown'daki "All Genres"). AÇMA/KAPAMA (toggle): aynı rozete İKİNCİ kez tıklanırsa
+    // (filtre zaten TAM OLARAK bu token'a göre uygulanmışsa) filtre kaldırılır — kullanıcı geri
+    // bildirimi: "tekrar tıklayınca gitmiyor" (önceki sürüm sadece uyguluyordu, hiç kaldırmıyordu).
     [RelayCommand]
-    private void RefreshMedia() { }
+    private void FilterByGenreToken(string token)
+    {
+        bool Matches(FilterOption option) =>
+            token == "ALL" || option.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Contains(token, StringComparer.OrdinalIgnoreCase);
 
-    [RelayCommand]
-    private void MetadataRefresh() { }
+        var alreadyApplied = token != "ALL" && GenresFilter.Options.All(o => o.IsChecked == Matches(o));
 
-    [RelayCommand]
-    private void MoveToLibrary() { }
+        foreach (var option in GenresFilter.Options)
+            option.IsChecked = alreadyApplied || Matches(option);
 
+        GenresFilter.ApplyFilterCommand.Execute(null);
+    }
+
+    // Detay panelindeki "Released"/"Junk" rozetine tıklanınca çalışır — YENİ bir filtre değil,
+    // toolbar'daki Released/Junk toggle'larıyla AYNI ShowReleased/ShowJunk alanlarını kullanır
+    // (bkz. OnShowReleasedChanged/OnShowJunkChanged, ikisi de zaten ApplyFilter'ı tetikliyor).
+    // Rozete tıklamak o sürüm türünü DIŞLAYICI olarak seçer (ör. Released'a tıklayınca Junk kapanır).
     [RelayCommand]
-    private void ApplyResolver() { }
+    private void FilterByVersion(string version)
+    {
+        ShowReleased = version == "Released";
+        ShowJunk = version == "Junk";
+    }
 
     // Sağ paneldeki BAŞLAT butonu — o an seçili oyunu başlatır (grid'deki Play butonuyla aynı
     // LaunchGame'i kullanır).
@@ -1652,10 +2066,29 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    // "Oynanış Önizleme" alanındaki YouTube/Wikipedia butonları — LaunchBox'tan gelen VideoUrl/
-    // WikipediaUrl'i varsayılan tarayıcıda açar. Buton zaten Game.HasVideoUrl/HasWikipediaUrl'e
-    // göre sadece URL varsa görünür (bkz. MainWindow.xaml), o yüzden burada ekstra bir kontrol
-    // gerekmiyor ama yine de savunmacı davranıyoruz.
+    // Gameplay screenshot alanındaki YouTube oynatma — artık dış tarayıcı AÇMIYOR (kullanıcı
+    // isteği), aynı alanda embedded WebView2 player'a geçiyor (bkz. MainWindow.xaml Grid.Row="4",
+    // MainWindow.xaml.cs PlayYouTubeEmbedAsync). Hem başlık satırındaki YouTube butonu hem de
+    // gameplay alanının ortasındaki Play overlay'i bunu çağırıyor.
+    [RelayCommand]
+    private void PlayVideo(Game game)
+    {
+        if (!game.HasYouTubeEmbed)
+            return;
+
+        VideoEmbedFailed = false;
+        IsPlayingVideo = true;
+    }
+
+    [RelayCommand]
+    private void CloseVideo()
+    {
+        IsPlayingVideo = false;
+        VideoEmbedFailed = false;
+    }
+
+    // SADECE embed navigasyonu başarısız olursa gösterilen fallback buton (bkz. VideoEmbedFailed) —
+    // bu tek durumda dış tarayıcıda açmak makul, aksi halde kullanıcının izleyecek hiçbir yolu kalmaz.
     [RelayCommand]
     private void OpenVideoUrl(Game game)
     {

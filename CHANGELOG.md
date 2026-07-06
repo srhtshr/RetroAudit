@@ -2,6 +2,64 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.21] - 2026-07-06
+
+### Added
+- **Embedded YouTube oynatıcı**: gameplay screenshot alanında bir Play overlay'i, tıklanınca dış
+  tarayıcı AÇMADAN aynı alanda (WebView2 + Plyr.io skin'i) videoyu embed olarak oynatıyor; kapat
+  butonuna basılınca veya başka oyun seçilince otomatik duruyor. YouTube'un embed doğrulamasının
+  reddettiği "Hata 153" sorunu, `player.html`'i `SetVirtualHostNameToFolderMapping` ile gerçek bir
+  https origin'i altında sunarak; sesli autoplay ise ayrı bir `CoreWebView2Environment`'a
+  `--autoplay-policy=no-user-gesture-required` argümanı vererek çözüldü. Video 1. dakikadan
+  başlıyor, 4:3 içerik yandaki siyah bantları azaltmak için hafifçe yatayda geriliyor. Başlık
+  satırındaki YouTube butonu artık linki olmayan oyunlarda da görünür (sadece pasif/soluk).
+- **Gerçek kırpma/yeniden boyutlandırma**: Box art ve Clear Logo'ya sol tıklayınca (sürüklenebilir
+  kırpma dikdörtgeni, köşe tutamaçları, isteğe bağlı en-boy kilidi, piksel küçültme seçenekleriyle)
+  gerçek bir kırpma editörü açılıyor; sağ tık ile "Klasöre Git" ile o görselin dosya konumu
+  açılabiliyor.
+- **Fanart tamamen kaldırıldı**: kod, veritabanı şeması ve daha önce indirilmiş dosyalar dahil —
+  artwork türleri artık sadece Box/Screenshot/Clear Logo.
+- LaunchBox'ın `ReleaseType` alanı okunuyor; Homebrew/ROM Hack/Unlicensed/Unreleased/DLC/Early
+  Access olarak işaretli eşleşmeler otomatik olarak Junk (varsayılan gizli) işaretleniyor.
+- Region/ülke bayrakları (LaunchBox CDN kaynaklı, 32 bayrak) indirilip tabloda Region sütununda,
+  Sürümler kartlarında ve Alternate Names satırlarında gösteriliyor. Region sütununun görünümü
+  (Bayrak+Text/Text+Bayrak/Sadece Bayrak/Sadece Text) Ayarlar > Arayüz'den seçilebiliyor.
+- Ayarlar > Arayüz'e yeni bir "Sürümler" görünüm tercihi eklendi: tek kart + açılır listeden seçim
+  veya tüm sürümlerin tam listesi.
+- Ayarlar penceresi artık **canlı** yansıyor: bir tercih değiştirildiğinde Kaydet'e basmadan ana
+  pencerede anında görünüyor; Kaydet hâlâ sadece diske kalıcı yazmak için gerekli.
+- "Ayarlar" düğmesi Tools açılır menüsünden ayrılıp toolbar'da kendi başına, tek tıkla erişilen bir
+  düğme oldu.
+
+### Changed
+- `VersionResolver.NormalizeForCompare`, LaunchBox'ın kendi `CompareName` normalizasyon algoritması
+  (183 binin üzerinde gerçek isim çifti üzerinden tersine mühendislikle) yeniden yazıldı — stopword
+  temizliği, Roma rakamı dönüşümü (II-VIII) ve noktalama kuralları eklendi. Bölge varyantı
+  birleştirme (ör. "1943 - The Battle of Midway"/"...Valhalla") artık doğru çalışıyor; eşleşen oyun
+  sayısı 43.495'ten 45.540'a çıktı.
+- Detay panelindeki Alternate Names bölümü artık her zaman görünür (isim yoksa "-" gösteriyor),
+  minimum 2 satır yer kaplıyor ve fazlası bir açılır menüde listeleniyor — Box art'ın oyunlar
+  arasında geçişte zıplaması önlendi.
+- Box art artık sabit yükseklikte; Details sütunundaki değişken satırlara (Publisher/Steam AppID
+  vb.) bağlı olarak boyu oynamıyor.
+- Gameplay screenshot alanı biraz daha yüksek (230 → 260px).
+
+### Fixed
+- Ayarlar penceresindeki RadioButton grupları (Sağ Tık Menüsü/Sürümler/Platform Listesi/Bölge
+  Sütunu) `GroupName` belirtilmediği için WPF tarafından tek bir grup sayılıyor, birbirini
+  işaretsiz bırakıyordu — her gruba ayrı `GroupName` eklendi.
+- Ayarlar penceresi "Kaydet" sonrası kapatılınca ana pencere bazen simge durumuna küçülüp
+  arkada kalıyordu (WindowChrome + Owner zinciri etkileşimi) — kapanışta ana pencere artık
+  açıkça eski haline getirilip öne alınıyor.
+- Ayarlar penceresi kapanınca çalışan gereksiz tam dosya/artwork yeniden tarama işlemi (artık veri
+  klasörü konumu Ayarlar'dan değiştirilemediği için anlamsızdı) kaldırıldı — algılanabilir bir
+  donma/"kapanıp açılma" hissi veriyordu.
+- Ayarlar penceresinin Genel/Arayüz sekmelerinde içerik pencere boyunu aşınca kaydırma çubuğu
+  yoktu, alttaki alanlara ulaşılamıyordu — ScrollViewer eklendi.
+- Clear Logo/gameplay screenshot fallback mantığı: Clear Logo var ama gameplay yoksa artık her
+  zaman gerçek logo gösteriliyor (önceden bazı durumlarda yanlışlıkla yer tutucu görseli
+  gösteriliyordu).
+
 ## [0.20] - 2026-07-05
 
 ### Added

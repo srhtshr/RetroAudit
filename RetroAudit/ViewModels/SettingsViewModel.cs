@@ -40,6 +40,11 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private double rowHeight = 30;
 
+    // Detay panelindeki "Sürümler (Region)" gösterim tercihi (bkz. Ayarlar > Arayüz, kullanıcı
+    // isteği: "ister bu şekilde açılır liste isterse full açık olarak gösterebilme ayarı olsun").
+    [ObservableProperty]
+    private bool showVersionsAsSingleCard = true;
+
     // Sol paneldeki platform listesinin gruplama/görünüm tercihleri (bkz. Ayarlar > Arayüz >
     // Platform Listesi) — MainViewModel.RebuildPlatformListItems bunları okuyup uygular.
     [ObservableProperty]
@@ -47,6 +52,9 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private PlatformListDisplayMode platformListDisplayMode = PlatformListDisplayMode.Text;
+
+    [ObservableProperty]
+    private RegionColumnDisplayMode regionColumnDisplayMode = RegionColumnDisplayMode.FlagAndText;
 
     // "Görsel Getir" indirmelerinin küçültüleceği maksimum boyut (bkz. Ayarlar > Genel).
     [ObservableProperty]
@@ -73,8 +81,10 @@ public partial class SettingsViewModel : ObservableObject
         contextMenuDisplayMode = settings.ContextMenuDisplayMode;
         launchBoxDbPath = settings.LaunchBoxDbPath;
         rowHeight = settings.RowHeight;
+        showVersionsAsSingleCard = settings.ShowVersionsAsSingleCard;
         groupPlatformsByCategory = settings.GroupPlatformsByCategory;
         platformListDisplayMode = settings.PlatformListDisplayMode;
+        regionColumnDisplayMode = settings.RegionColumnDisplayMode;
         artworkMaxDimension = settings.ArtworkMaxDimension;
         BuildCategoryOptions(settings);
     }
@@ -309,8 +319,10 @@ public partial class SettingsViewModel : ObservableObject
         settings.ContextMenuDisplayMode = ContextMenuDisplayMode;
         settings.LaunchBoxDbPath = LaunchBoxDbPath;
         settings.RowHeight = RowHeight;
+        settings.ShowVersionsAsSingleCard = ShowVersionsAsSingleCard;
         settings.GroupPlatformsByCategory = GroupPlatformsByCategory;
         settings.PlatformListDisplayMode = PlatformListDisplayMode;
+        settings.RegionColumnDisplayMode = RegionColumnDisplayMode;
         settings.ArtworkMaxDimension = ArtworkMaxDimension;
         settings.CategoryVisibility = CategoryOptions.ToDictionary(o => o.Key, o => o.IsVisible);
         settings.Emulators = Emulators.ToList();
@@ -325,8 +337,10 @@ public partial class SettingsViewModel : ObservableObject
         ContextMenuDisplayMode = settings.ContextMenuDisplayMode;
         LaunchBoxDbPath = settings.LaunchBoxDbPath;
         RowHeight = settings.RowHeight;
+        ShowVersionsAsSingleCard = settings.ShowVersionsAsSingleCard;
         GroupPlatformsByCategory = settings.GroupPlatformsByCategory;
         PlatformListDisplayMode = settings.PlatformListDisplayMode;
+        RegionColumnDisplayMode = settings.RegionColumnDisplayMode;
         ArtworkMaxDimension = settings.ArtworkMaxDimension;
         BuildCategoryOptions(settings);
 

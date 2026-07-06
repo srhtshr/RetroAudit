@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -17,7 +18,7 @@ public static class ArtworkService
 
     private static readonly HttpClient Http = new();
 
-    // Kaynak dosyalar (özellikle Background/Screenshot) birkaç MB'a kadar çıkabiliyordu — uygulama
+    // Kaynak dosyalar (özellikle Screenshot) birkaç MB'a kadar çıkabiliyordu — uygulama
     // bunları hiçbir yerde bu boyuttan büyük göstermiyor (en büyük gösterim alanı ~300x240), bu
     // yüzden indirdikten sonra uzun kenarı Ayarlar > Genel'de seçilen boyuta küçültüp yeniden
     // kodluyoruz (bkz. AppSettings.ArtworkMaxDimension, MainViewModel çağrı yeri). "Original"
@@ -35,15 +36,22 @@ public static class ArtworkService
     // sayaca topluyor (bkz. RomImportViewModel'in per-item try/catch deseni). preserveTransparency:
     // Logo için PNG (alfa kanalı korunur), diğer türler için küçük/kayıplı JPEG (%90 kalite —
     // opak fotoğraf içerikte gözle fark edilmeyen bir kalite kaybı, PNG'ye göre çok daha küçük).
-    public static async Task<bool> DownloadAsync(string fileName, string destinationPath, bool preserveTransparency, int maxDimension)
+    // cancellationToken: kullanıcı "Durdur"a basarsa OperationCanceledException fırlatılır —
+    // bilinçli olarak alttaki genel catch'e YAKALANMADAN yeniden fırlatılıyor, aksi halde iptal
+    // sessizce "bu görsel indirilemedi" sayılıp döngü durmadan devam ederdi.
+    public static async Task<bool> DownloadAsync(string fileName, string destinationPath, bool preserveTransparency, int maxDimension, CancellationToken cancellationToken = default)
     {
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
-            var bytes = await Http.GetByteArrayAsync(BuildUrl(fileName));
+            var bytes = await Http.GetByteArrayAsync(BuildUrl(fileName), cancellationToken);
             var encoded = ResizeAndEncode(bytes, preserveTransparency, maxDimension);
-            await File.WriteAllBytesAsync(destinationPath, encoded);
+            await File.WriteAllBytesAsync(destinationPath, encoded, cancellationToken);
             return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
