@@ -26,6 +26,12 @@ public class BuildReport
     // etiketleri yüzünden DatNameParser.ShouldExclude tarafından tamamen elenen ham DAT kaydı sayısı.
     public int FilteredRecordCount { get; set; }
 
+    // FilteredRecordCount'un alt kümesi: oyun ADI (entry.Name) temiz göründüğü hâlde SADECE ROM
+    // dosya adındaki bir etiket (ör. "(Aftermarket) (Unl)") yüzünden elenen kayıt sayısı — kullanıcı
+    // geri bildirimi: "üstte released yazıyor ama sürüm adında Unl yazıyor" (bkz. VersionResolver.
+    // ContainsExcludedTag çağrısı).
+    public int ExcludedByRomFileNameCount { get; set; }
+
     public int PreferredVersionMissing { get; set; }
     public int DuplicateHashCollisions { get; set; }
 
@@ -79,6 +85,7 @@ public class BuildReport
         sb.AppendLine($"Versions:                   {VersionCount}");
         sb.AppendLine($"Hash rows:                  {HashCount}");
         sb.AppendLine($"Filtered records (excluded before grouping): {FilteredRecordCount}");
+        sb.AppendLine($"  of which by ROM file name only (game name was clean): {ExcludedByRomFileNameCount}");
         sb.AppendLine($"Unknown-region versions:    {UnknownRegionVersionCount}");
         sb.AppendLine($"RetroAudit Matched:         {MetadataMatched}  (exact: {MetadataMatched - FuzzyMatched}, fuzzy: {FuzzyMatched})");
         sb.AppendLine($"  of which Needs Review:    {NeedsReview}");

@@ -11,15 +11,27 @@ public partial class ArtworkTypeSelectionViewModel : ObservableObject
 {
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAnySelected))]
-    private bool includeBox = true;
+    private bool includeBox;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAnySelected))]
-    private bool includeClearLogo = true;
+    private bool includeClearLogo;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAnySelected))]
-    private bool includeGameplay = true;
+    private bool includeGameplay;
+
+    // Kullanıcı isteği: "hangileri zaten indirilmiş/tanımlıysa işaretsiz gelsin otomatikman" —
+    // zaten var olan bir tür varsayılan olarak İŞARETSİZ geliyor (gereksiz yeniden indirmeyi
+    // önlemek için), ama kullanıcı isterse yine de elle işaretleyip zorla yeniden indirebilir.
+    // Tekli indirimde bu üçü doğrudan o oyunun Has*'ı; toplu indirimde (bkz. MainViewModel.
+    // BulkFetchArtwork) "SEÇİLİ oyunların HEPSİNDE zaten var mı" sorusuna karşılık gelir.
+    public ArtworkTypeSelectionViewModel(bool alreadyHasBox = false, bool alreadyHasClearLogo = false, bool alreadyHasGameplay = false)
+    {
+        includeBox = !alreadyHasBox;
+        includeClearLogo = !alreadyHasClearLogo;
+        includeGameplay = !alreadyHasGameplay;
+    }
 
     // İndir butonunun etkin olması için en az bir tür seçili olmalı.
     public bool HasAnySelected => IncludeBox || IncludeClearLogo || IncludeGameplay;

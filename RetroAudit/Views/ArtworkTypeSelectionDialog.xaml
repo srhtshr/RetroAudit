@@ -5,10 +5,6 @@
         Title="Görsel Getir" Height="320" Width="340" WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize">
 
-    <Window.DataContext>
-        <vm:ArtworkTypeSelectionViewModel />
-    </Window.DataContext>
-
     <Grid Background="{StaticResource Brush.Background.Base}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />

@@ -79,7 +79,7 @@ public partial class MainWindow : Window
                     StopYouTubeEmbed();
             };
 
-            vm.RequestOpenMediaProvider += () => new MediaProviderWindow { Owner = this }.Show();
+            vm.RequestOpenMediaProvider += () => new MediaProviderWindow(vm) { Owner = this }.Show();
             vm.RequestOpenCropEditor += () => new CropEditorDialog { Owner = this }.ShowDialog();
             vm.RequestOpenSettings += () =>
             {
@@ -130,10 +130,11 @@ public partial class MainWindow : Window
             vm.RequestShowMessage += message => MessageBox.Show(message, "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
 
             // "Görsel Getir" öncesi hangi türlerin (Box/Clear Logo/Gameplay) indirileceğini
-            // sorar (kullanıcı isteği) — iptal edilirse null döner, indirme hiç başlamaz.
-            vm.RequestArtworkTypeSelection += () =>
+            // sorar (kullanıcı isteği) — iptal edilirse null döner, indirme hiç başlamaz. Zaten
+            // mevcut olan türler diyalogda varsayılan işaretsiz geliyor (bkz. ArtworkTypeSelectionViewModel).
+            vm.RequestArtworkTypeSelection += alreadyHas =>
             {
-                var dialog = new ArtworkTypeSelectionDialog { Owner = this };
+                var dialog = new ArtworkTypeSelectionDialog(alreadyHas.HasBox, alreadyHas.HasClearLogo, alreadyHas.HasScreenshot) { Owner = this };
                 return dialog.ShowDialog() == true ? dialog.SelectedTypes : null;
             };
 
@@ -144,8 +145,20 @@ public partial class MainWindow : Window
             // (Completed) o TEK oyunun "dosya var mı" durumunu tazeliyor.
             vm.RequestSearchRom += request =>
             {
-                var (url, targetFolder, game) = request;
-                new RomSearchWindow(url, targetFolder, game.Title, _ => vm.NotifyRomDownloaded(game))
+                var (url, targetFolder, forcedFileName, game) = request;
+                new RomSearchWindow(url, targetFolder, game.Title, _ => vm.NotifyRomDownloaded(game), forcedFileName)
+                {
+                    Owner = this,
+                }.Show();
+            };
+
+            // Detay panelindeki tek-görsel "Ara" butonları (bkz. MainViewModel.SearchBoxArt/
+            // SearchClearLogoArt/SearchScreenshotArt) — aynı embedded WebView2 deseni, sadece
+            // hedef dosya adı ROM'la eşleşecek şekilde zorlanıyor (bkz. MediaSearchWindow).
+            vm.RequestSearchArtwork += request =>
+            {
+                var (url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback) = request;
+                new MediaSearchWindow(url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback)
                 {
                     Owner = this,
                 }.Show();
@@ -680,6 +693,19 @@ public partial class MainWindow : Window
     // alternatif isimleri listeleyen ContextMenu'yü açar (2 satır sınırının üzerinde her zaman
     // en az 1 öğe olduğu için burada tek/çoklu ayrımı yok, her tıklama menüyü açar).
     private void AlternateNamesOverflowToggle_Click(object sender, RoutedEventArgs e)
+    {
+        var button = (Button)sender;
+        if (button.ContextMenu is { } menu)
+        {
+            menu.PlacementTarget = button;
+            menu.IsOpen = true;
+        }
+    }
+
+    // Başlık satırındaki tek "Ara" düğmesi (bkz. XAML, kullanıcı isteği: "search butonuna
+    // tıklayınca Kapak/Logo/Gameplay seçenekleri açılsın") — Kapsül menüsünü açar, hangi türün
+    // aranacağına kullanıcı orada karar verir.
+    private void ArtworkSearchBadge_Click(object sender, RoutedEventArgs e)
     {
         var button = (Button)sender;
         if (button.ContextMenu is { } menu)

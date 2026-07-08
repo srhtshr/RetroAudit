@@ -1,77 +1,40 @@
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
 using RetroAudit.ViewModels;
 
 namespace RetroAudit.Views;
 
-// Sürükle-bırak (drag & drop) mantığı bilinçli olarak code-behind'da tutuluyor:
-// bu tamamen bir View/gesture sorumluluğu (fare hareketi izleme, hit-testing ile hangi
-// satırın üzerine bırakıldığını bulma). Asıl veri değişikliği (öğeyi listeden kaldırma vb.)
-// ViewModel.ApplyDrop(...) içinde yapılıyor, code-behind sadece o metodu çağırıyor.
+// Kullanıcı isteği: "media provider tool'u mevcut yapıya entegre et, eksik olanları görsün,
+// ordan da indirme yapabilelim" — sürükle-bırak/sahte arama sonucu kartları kaldırıldı (bkz.
+// MediaProviderViewModel), pencere artık MainViewModel'in gerçek oyun listesi üzerinden çalışıyor
+// (RomImportWindow(mainVm) ile AYNI desen).
 public partial class MediaProviderWindow : Window
 {
-    private Point _dragStartPoint;
-
-    public MediaProviderWindow()
+    public MediaProviderWindow(MainViewModel mainVm)
     {
         InitializeComponent();
         DarkTitleBarHelper.Apply(this);
 
-        // ViewModel MessageBox'a doğrudan bağımlı olmasın diye basit bir bilgi olayı üzerinden haberleşiyoruz.
-        if (DataContext is MediaProviderViewModel vm)
+        var vm = new MediaProviderViewModel(mainVm.AllGames, game =>
         {
-            vm.RequestShowMessage += message =>
-                MessageBox.Show(this, message, "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
-        }
-    }
+            mainVm.NotifyArtworkDownloaded(game);
+            mainVm.ApplyFilter();
+        });
 
-    // Sürüklemenin başlangıç noktasını hatırlar; gerçek sürükleme MouseMove'da eşik aşılınca başlar.
-    private void Card_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        _dragStartPoint = e.GetPosition(null);
-    }
+        vm.RequestShowMessage += message =>
+            MessageBox.Show(this, message, "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
 
-    // Fare sol tuşu basılıyken yeterince hareket edildiğinde asıl WPF sürükleme işlemini başlatır.
-    private void Card_MouseMove(object sender, MouseEventArgs e)
-    {
-        if (e.LeftButton != MouseButtonState.Pressed || sender is not FrameworkElement { DataContext: MediaSearchResult result } element)
-            return;
+        // Embedded arama penceresi — MainViewModel.RequestSearchArtwork İLE AYNI handler deseni
+        // (bkz. MainWindow.xaml.cs), burada ayrıca Media Provider'ın kendi MissingItems listesini
+        // de güncelliyor (completedCallback zaten bunu ViewModel içinde yapıyor).
+        vm.RequestSearchArtwork += request =>
+        {
+            var (url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback) = request;
+            new MediaSearchWindow(url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback)
+            {
+                Owner = this,
+            }.Show();
+        };
 
-        var currentPosition = e.GetPosition(null);
-        var movedFarEnough =
-            Math.Abs(currentPosition.X - _dragStartPoint.X) > SystemParameters.MinimumHorizontalDragDistance ||
-            Math.Abs(currentPosition.Y - _dragStartPoint.Y) > SystemParameters.MinimumVerticalDragDistance;
-
-        if (movedFarEnough)
-            DragDrop.DoDragDrop(element, result, DragDropEffects.Copy);
-    }
-
-    // Sürüklenen kart, eksik öğe listesinin üzerine geldiğinde "kopyala" imlecini göstermek için izin verir.
-    private void MissingList_DragOver(object sender, DragEventArgs e)
-    {
-        e.Effects = e.Data.GetDataPresent(typeof(MediaSearchResult)) ? DragDropEffects.Copy : DragDropEffects.None;
-        e.Handled = true;
-    }
-
-    // Kart bırakıldığında: bırakılan noktanın hangi ListBoxItem'ın (yani hangi eksik öğenin) üzerine
-    // denk geldiğini bulur ve ViewModel.ApplyDrop(...) ile eşleştirmeyi simüle eder.
-    private void MissingList_Drop(object sender, DragEventArgs e)
-    {
-        if (sender is not ListBox { DataContext: MediaProviderViewModel vm } listBox)
-            return;
-
-        if (!e.Data.GetDataPresent(typeof(MediaSearchResult)))
-            return;
-
-        var droppedResult = (MediaSearchResult)e.Data.GetData(typeof(MediaSearchResult))!;
-
-        var hit = e.OriginalSource as DependencyObject;
-        while (hit is not null and not ListBoxItem)
-            hit = VisualTreeHelper.GetParent(hit);
-
-        if (hit is ListBoxItem { DataContext: MissingMediaItem targetItem })
-            vm.ApplyDrop(targetItem, droppedResult);
+        DataContext = vm;
     }
 }

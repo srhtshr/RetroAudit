@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.21)
+## Mevcut durum (v0.22)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
@@ -29,12 +29,15 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 - Sağ tık ile açılan kapsül biçimli komut menüsü (Ayarlar > Arayüz'den İkon / İkon+Metin seçilebilir): Sil (önce çöp kutusuna taşır), Gizle, Metadata Düzenle, Dosya Konumunu Aç, Web'de Ara, Sürüm listesinden "Preferred yap", Metadata'yı Yeniden Eşleştir. Çoklu seçimde sadece çakışmayan toplu eylemler (favori/gizle/sil/playlist) gösterilir.
 - Kullanıcının oluşturduğu sınırsız playlist + sabit Favorites/Hidden/Recycle Bin, tümü tablonun üstünde tıklanabilir chip/etiket olarak.
 - Sağ detay panelinde seçili oyunun tüm sürümleri (bölge/kaynak/hash) ve tercih edilen sürümü değiştirme; Ayarlar > Emülatörler'de platform başına tanımlanan emülatörle BAŞLAT butonu üzerinden doğrudan oynatma.
+- **Emülatör indirme altyapısı**: tüm standalone emülatörler (PCSX2, RPCS3, Xemu, Cemu, melonDS, Vita3K, Xenia Canary, Dolphin, Ryujinx, Azahar) tek, veri tabanlı bir "İndir & Kur" sistemini paylaşıyor — Ayarlar > Komutlar'daki **Emülatör İndirme Kaynakları** listesinden her biri için Kaynak Türü (GitHub Releases API / Direct URL / RPCS3'e özel Yerleşik API) ve Kaynak adresi düzenlenebiliyor, değişiklik programı yeniden derlemeden Kaydet ile hemen etkin oluyor. Core Adı dropdown'ında seçim artık gerçekten kullanılan core/exe'yi belirliyor; silinmiş/eksik core'lar listede silik gösterilip yeniden indirilebiliyor.
+- **Eksik görsel bulucu (Media Provider)**: artık gerçek kütüphaneden hesaplanan eksik Box/Clear Logo/Ekran Görüntüsü listesiyle çalışıyor — "Otomatik İndir" gerçekten LaunchBox kaynağından indiriyor, "Ara" uygulama içi (embedded WebView2) bir arama penceresi açıyor. Oyun detay panelinde tek bir "eksik görsel" rozeti üzerinden hangi türlerin getirileceği seçilebiliyor.
 
 ### Pencereler
 - **MainWindow** — Platform listesi, sanallaştırılmış oyun tablosu (DataGrid), playlist chip şeridi, seçili oyun detay paneli ve BAŞLAT butonu.
 - **RomSearchWindow** — "Ara" butonuyla açılan, uygulama içi (WebView2) ROM arama penceresi; indirmeler otomatik olarak doğru platform klasörüne yönlendirilir.
 - **RomImportWindow** — Kendi ROM arşivinizi tarayıp toplu Taşı/Kopyala/Referans ile içe aktarma, opsiyonel hash doğrulaması.
-- **MediaProviderWindow** — Eksik medya (kutu/arkaplan/ekran görüntüsü) için arama sonucu kartları; kartlar sürükle-bırak ile eksik öğe listesine uygulanabiliyor.
+- **MediaProviderWindow** — Kütüphanedeki eksik Box/Clear Logo/Ekran Görüntüsü öğelerinin gerçek listesi; her öğe için Otomatik İndir (LaunchBox kaynağı) veya Ara (embedded arama) ile tek tek çözülebiliyor.
+- **MediaSearchWindow** — "Ara" ile açılan, uygulama içi (WebView2) görsel arama penceresi; indirilen dosya doğrudan ilgili oyunun ROM dosya adıyla eşleşen konuma kaydediliyor.
 - **CropEditorDialog** — Görsel kırpma oranı seçim arayüzü.
 - **EditMetadataWindow** — Bir oyunun Başlık/Tür/Açıklama/Notlar/Yayıncı/Geliştirici alanlarını elle düzenleme.
 - **SettingsWindow** — Veri klasörü (salt-okunur, her zaman .exe'nin yanında), görsel indirme boyutu, LaunchBox metadata veritabanı yolu, platform başına emülatör yolu/parametreleri, bölge önceliği, arayüz tercihleri (komut menüsü görünümü, satır yüksekliği, platform listesi görünümü/kategorileri) — hepsi **Kaydet** düğmesiyle diske yazılıyor. Export/Import Config (JSON).

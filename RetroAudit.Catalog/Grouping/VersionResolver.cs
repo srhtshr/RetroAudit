@@ -12,8 +12,16 @@ namespace RetroAudit.Catalog.Grouping;
 // satırı oluşturmaz — RetroAudit sadece gerçekten resmi bir sürümü olan oyunları listeler.
 public static class VersionResolver
 {
+    // Group() çağrısından SONRA CatalogBuilder.Run tarafından BuildReport'a okunuyor — kaç ham
+    // kaydın, oyun ADI temiz göründüğü hâlde SADECE ROM dosya adındaki bir etiket (ör. "(Unl)")
+    // yüzünden elendiğini ayrı raporlayabilmek için (bkz. ContainsExcludedTag çağrısı aşağıda).
+    // İstatistiksel görünürlük amaçlı; Group() her çağrıldığında sıfırlanır.
+    public static int LastRunRomFileNameExclusionCount { get; private set; }
+
     public static List<CatalogGame> Group(IEnumerable<DatGameEntry> entries)
     {
+        LastRunRomFileNameExclusionCount = 0;
+
         // Gruplama anahtarı normalize edilmiş başlık (CompareTitle) üzerinden yapılır, ham
         // CleanTitle üzerinden değil — aynı oyunun USA/Europe/Japan sürümleri arasında noktalama,
         // büyük/küçük harf ya da alt başlık yazım farkı olması çok yaygın (ör. "Mega Man 2" /
@@ -26,7 +34,16 @@ public static class VersionResolver
         foreach (var entry in entries)
         {
             var parsed = DatNameParser.Parse(entry.Name);
-            if (parsed.ShouldExclude)
+
+            // Oyun adı (entry.Name) "temiz" görünse bile, o oyunun ROM dosya adı(ları) ayrı bir
+            // alan ve "(Aftermarket) (Unl)" gibi ek etiketler taşıyabiliyor (bkz. DatNameParser.
+            // ContainsExcludedTag yorumu, kullanıcı geri bildirimi: "üstte released yazıyor ama
+            // sürüm adında Unl yazıyor") — dosya adlarından biri bile dışlanan bir etiket
+            // taşıyorsa kayıt yine tamamen elenir.
+            if (!parsed.ShouldExclude && entry.Roms.Any(r => DatNameParser.ContainsExcludedTag(r.FileName)))
+                LastRunRomFileNameExclusionCount++;
+
+            if (parsed.ShouldExclude || entry.Roms.Any(r => DatNameParser.ContainsExcludedTag(r.FileName)))
                 continue;
 
             var compareTitle = NormalizeForCompare(parsed.CleanTitle);

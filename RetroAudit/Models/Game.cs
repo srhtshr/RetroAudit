@@ -54,6 +54,7 @@ public partial class Game : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasBox))]
     [NotifyPropertyChangedFor(nameof(BoxDisplayPath))]
+    [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
     private string boxPath = string.Empty;
 
     [ObservableProperty]
@@ -61,6 +62,7 @@ public partial class Game : ObservableObject
     [NotifyPropertyChangedFor(nameof(ScreenshotDisplayPath))]
     [NotifyPropertyChangedFor(nameof(ClearLogoDisplayPath))]
     [NotifyPropertyChangedFor(nameof(ShowClearLogoArea))]
+    [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
     private string screenshotPath = string.Empty;
 
     [ObservableProperty]
@@ -68,11 +70,16 @@ public partial class Game : ObservableObject
     [NotifyPropertyChangedFor(nameof(ClearLogoDisplayPath))]
     [NotifyPropertyChangedFor(nameof(ClearLogoThumbnailPath))]
     [NotifyPropertyChangedFor(nameof(ShowClearLogoArea))]
+    [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
     private string clearLogoPath = string.Empty;
 
     public bool HasBox => !string.IsNullOrWhiteSpace(BoxPath);
     public bool HasScreenshot => !string.IsNullOrWhiteSpace(ScreenshotPath);
     public bool HasClearLogo => !string.IsNullOrWhiteSpace(ClearLogoPath);
+
+    // Detay panelindeki tek Download/Search butonlarının görünürlüğü (kullanıcı isteği:
+    // "bütün resimler varsa gösterme indirme ve arama butonunu") — üçünden BİRİ bile eksikse true.
+    public bool HasMissingArtwork => !HasBox || !HasClearLogo || !HasScreenshot;
 
     // Detay panelinde gösterilecek gerçek yol — Has* bayrakları (yukarıda) gerçek görselin var
     // olup olmadığını (grid noktaları, "Görsel Getir" gibi yerlerde) yansıtmaya devam eder, bu

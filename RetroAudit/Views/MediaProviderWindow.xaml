@@ -3,11 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:RetroAudit.ViewModels"
         xmlns:models="clr-namespace:RetroAudit.Models"
-        Title="Media Provider" Height="700" Width="1150" WindowStartupLocation="CenterOwner">
+        xmlns:conv="clr-namespace:RetroAudit.Converters"
+        Title="Media Provider" Height="700" Width="950" WindowStartupLocation="CenterOwner">
 
-    <Window.DataContext>
-        <vm:MediaProviderViewModel />
-    </Window.DataContext>
+    <Window.Resources>
+        <conv:InverseBooleanConverter x:Key="InverseBoolean" />
+    </Window.Resources>
 
     <Grid Background="{StaticResource Brush.Background.Base}">
         <Grid.RowDefinitions>
@@ -19,12 +20,12 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220" />
                 <ColumnDefinition Width="1" />
-                <ColumnDefinition Width="320" />
-                <ColumnDefinition Width="1" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="1" />
+                <ColumnDefinition Width="260" />
             </Grid.ColumnDefinitions>
 
-            <!-- Left: platform + media type filters -->
+            <!-- Sol: platform + eksik medya türü filtresi -->
             <Border Grid.Column="0" Background="{StaticResource Brush.Background.Panel}">
                 <DockPanel Margin="10">
                     <TextBlock DockPanel.Dock="Top" Text="Platformlar" FontWeight="Bold" Margin="0,0,0,8" />
@@ -44,21 +45,19 @@
 
             <Rectangle Grid.Column="1" Fill="{StaticResource Brush.Border}" />
 
-            <!-- Center: missing items -->
+            <!-- Orta: eksik öğeler (gerçek kütüphaneden, bkz. MediaProviderViewModel.RebuildMissingItems) -->
             <Border Grid.Column="2" Background="{StaticResource Brush.Background.Base}">
                 <DockPanel Margin="10">
-                    <TextBlock DockPanel.Dock="Top" Text="Eksik Öğeler" FontWeight="Bold" Margin="0,0,0,8" />
-                    <!-- Sağdaki kartlar buraya sürüklenip bırakıldığında MediaProviderWindow.xaml.cs
-                         içindeki MissingList_Drop olayı, hangi satırın üzerine bırakıldığını bulup
-                         ViewModel.ApplyDrop(...) çağırarak eşleştirmeyi simüle eder. -->
-                    <ListBox ItemsSource="{Binding MissingItems}" SelectedItem="{Binding SelectedMissingItem}"
-                             AllowDrop="True" DragOver="MissingList_DragOver" Drop="MissingList_Drop">
+                    <TextBlock DockPanel.Dock="Top" FontWeight="Bold" Margin="0,0,0,8">
+                        <Run Text="Eksik Öğeler" /><Run Text=" (" /><Run Text="{Binding MissingItems.Count, Mode=OneWay}" /><Run Text=")" />
+                    </TextBlock>
+                    <ListBox ItemsSource="{Binding MissingItems}" SelectedItem="{Binding SelectedMissingItem}">
                         <ListBox.ItemTemplate>
                             <DataTemplate DataType="{x:Type vm:MissingMediaItem}">
                                 <StackPanel Margin="2,4">
                                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
                                     <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11">
-                                        <Run Text="{Binding Platform}" /><Run Text=" • " /><Run Text="{Binding MissingType}" />
+                                        <Run Text="{Binding Platform}" /><Run Text=" • " /><Run Text="{Binding MissingTypeLabel}" />
                                     </TextBlock>
                                 </StackPanel>
                             </DataTemplate>
@@ -69,47 +68,43 @@
 
             <Rectangle Grid.Column="3" Fill="{StaticResource Brush.Border}" />
 
-            <!-- Right: search result cards -->
+            <!-- Sağ: seçili öğe detayı -->
             <Border Grid.Column="4" Background="{StaticResource Brush.Background.Base}">
                 <DockPanel Margin="10">
-                    <TextBlock DockPanel.Dock="Top" Text="Arama Sonuçları" FontWeight="Bold" Margin="0,0,0,8" />
-                    <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding SearchResults}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:MediaSearchResult}">
-                                    <!-- Kart: sol tuşla basılı tutup sürüklemeye başlanınca (bkz. Card_MouseMove)
-                                         bu kartın DataContext'i (MediaSearchResult) sürükleme verisi olarak taşınır. -->
-                                    <Border Width="150" Height="170" Margin="6" CornerRadius="4" Cursor="Hand"
-                                            PreviewMouseLeftButtonDown="Card_PreviewMouseLeftButtonDown"
-                                            MouseMove="Card_MouseMove"
-                                            Background="{StaticResource Brush.Background.Panel}"
-                                            BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
-                                        <Grid Margin="6">
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="*" />
-                                                <RowDefinition Height="Auto" />
-                                            </Grid.RowDefinitions>
-                                            <Border Grid.Row="0" Background="{StaticResource Brush.Background.Elevated}" CornerRadius="3">
-                                                <Border Background="{StaticResource Brush.Accent.Amber}" CornerRadius="8"
-                                                        Padding="5,1" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4">
-                                                    <TextBlock Text="{Binding Resolution}" FontSize="9"
-                                                               Foreground="{StaticResource Brush.Accent.AmberText}" />
-                                                </Border>
-                                            </Border>
-                                            <TextBlock Grid.Row="1" Text="{Binding Source}" HorizontalAlignment="Center"
-                                                       Margin="0,6,0,0" FontSize="10"
-                                                       Foreground="{StaticResource Brush.Text.Secondary}" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
+                    <TextBlock DockPanel.Dock="Top" Text="Seçili Öğe" FontWeight="Bold" Margin="0,0,0,8" />
+
+                    <Grid>
+                        <StackPanel DataContext="{Binding SelectedMissingItem}">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+                            <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="14" TextWrapping="Wrap" />
+                            <TextBlock Text="{Binding Platform}" Foreground="{StaticResource Brush.Text.Secondary}" Margin="0,2,0,0" />
+                            <TextBlock Margin="0,10,0,0" FontSize="11" Foreground="{StaticResource Brush.Text.Secondary}" TextWrapping="Wrap">
+                                <Run Text="Eksik: " /><Run Text="{Binding MissingTypeLabel}" FontWeight="SemiBold" />
+                            </TextBlock>
+                        </StackPanel>
+
+                        <TextBlock Text="Soldan bir öğe seçin." Foreground="{StaticResource Brush.Text.Secondary}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SelectedMissingItem}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
                 </DockPanel>
             </Border>
         </Grid>
@@ -117,8 +112,10 @@
         <Border Grid.Row="1" Background="{StaticResource Brush.Background.Panel}"
                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0" Padding="10">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Content="Atla" Command="{Binding SkipItemCommand}" Margin="0,0,8,0" />
-                <Button Content="Uygula" Command="{Binding ApplySelectedResultCommand}" />
+                <Button Content="Atla" Command="{Binding SkipItemCommand}" Margin="0,0,8,0" Padding="12,6" />
+                <Button Content="Ara" Command="{Binding SearchSelectedCommand}" Margin="0,0,8,0" Padding="12,6" />
+                <Button Content="Otomatik İndir" Padding="12,6"
+                        Command="{Binding FetchSelectedAsyncCommand}" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}" />
             </StackPanel>
         </Border>
     </Grid>

@@ -15,7 +15,7 @@ public static class CatalogBuilder
     // yapısı değiştikçe (ör. bu turda Games.HiddenByDefault eklendi) artırılır; WPF tarafı
     // (Stage B) ileride uyumsuz bir RetroAudit.db'yi bu alana bakarak erkenden reddedebilir.
     public const string SchemaVersion = "1.6";
-    public const string BuilderVersion = "1.6.2";
+    public const string BuilderVersion = "1.6.3";
 
     // Ana listede varsayılan olarak gizlenecek (ama SİLİNMEYECEK) LaunchBox tür etiketleri —
     // kullanıcı kararı: gerçek video oyunu sayılmayan Casino/Gambling/Mahjong/Pachinko/Pachislot/
@@ -60,6 +60,7 @@ public static class CatalogBuilder
 
         var games = VersionResolver.Group(scan.Entries);
         report.FilteredRecordCount = scan.Entries.Count - games.Sum(g => g.Versions.Count);
+        report.ExcludedByRomFileNameCount = VersionResolver.LastRunRomFileNameExclusionCount;
         report.UnknownRegionVersionCount = games.Sum(g => g.Versions.Count(v => v.Regions.Contains("Unknown", StringComparer.OrdinalIgnoreCase)));
 
         using (var metadataReader = new LaunchBoxMetadataReader(options.LaunchBoxDbPath))

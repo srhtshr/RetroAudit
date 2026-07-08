@@ -175,7 +175,12 @@
     <!-- "Görsel Getir" indirme ilerlemesi için (bkz. MainWindow.xaml alt durum çubuğu). Varsayılan
          WPF ProgressBar'ı (beyaz Aero şeridi) koyu temaya hiç uymuyordu. PART_Indicator ismi WPF'in
          kendi ProgressBar mantığı tarafından aranıyor — Value/Minimum/Maximum'a göre genişliğini
-         otomatik hesaplıyor, burada sadece görünümü (düz renkli, köşeleri yuvarlak) özelleştiriliyor. -->
+         otomatik hesaplıyor, burada sadece görünümü (düz renkli, köşeleri yuvarlak) özelleştiriliyor.
+         Kullanıcı isteği: "ilerleme çubuğu gözüküyor ama ilerleme olmuyor dümdüz duruyor" — kök neden:
+         bu şablon IsIndeterminate için HİÇ bir Trigger/animasyon tanımlamıyordu (arşiv açma aşamasında
+         Emülatörler ekranı IsIndeterminate=true kullanıyor, bkz. StandaloneEmulatorInstallerService) —
+         WPF'in varsayılan indeterminate animasyonu bu ÖZEL şablonda çalışmıyordu, PART_Indicator
+         olduğu yerde sabit kalıyordu. Şimdi AYRI bir "kayan şerit" göstergesi + sonsuz döngü animasyonu var. -->
     <Style TargetType="{x:Type ProgressBar}">
         <Setter Property="Background" Value="{StaticResource Brush.Background.Elevated}" />
         <Setter Property="Foreground" Value="{StaticResource Brush.Accent.SelectedBorder}" />
@@ -188,8 +193,32 @@
                             <Decorator x:Name="PART_Indicator" HorizontalAlignment="Left">
                                 <Border Background="{TemplateBinding Foreground}" CornerRadius="3" />
                             </Decorator>
+                            <Border x:Name="IndeterminateIndicator" Background="{TemplateBinding Foreground}"
+                                    CornerRadius="3" Width="60" HorizontalAlignment="Left" Visibility="Collapsed">
+                                <Border.RenderTransform>
+                                    <TranslateTransform x:Name="IndeterminateTransform" X="-60" />
+                                </Border.RenderTransform>
+                            </Border>
                         </Grid>
                     </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsIndeterminate" Value="True">
+                            <Setter TargetName="PART_Indicator" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="IndeterminateIndicator" Property="Visibility" Value="Visible" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard x:Name="IndeterminateStoryboard">
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="IndeterminateTransform"
+                                                         Storyboard.TargetProperty="X"
+                                                         From="-60" To="400" Duration="0:0:1.2" RepeatBehavior="Forever" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <StopStoryboard BeginStoryboardName="IndeterminateStoryboard" />
+                            </Trigger.ExitActions>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>

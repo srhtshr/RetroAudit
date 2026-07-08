@@ -2,6 +2,54 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.22] - 2026-07-08
+
+### Added
+- **Emülatör indirme altyapısı generic hale getirildi**: Cemu, melonDS, Vita3K, RPCS3, Xemu ve
+  PCSX2'de ayrı ayrı yazılmış GitHub Releases asset-seçim kodu tek, paylaşılan bir algoritmaya
+  (`StandaloneEmulatorInstallerService.ResolveGitHubReleaseWindowsAssetAsync`) indirildi — "windows"
+  içeren, sembol/hata ayıklama/ARM/libretro asset'lerini hariç tutan adaylar arasından uzantı
+  önceliğine (.7z > .zip > .exe) göre seçim yapılıyor.
+- Ayarlar > Komutlar sekmesine **Emülatör İndirme Kaynakları** eklendi: her standalone emülatör
+  için Kaynak Türü (GitHub Releases API / Direct URL / RPCS3'e özel Yerleşik API) ve Kaynak (tam
+  URL) düzenlenebiliyor; değişiklik diske kaydedilip her indirmede TAZE okunuyor — kaynağı
+  değiştirmek programı yeniden derlemeyi gerektirmiyor.
+- Cemu (Wii U), melonDS (Nintendo DS), Vita3K (PS Vita) ve Xenia Canary (Xbox 360) için otomatik
+  GitHub Releases indirme desteği eklendi.
+- Nintendo 3DS: "Lime3DS" yerine artık **Azahar** gösteriliyor (proje GitHub'da bu isimle devam
+  ediyor) — eski kayıtlı seçimler geriye dönük uyumlu şekilde göçürülüyor.
+- Dolphin (GameCube/Wii) ve Ryujinx (Switch) için resmi bir GitHub Releases kaynağı olmadığından
+  Direct URL ile gerçek indirme linkleri tanımlandı; boş bırakılırsa "İndir & Kur" artık "İndirme
+  kaynağı tanımlı değil" durumunu net şekilde gösteriyor (sessizce başarısız olmuyor).
+- Core Adı dropdown'ında seçim artık **gerçekten** kullanılan core/exe'yi belirliyor (önceden
+  BAŞLAT her zaman ilk indirilen core'u kullanıyordu); "+" ile özel core/exe eklenebiliyor, eklenen
+  RetroArch core'ları otomatik olarak o platformun kendi klasörüne taşınıyor. Silinmiş/eksik
+  core'lar listeden kaybolmuyor, silik gri gösterilip yeniden indirilebiliyor. "Core Adı listesi:
+  Sadece Önerilen/Alternatif veya Hepsini Göster" seçeneği ve "Önerilenlere Sıfırla" butonu eklendi.
+- İlerleme çubuğu artık arşiv açma aşamasında da (gerçek bir yüzde olmadığından) belirsiz
+  (indeterminate) modda animasyonlu çalışıyor.
+- **Media Provider penceresi gerçek işlevsellik kazandı**: önceki tamamen mock (sabit sahte liste +
+  simülasyon indirme) hâli kaldırıldı — artık kütüphaneden gerçekten hesaplanan eksik Box/Clear
+  Logo/Ekran Görüntüsü listesiyle çalışıyor, "Otomatik İndir" gerçekten LaunchBox kaynağından
+  indiriyor, "Ara" yeni **MediaSearchWindow** ile uygulama içi (embedded WebView2) arama açıyor.
+- Oyun detay panelinde tek bir "eksik görsel" rozeti/butonu eklendi — üç görselden biri bile
+  eksikse görünüyor, tıklanınca hangi türlerin getirileceği seçilebiliyor.
+
+### Changed
+- Emülatör kurulumları platform bazlı değil emülatör kimliği bazlı paylaşılıyor
+  (`ThirdParty/Emulation/{EmulatorId}/`) — aynı emülatör birden fazla platform satırından
+  atanabiliyorsa tek kurulum yeterli.
+- Top 100 / Top 25 / Top 250 rozetleri: tek bir platform seçiliyken artık o platformun kendi
+  sıralamasına göre hesaplanıyor — önceden "Tüm Platformlar" havuzundan hesaplandığı için bir oyun
+  Top 100 listesinde görünürken rozetinde yanlışlıkla "Top 25" yazabiliyordu.
+- DAT ayrıştırma: oyun adı (game name) temiz göründüğü hâlde ROM dosya adında "(Unl)"/"(Aftermarket)"
+  gibi dışlanan bir etiket varsa kayıt artık yine tamamen eleniyor (önceden sadece oyun adına
+  bakılıyordu) — Build raporunda bu durum ayrı sayılıyor.
+
+### Fixed
+- "Tüm Platformlar" seçimi artık doğru şekilde kalıcı hale getiriliyor (silinmiş/geçersiz bir
+  platform adı saklanmıyordu).
+
 ## [0.21] - 2026-07-06
 
 ### Added

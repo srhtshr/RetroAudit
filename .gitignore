@@ -39,3 +39,14 @@ RetroAudit/Images/*/Box/
 RetroAudit/Images/*/BG/
 RetroAudit/Images/*/SS/
 RetroAudit/Images/*/Logo/
+
+## Kullanıcının kişisel ROM kütüphanesi (taşınabilir veri düzeni: .exe'nin yanındaki Games\) —
+## telif hakkına sahip oyun dosyaları, asla commit edilmez.
+RetroAudit/Games/
+
+## "İndir & Kur" ile çalışma zamanında indirilen RetroArch + standalone emülatör kurulumları
+## (ThirdParty/Emulation/{id}\) — büyük boyutlu (tek başına RetroArch birkaç GB), makineye özel,
+## üçüncü taraf ikili dosyalar. ThirdParty/7-Zip İSTİSNA — repoyla gelen sabit, küçük bir araç
+## (bkz. AppPaths.SevenZipExe), o commit edilir.
+RetroAudit/ThirdParty/RetroArch/
+RetroAudit/ThirdParty/Emulation/

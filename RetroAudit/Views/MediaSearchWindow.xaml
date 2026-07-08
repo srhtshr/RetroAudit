@@ -1,0 +1,14 @@
+<Window x:Class="RetroAudit.Views.MediaSearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="RetroAudit - Görsel Ara" Height="820" Width="1200" WindowStartupLocation="CenterOwner">
+
+    <!-- RomSearchWindow ile aynı desen (embedded, adres çubuğu olmayan WebView2) — kullanıcı
+         Google Görseller'de serbestçe gezinip istediği görseli kendi tıklayarak indirir; tek
+         otomasyon, indirilen dosyayı oyunun doğru Images\{Platform}\{Type}\ klasörüne ve
+         ROM dosya adıyla eşleşen isme yönlendirmek (bkz. MediaSearchWindow.xaml.cs). -->
+    <Grid Background="{StaticResource Brush.Background.Base}">
+        <wv2:WebView2 x:Name="Browser" />
+    </Grid>
+</Window>

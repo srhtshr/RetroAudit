@@ -108,6 +108,36 @@ public static partial class DatNameParser
 
         return new ParsedDatName(cleanTitle, regions.ToArray(), versionLabel, shouldExclude);
     }
+
+    // Parse(), sadece DAT'ın "game" seviyesindeki isme (rawName) bakıyor — ama bazı No-Intro
+    // kayıtlarında (ör. "Forehead Block Guy") oyun adı temiz görünürken, o oyunun ROM dosya
+    // adı(ları) "(Aftermarket) (Unl)" gibi ek etiketler taşıyabiliyor (oyun adı ile rom adı
+    // BİREBİR aynı olmak zorunda değil). Bu yüzden VersionResolver, her kaydın rom dosya
+    // adlarını da AYRICA bu metotla kontrol ediyor — game adı "temiz" görünse bile dosya
+    // adında dışlanan bir etiket varsa kayıt yine tamamen elenir (kullanıcı geri bildirimi:
+    // "üstte released yazıyor ama sürüm adında Unl yazıyor").
+    public static bool ContainsExcludedTag(string text)
+    {
+        foreach (Match match in ParenGroupRegex().Matches(text))
+        {
+            var content = match.Groups[1].Value.Trim();
+            if (content.Length > 0 && ExcludedParenKeywords.Any(keyword => content.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+                return true;
+        }
+
+        foreach (Match match in BracketGroupRegex().Matches(text))
+        {
+            var content = match.Groups[1].Value.Trim();
+            if (content.Length == 0)
+                continue;
+
+            var code = content.Split(' ', 2)[0];
+            if (ExcludedBracketCodes.Contains(code))
+                return true;
+        }
+
+        return false;
+    }
 }
 
 // ShouldExclude=true olan bir kayıt VersionResolver tarafından tamamen atlanır — GameVersions'a

@@ -40,6 +40,83 @@
         <conv:RegionToFlagConverter x:Key="RegionToFlag" />
         <conv:ThumbnailImageConverter x:Key="ThumbnailImage" />
 
+        <!-- NOT: Aşağıdaki üç stil (ActionsIconButton/DarkMenuItem/CapsuleContextMenu) BİLİNÇLİ
+             OLARAK burada, dosyanın en başında tanımlı — VersionCardItemTemplate (birazdan
+             aşağıda) bunları kullanıyor ve WPF, StaticResource için AYNI ResourceDictionary
+             içinde GERİYE referans (forward reference) kabul etmiyor; DataTemplate/ControlTemplate
+             içeriği gibi ERTELENMİŞ (deferred) XAML'de bu, sadece şablon gerçekten UYGULANDIĞINDA
+             (ör. Sürümler listesi ilk kez render edilince) bir XamlParseException olarak patlıyor
+             — derleme sırasında YAKALANMIYOR. Bu üç stil daha aşağıda (orijinal, temaya uygun
+             yerlerinde) TEKRAR tanımlanmıyor; sadece BURAYA taşındı.
+             (Kullanıcı geri bildirimi: "program kapanıyor / açılmıyor" — kök neden buydu.) -->
+        <Style x:Key="ActionsIconButton" TargetType="Button">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bg" CornerRadius="11" Background="Transparent">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush.Background.Hover}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.35" />
+                                <Setter Property="Cursor" Value="Arrow" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="DarkMenuItem" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="Bg" CornerRadius="8" Background="Transparent" Padding="{TemplateBinding Padding}">
+                            <StackPanel Orientation="Horizontal">
+                                <ContentPresenter ContentSource="Icon" VerticalAlignment="Center" Margin="0,0,8,0" />
+                                <ContentPresenter ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"
+                                                  TextElement.Foreground="{TemplateBinding Foreground}" />
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush.Background.Hover}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="CapsuleContextMenu" TargetType="ContextMenu">
+            <Setter Property="OverridesDefaultStyle" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border CornerRadius="24" Padding="8,6"
+                                Background="{StaticResource Brush.Background.Elevated}"
+                                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.4" Color="Black" />
+                            </Border.Effect>
+                            <StackPanel IsItemsHost="True" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
         <!-- "YouTube'da İzle"/"Wikipedia" düğmelerindeki ikonlar — açık kaynak Material Design
              Icons setinden (Apache 2.0), sabit 24x24 viewbox'ta vektör path verisi. Raster
              (PNG) yerine vektör kullanmak DPI'dan bağımsız keskinlik sağlıyor ve ek dosya
@@ -142,8 +219,23 @@
                                 </TextBlock.Style>
                             </TextBlock>
                         </StackPanel>
-                        <TextBlock Grid.Column="1" Text="{Binding SourceDat}" FontSize="10" Margin="6,0,0,0"
-                                   VerticalAlignment="Top" Foreground="{StaticResource Brush.Text.Secondary}" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                            <TextBlock Text="{Binding SourceDat}" FontSize="10" Margin="6,0,0,0"
+                                       Foreground="{StaticResource Brush.Text.Secondary}" />
+                            <!-- ROM ara (bu SÜRÜME özgü) — kullanıcı isteği: "xyz sürümünü aradım,
+                                 indirirken otomatik o isimle kayıt etsin" — bkz. MainViewModel.
+                                 SearchRomForVersion, RomSearchWindow'un forcedFileName parametresi.
+                                 DataContext burada zaten GameVersion olduğu için CommandParameter
+                                 düz {Binding}; Command ise MainViewModel'de olduğundan ViewModelProxy
+                                 üzerinden (bu Button normal görsel ağaçta, ContextMenu değil — ama
+                                 DataContext'i yine de GameVersion'a scoped, MainViewModel'e değil). -->
+                            <Button Style="{StaticResource ActionsIconButton}" Width="20" Height="20" Margin="4,0,0,0"
+                                    ToolTip="ROM ara"
+                                    Command="{Binding Data.SearchRomForVersionCommand, Source={StaticResource ViewModelProxy}}"
+                                    CommandParameter="{Binding}">
+                                <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{StaticResource Brush.Text.Primary}" />
+                            </Button>
+                        </StackPanel>
                     </Grid>
                     <ItemsControl ItemsSource="{Binding Hashes}" Margin="0,4,0,0">
                         <ItemsControl.ItemTemplate>
@@ -425,43 +517,6 @@
             </Setter>
         </Style>
 
-        <!-- Actions sütunundaki (Favori/Gizle/Ara-Başlat) küçük ikon düğmeleri için — ContextMenuIconButton
-             ile aynı mantık (dairesel hover vurgusu) ama küçük boyutta. Bu olmadan bu düğmeler global
-             Button Style'ını (ObsidianDark.xaml) devralıyordu: o şablonun IsMouseOver tetikleyicisi,
-             düğmenin Background/BorderThickness local Setter'larını YOK SAYIP CornerRadius=3'lük dolu
-             bir dikdörtgeni doğrudan "border" adlı elemana uyguluyordu. Üç düğme neredeyse bitişik
-             durduğu için fare sınırda gezinirken bu dikdörtgenler art arda görünüp kayboluyor, göz
-             "yanıp sönme" olarak algılıyordu. Sabit Width/Height + dairesel (CornerRadius=Width/2)
-             küçük bir vurgu bu sorunu ortadan kaldırıyor. -->
-        <Style x:Key="ActionsIconButton" TargetType="Button">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Width" Value="22" />
-            <Setter Property="Height" Value="22" />
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" CornerRadius="11" Background="Transparent">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Bg" Property="Background" Value="{StaticResource Brush.Background.Hover}" />
-                            </Trigger>
-                            <!-- Kullanıcı isteği: YouTube linki yoksa buton tamamen gizlenmesin,
-                                 tıklanamaz/soluk görünsün. -->
-                            <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value="0.35" />
-                                <Setter Property="Cursor" Value="Arrow" />
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-
         <!-- Detay panelindeki Metadata rozetleri (Tür/Oyun Modu/Sürüm) — kullanıcı isteği: "Badge
              tasarımı: RetroAudit temasına uygun, hafif border, hafif koyu arka plan, 4-6px radius,
              hover efekti, el cursor, tıklanabilir görünüm". Tıklanabilir olanlar (Tür, Sürüm) Button,
@@ -506,19 +561,6 @@
             <Setter Property="CornerRadius" Value="5" />
             <Setter Property="Padding" Value="8,4" />
             <Setter Property="HorizontalAlignment" Value="Left" />
-        </Style>
-
-        <!-- Küçük sağ-tık kapsül menüleri (Box art/Clear Logo "Klasöre Git" gibi) için ortak
-             MenuItem stili — WPF'in varsayılan sistem menü renklerine (beyaz arkaplan) düşmesin
-             diye (bkz. Alternate Names/Genre açılır menülerinde daha önce yapılan aynı düzeltme). -->
-        <Style x:Key="DarkMenuItem" TargetType="MenuItem">
-            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-            <Style.Triggers>
-                <Trigger Property="IsHighlighted" Value="True">
-                    <Setter Property="Background" Value="{StaticResource Brush.Background.Hover}" />
-                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-                </Trigger>
-            </Style.Triggers>
         </Style>
 
         <!-- IconOnly modunda etiket metni gizlenir (bkz. Ayarlar > Arayüz, ContextMenuDisplayMode). -->
@@ -1886,10 +1928,14 @@
                                     Cursor="Hand" ToolTip="Kırpmak için tıkla"
                                     MouseLeftButtonDown="BoxArt_MouseLeftButtonDown">
                                 <Border.ContextMenu>
-                                    <ContextMenu Background="{StaticResource Brush.Background.Elevated}"
-                                                 BorderBrush="{StaticResource Brush.Border}">
+                                    <ContextMenu Style="{StaticResource CapsuleContextMenu}">
                                         <MenuItem Header="Klasöre Git" Style="{StaticResource DarkMenuItem}"
-                                                  Command="{Binding OpenBoxArtFolderCommand}" CommandParameter="{Binding SelectedGame}" />
+                                                  Command="{Binding OpenBoxArtFolderCommand}" CommandParameter="{Binding SelectedGame}">
+                                            <MenuItem.Icon>
+                                                <TextBlock Text="&#xE838;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                                           Foreground="{StaticResource Brush.Text.Primary}" />
+                                            </MenuItem.Icon>
+                                        </MenuItem>
                                     </ContextMenu>
                                 </Border.ContextMenu>
                                 <Grid>
@@ -1940,13 +1986,31 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
                                 <!-- Kullanıcı isteği: "2 satırlık sabit boşluk bırak kayma olmasın" —
                                      Alternate Names'teki aynı sabit-yükseklik düzeltmesi burada da:
                                      bazı başlıklar 1 satır bazıları 2 satır sürdüğü için MinHeight
                                      olmadan oyunlar arası geçişte sağ sütun (ve ona Stretch ile bağlı
                                      sol Box art) zıplıyordu. -->
+                                <!-- Kullanıcı isteği: "oyun adları kopyalanabilsin" — Alternate Names'teki
+                                     aynı CopyTextCommand deseni burada da, sağ tık kapsül menüsüyle. -->
                                 <TextBlock Grid.Column="0" Text="{Binding SelectedGame.Title}" FontSize="16" FontWeight="Bold"
-                                           TextWrapping="Wrap" VerticalAlignment="Top" MinHeight="40" />
+                                           TextWrapping="Wrap" VerticalAlignment="Top" MinHeight="40">
+                                    <TextBlock.ContextMenu>
+                                        <ContextMenu Style="{StaticResource CapsuleContextMenu}">
+                                            <MenuItem Header="Kopyala" Style="{StaticResource DarkMenuItem}"
+                                                      Command="{Binding CopyTextCommand}" CommandParameter="{Binding SelectedGame.Title}">
+                                                <MenuItem.Icon>
+                                                    <TextBlock Text="&#xE8C8;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                                               Foreground="{StaticResource Brush.Text.Primary}" />
+                                                </MenuItem.Icon>
+                                            </MenuItem>
+                                        </ContextMenu>
+                                    </TextBlock.ContextMenu>
+                                </TextBlock>
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top" Margin="6,0,0,0">
                                     <!-- Kullanıcı isteği: "buton youtube link olsa da olmasa da orda,
                                          link yoksa pasif renk olsun tıklanamaz gibi" — artık dış
@@ -1968,6 +2032,34 @@
                                               Width="18" Height="18" Stretch="Uniform" />
                                     </Button>
                                 </StackPanel>
+
+                                <!-- Kullanıcı isteği: "ayrı ayrı bi sürü buton olmasın, tek bir download
+                                     iconu youtube iconunun altında olsun. resmi olmayanları indirsin,
+                                     search butonu da koy tıklayınca Kapak/Logo/Gameplay seçenekleri
+                                     açılsın". İkisi de SADECE eksik bir görsel varsa görünür (bkz.
+                                     Game.HasMissingArtwork). -->
+                                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="6,4,0,0" HorizontalAlignment="Right"
+                                            Visibility="{Binding SelectedGame.HasMissingArtwork, Converter={StaticResource BoolToVisibility}}">
+                                    <Button Style="{StaticResource ActionsIconButton}" Width="28" Height="28" Margin="0,0,4,0"
+                                            ToolTip="Eksik görselleri otomatik indir"
+                                            Command="{Binding FetchMissingArtworkCommand}" CommandParameter="{Binding SelectedGame}">
+                                        <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="{StaticResource Brush.Text.Primary}" />
+                                    </Button>
+                                    <Button x:Name="ArtworkSearchBadge" Style="{StaticResource ActionsIconButton}" Width="28" Height="28"
+                                            ToolTip="Görsel ara" Click="ArtworkSearchBadge_Click">
+                                        <Button.ContextMenu>
+                                            <ContextMenu Style="{StaticResource CapsuleContextMenu}">
+                                                <MenuItem Header="Kapak" Style="{StaticResource DarkMenuItem}"
+                                                          Command="{Binding SearchBoxArtCommand}" CommandParameter="{Binding SelectedGame}" />
+                                                <MenuItem Header="Logo" Style="{StaticResource DarkMenuItem}"
+                                                          Command="{Binding SearchClearLogoArtCommand}" CommandParameter="{Binding SelectedGame}" />
+                                                <MenuItem Header="Gameplay" Style="{StaticResource DarkMenuItem}"
+                                                          Command="{Binding SearchScreenshotArtCommand}" CommandParameter="{Binding SelectedGame}" />
+                                            </ContextMenu>
+                                        </Button.ContextMenu>
+                                        <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="15" Foreground="{StaticResource Brush.Text.Primary}" />
+                                    </Button>
+                                </StackPanel>
                             </Grid>
 
                             <!-- Tür rozeti: tek tür varsa tıklanınca doğrudan o türe göre filtreler
@@ -1984,20 +2076,12 @@
                                          Names açılır menüsündeki aynı düzeltme burada da uygulandı. -->
                                     <Button.ContextMenu>
                                         <ContextMenu ItemsSource="{Binding PlacementTarget.DataContext.SelectedGame.GenreTokens, RelativeSource={RelativeSource Self}}"
-                                                     Background="{StaticResource Brush.Background.Elevated}"
-                                                     BorderBrush="{StaticResource Brush.Border}">
+                                                     Style="{StaticResource CapsuleContextMenu}">
                                             <ContextMenu.ItemContainerStyle>
-                                                <Style TargetType="MenuItem">
+                                                <Style TargetType="MenuItem" BasedOn="{StaticResource DarkMenuItem}">
                                                     <Setter Property="Header" Value="{Binding}" />
-                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
                                                     <Setter Property="Command" Value="{Binding PlacementTarget.DataContext.FilterByGenreTokenCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                     <Setter Property="CommandParameter" Value="{Binding}" />
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsHighlighted" Value="True">
-                                                            <Setter Property="Background" Value="{StaticResource Brush.Background.Hover}" />
-                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-                                                        </Trigger>
-                                                    </Style.Triggers>
                                                 </Style>
                                             </ContextMenu.ItemContainerStyle>
                                         </ContextMenu>
@@ -2079,10 +2163,9 @@
                                             Click="AlternateNamesOverflowToggle_Click">
                                     <Button.ContextMenu>
                                         <ContextMenu ItemsSource="{Binding PlacementTarget.DataContext.OverflowAlternateNames, RelativeSource={RelativeSource Self}}"
-                                                     Background="{StaticResource Brush.Background.Elevated}"
-                                                     BorderBrush="{StaticResource Brush.Border}">
+                                                     Style="{StaticResource CapsuleContextMenu}">
                                             <ContextMenu.ItemContainerStyle>
-                                                <Style TargetType="MenuItem">
+                                                <Style TargetType="MenuItem" BasedOn="{StaticResource DarkMenuItem}">
                                                     <Setter Property="Header" Value="{Binding}" />
                                                     <Setter Property="HeaderTemplate">
                                                         <Setter.Value>
@@ -2098,15 +2181,8 @@
                                                             </DataTemplate>
                                                         </Setter.Value>
                                                     </Setter>
-                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
                                                     <Setter Property="Command" Value="{Binding PlacementTarget.DataContext.CopyTextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                                                     <Setter Property="CommandParameter" Value="{Binding Name}" />
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsHighlighted" Value="True">
-                                                            <Setter Property="Background" Value="{StaticResource Brush.Background.Hover}" />
-                                                            <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-                                                        </Trigger>
-                                                    </Style.Triggers>
                                                 </Style>
                                             </ContextMenu.ItemContainerStyle>
                                         </ContextMenu>
@@ -2261,10 +2337,14 @@
                             Visibility="{Binding SelectedGame.ShowClearLogoArea, Converter={StaticResource BoolToVisibility}}"
                             MouseLeftButtonDown="ClearLogo_MouseLeftButtonDown">
                         <Border.ContextMenu>
-                            <ContextMenu Background="{StaticResource Brush.Background.Elevated}"
-                                         BorderBrush="{StaticResource Brush.Border}">
+                            <ContextMenu Style="{StaticResource CapsuleContextMenu}">
                                 <MenuItem Header="Klasöre Git" Style="{StaticResource DarkMenuItem}"
-                                          Command="{Binding OpenClearLogoFolderCommand}" CommandParameter="{Binding SelectedGame}" />
+                                          Command="{Binding OpenClearLogoFolderCommand}" CommandParameter="{Binding SelectedGame}">
+                                    <MenuItem.Icon>
+                                        <TextBlock Text="&#xE838;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                                   Foreground="{StaticResource Brush.Text.Primary}" />
+                                    </MenuItem.Icon>
+                                </MenuItem>
                             </ContextMenu>
                         </Border.ContextMenu>
                         <Image Source="{Binding SelectedGame.ClearLogoDisplayPath}" Stretch="Uniform" Height="66"

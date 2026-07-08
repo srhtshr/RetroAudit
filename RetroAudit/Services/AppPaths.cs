@@ -22,7 +22,29 @@ public static class AppPaths
     public static string Games { get; } = Path.Combine(Root, "Games");
     public static string Images { get; } = Path.Combine(Root, "Images");
     public static string Metadata { get; } = Path.Combine(Root, "Metadata");
-    public static string Emulation { get; } = Path.Combine(Root, "Emulation");
+
+    // LaunchBox'ın kendi kurulumundaki AYNI isimlendirme (bkz. kullanıcı isteği: "ThirdParty
+    // klasörüne portable atacak dimi") — RetroAudit'in KENDİ indirip yönettiği harici araçlar
+    // burada yaşar: repoyla gelen sabit araçlar (ör. ThirdParty/7-Zip/7zr.exe, bkz. SevenZipExe)
+    // VE kullanıcının "İndir & Kur" ile çalışma zamanında indirdiği şeyler (ör. ThirdParty/
+    // RetroArch/, bkz. RetroArchInstallerService) aynı kökün altında.
+    public static string ThirdParty { get; } = Path.Combine(Root, "ThirdParty");
+
+    // Kullanıcı isteği: "emulation klasörünü de thirdparty içine al ... standalonelar sadece emulation
+    // klasörüne indirip ordan algılasın" — Games/Images/Metadata gibi KÖK seviyede AYRI durmuyor
+    // artık, ThirdParty'nin altında. TÜM standalone emülatörler burada yaşar: hem otomatik kurulumu
+    // olanlar (PCSX2/RPCS3/Xemu, kendi emulatorId klasörü — bkz. StandaloneEmulatorInstallerService.
+    // InstallRootFor) HEM DE Gözat-only olanlar (Dolphin, Cemu vb. — kullanıcının kendi kurduğu,
+    // platform adına göre klasörlenmiş, bkz. BrowseEmulatorPath/AddCustomCore). RetroArch çekirdekleri
+    // BURADA DEĞİL — onlar ThirdParty\RetroArch\cores\ altında ayrı yaşıyor (bkz. RetroArchInstallerService).
+    public static string Emulation { get; } = Path.Combine(ThirdParty, "Emulation");
+
+    // 7-Zip'in resmi "reduced" (sadece .7z formatını açan, tek dosyalık, kurulum gerektirmeyen)
+    // komut satırı aracı — RetroArch.7z/RetroArch_cores.7z'yi açmak için. LaunchBox'ın kendi
+    // ThirdParty\7-Zip\ klasörüne 7z.exe+7z.dll koyup aynı şeyi yaptığı görüldü (bkz. kullanıcı
+    // isteği: "launchboxdaki sisteme baksana nasıl yapmış") — biz .dll'e bağımlı olmayan, tek
+    // dosyalık 7zr.exe'yi tercih ettik (7-zip.org/GitHub'dan indirilip repoya eklendi).
+    public static string SevenZipExe { get; } = Path.Combine(Root, "ThirdParty", "7-Zip", "7zr.exe");
 
     // Görseli olmayan oyunlar için sabit yer tutucular (Images/NoImage altında elle eklenmiş
     // hazır dosyalar) — bkz. Game.BoxDisplayPath vb. Klasör repoyla birlikte geldiği için burada
@@ -47,5 +69,16 @@ public static class AppPaths
         Directory.CreateDirectory(Images);
         Directory.CreateDirectory(Metadata);
         Directory.CreateDirectory(Emulation);
+        Directory.CreateDirectory(ThirdParty);
+    }
+
+    // Platform adlarından klasör adı üretirken kullanılan ortak yardımcı (bkz. RetroArchInstallerService.
+    // PlatformCoresFolder, SettingsViewModel.EnsureEmulationPlatformFolders) — şu an hiçbir platform adı
+    // geçersiz Windows dosya adı karakteri içermiyor (bkz. CanonicalEmulatorDefinitions), yine de güvenceye alınıyor.
+    public static string SanitizeFolderName(string name)
+    {
+        foreach (var invalidChar in Path.GetInvalidFileNameChars())
+            name = name.Replace(invalidChar, '_');
+        return name;
     }
 }

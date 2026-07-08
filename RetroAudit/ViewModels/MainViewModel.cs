@@ -332,8 +332,22 @@ public partial class MainViewModel : ObservableObject
         RebuildPlaylistChips();
 
         // Backing field'a doğrudan atama yapılıyor ki henüz Games/ApplyFilter hazır değilken
-        // OnSelectedPlatformChanged tetiklenip erken/eksik bir filtreleme yapılmasın.
-        selectedPlatform = Platforms.FirstOrDefault(p => p.IsAllPlatforms) ?? Platforms.First();
+        // OnSelectedPlatformChanged/OnSelectedChipChanged tetiklenip erken/eksik bir filtreleme
+        // yapılmasın. Kullanıcı isteği: "program açılışında son açık bırakılan playlist ve
+        // platformu açsın" — kayıtlı bir eşleşme yoksa (ör. platform silinmiş/kategori
+        // kapatılmış) sessizce "All Platforms"/hiç chip'e düşer.
+        selectedPlatform = Platforms.FirstOrDefault(p => p.Name == _appSettings.LastSelectedPlatform)
+            ?? Platforms.FirstOrDefault(p => p.IsAllPlatforms)
+            ?? Platforms.First();
+        if (_appSettings.LastSelectedChipKind is { } lastChipKind)
+            selectedChip = PlaylistChips.FirstOrDefault(c => c.Kind == lastChipKind && c.PlaylistId == _appSettings.LastSelectedPlaylistId);
+        if (selectedChip is not null)
+        {
+            selectedChip.IsSelected = true;
+            _selectedChipMembership = selectedChip is { Kind: PlaylistChipKind.Playlist, PlaylistId: int id }
+                ? UserDataService.GetPlaylistGameKeys(id)
+                : new HashSet<string>();
+        }
         contextMenuDisplayMode = _appSettings.ContextMenuDisplayMode;
 
         ApplyFilter();
@@ -490,7 +504,11 @@ public partial class MainViewModel : ObservableObject
             SelectedToolAction = "Tools";
     }
 
-    partial void OnSelectedPlatformChanged(Platform? value) => ApplyFilter();
+    partial void OnSelectedPlatformChanged(Platform? value)
+    {
+        ApplyFilter();
+        SaveLastSelection();
+    }
 
     partial void OnSelectedChipChanged(PlaylistChip? value)
     {
@@ -501,6 +519,18 @@ public partial class MainViewModel : ObservableObject
             ? UserDataService.GetPlaylistGameKeys(id)
             : new HashSet<string>();
         ApplyFilter();
+        SaveLastSelection();
+    }
+
+    // Kullanıcı isteği: "program açılışında son açık bırakılan playlist ve platformu açsın" —
+    // platform veya chip her değiştiğinde diske yazılır (bkz. constructor'daki geri okuma).
+    // "All Platforms" null olarak kaydediliyor (silinmiş bir platform ismini saklamak yerine).
+    private void SaveLastSelection()
+    {
+        _appSettings.LastSelectedPlatform = SelectedPlatform is { IsAllPlatforms: false } ? SelectedPlatform.Name : null;
+        _appSettings.LastSelectedChipKind = SelectedChip?.Kind;
+        _appSettings.LastSelectedPlaylistId = SelectedChip?.PlaylistId;
+        ConfigService.SaveDefault(_appSettings);
     }
 
     // UserDataService.Playlists (Favorites dahil) + sentetik Hidden/Recycle Bin chip'lerini
@@ -784,7 +814,12 @@ public partial class MainViewModel : ObservableObject
     // View katmanı (MainWindow.xaml.cs) bunu dinleyip embedded WebView2 penceresini açıyor —
     // ViewModel doğrudan bir Window tipine bağımlı olmasın diye (bkz. RequestOpenMediaProvider
     // ile aynı desen).
-    public event Action<(string Url, string TargetFolder, Game Game)>? RequestSearchRom;
+    // ForcedFileName: null ise (grid'deki genel "Web'de Ara") tarayıcının önerdiği isim aynen
+    // korunur (eski davranış). Dolu ise (bkz. SearchRomForVersion) indirilen dosya, tarayıcının
+    // önerdiği isim NE OLURSA OLSUN bu isme zorlanır — kullanıcı isteği: "indirirken otomatik o
+    // isimle kaydetsin, isim yazmakla uğraşmayım", tıpkı görsel aramasındaki (bkz. MediaSearchWindow)
+    // otomatik isimlendirme gibi.
+    public event Action<(string Url, string TargetFolder, string? ForcedFileName, Game Game)>? RequestSearchRom;
 
     [RelayCommand]
     private void SearchWeb(Game game)
@@ -798,7 +833,38 @@ public partial class MainViewModel : ObservableObject
 
         var targetFolder = Path.Combine(AppPaths.Games, game.PlatformDisplayName);
 
-        RequestSearchRom?.Invoke((url, targetFolder, game));
+        RequestSearchRom?.Invoke((url, targetFolder, null, game));
+    }
+
+    // Sürüm kartındaki "Ara" (ROM) düğmesi. Sorgu BİLİNÇLİ OLARAK hiçbir SİTEYE kısıtlı değil
+    // ("site:archive.org", "reddit" gibi önceden tahmin edilen kaynaklara sınırlamıyoruz, dosya
+    // internetin herhangi bir köşesinde barındırılıyor olabilir) — ama tam dosya adı tek başına
+    // sık sık salt hash/bilgi listeleyen detay sayfalarını öne çıkarıyordu, indirme linkinin
+    // kendisini bulmak zorlaşıyordu. Bu yüzden SAYFA TÜRÜNE (site'a değil) göre bir OR grubu
+    // eklendi: download/"download page"/"direct link"/roms — bunlardan biri sayfada geçmeli.
+    // Hangi sonuca tıklanacağına HER ZAMAN kullanıcı karar verir (uygulama otomatik bir
+    // tarama/parse yapmıyor, insan kontrolünde kalıyor — bkz. RomSearchWindow'un genel tasarım
+    // felsefesi). İndirilen dosya, katalogdaki bu sürümün TAM beklenen dosya adına (Hashes[0].
+    // FileName, ör. "Air Raid (USA).a26") zorlanıyor, böylece HasLocalFile/IsVersionOwned
+    // eşleşmesi başka bir işlem gerekmeden hemen tutar.
+    [RelayCommand]
+    private void SearchRomForVersion(GameVersion version)
+    {
+        if (SelectedGame is not { } game)
+            return;
+
+        var forcedFileName = version.Hashes.FirstOrDefault()?.FileName;
+
+        // Beklenmedik durum: bu sürümün hiç hash/dosya adı kaydı yoksa (katalogda eksik veri),
+        // tam dosya adına göre arama yapılamaz — eski başlık-tabanlı sorguya düşülüyor.
+        var query = !string.IsNullOrWhiteSpace(forcedFileName)
+            ? $"\"{forcedFileName}\" (download | \"download page\" | \"direct link\" | roms)"
+            : $"{game.Title} {game.PlatformDisplayName} rom";
+        var url = "https://www.google.com/search?q=" + Uri.EscapeDataString(query);
+
+        var targetFolder = Path.Combine(AppPaths.Games, game.PlatformDisplayName);
+
+        RequestSearchRom?.Invoke((url, targetFolder, forcedFileName, game));
     }
 
     // RomSearchWindow, WebView2'nin DownloadStarting/StateChanged olaylarını izleyip bir indirme
@@ -813,6 +879,11 @@ public partial class MainViewModel : ObservableObject
     {
         game.HasLocalFile = HasLocalFile(game);
         ApplyFilter();
+
+        // Sürüm kartından (SearchRomForVersion) indirilmiş olabilir — Sürümler listesindeki
+        // Play/çarpı ikonlarının (IsVersionOwned) anında güncellenmesi için yeniden yükleniyor.
+        if (game == SelectedGame)
+            LoadSelectedGameVersions();
     }
 
     [RelayCommand]
@@ -1147,8 +1218,11 @@ public partial class MainViewModel : ObservableObject
 
     // "Görsel Getir" başlamadan önce hangi türlerin (Box/Clear Logo/Gameplay) indirileceğini
     // sormak için View'a bırakılan istek (bkz. ArtworkTypeSelectionDialog, MainWindow.xaml.cs).
-    // Kullanıcı iptal ederse veya hiç tür seçmezse null/boş küme döner, indirme hiç başlamaz.
-    public event Func<HashSet<string>?>? RequestArtworkTypeSelection;
+    // Parametre: (HasBox, HasClearLogo, HasScreenshot) — zaten mevcut olan türler diyalogda
+    // varsayılan olarak İŞARETSİZ gelsin diye (kullanıcı isteği: "kapak indirilmişse gene
+    // sormasın, işaretsiz çıksın"). Kullanıcı iptal ederse veya hiç tür seçmezse null/boş küme
+    // döner, indirme hiç başlamaz.
+    public event Func<(bool HasBox, bool HasClearLogo, bool HasScreenshot), HashSet<string>?>? RequestArtworkTypeSelection;
 
     // MainWindow.xaml'deki "Durdur" düğmesi bunu Cancel() ile tetikler (bkz. CancelArtworkDownload).
     // Tekli/toplu indirme başlarken yeniden oluşturulur, bitince/iptal olunca Dispose edilir.
@@ -1156,6 +1230,74 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void CancelArtworkDownload() => _artworkDownloadCts?.Cancel();
+
+    // Detay panelindeki TEK Download butonu (kullanıcı isteği: "ayrı ayrı bi sürü buton olmasın,
+    // resmi olmayanları indirsin ayrı ayrı tanımlama") — hangi türlerin eksik olduğunu kendisi
+    // hesaplayıp SADECE onları indirir, çoklu tür seçim diyaloğu (RequestArtworkTypeSelection)
+    // hiç açılmaz. Buton zaten Game.HasMissingArtwork'e göre sadece eksik varsa görünür.
+    [RelayCommand]
+    private async Task FetchMissingArtwork(Game game)
+    {
+        if (!game.HasArtworkSource)
+        {
+            RequestShowMessage?.Invoke("Bu oyun için eşleşmiş bir metadata kaydı yok, görsel aranamadı.");
+            return;
+        }
+
+        var missingTypes = new HashSet<string>();
+        if (!game.HasBox) missingTypes.Add("Box");
+        if (!game.HasClearLogo) missingTypes.Add("Logo");
+        if (!game.HasScreenshot) missingTypes.Add("SS");
+        if (missingTypes.Count == 0)
+            return;
+
+        IsArtworkDownloadInProgress = true;
+        try
+        {
+            var result = await DownloadArtworkAsync(game, missingTypes, CancellationToken.None);
+            NotifyArtworkDownloaded(game);
+            ApplyFilter();
+
+            if (result.Total == 0)
+                RequestShowMessage?.Invoke("Eksik görseller için LaunchBox'ta kaynak bulunamadı — \"Ara\" ile deneyebilirsiniz.");
+            else if (result.Succeeded < result.Total)
+                RequestShowMessage?.Invoke($"{result.Total - result.Succeeded} görsel indirilemedi — \"Ara\" ile deneyebilirsiniz.");
+        }
+        finally
+        {
+            IsArtworkDownloadInProgress = false;
+        }
+    }
+
+    // Detay panelindeki tek-görsel Search butonları — otomatik indirme (LaunchBox kaynağı)
+    // hiçbir şey bulamazsa/başarısız olursa kullanıcının kendi bulup indirebilmesi için (kullanıcı
+    // isteği: "indiremezse bulunamazsa search ile bizim webview'den çekebilelim"). RomSearchWindow
+    // ile aynı gömülü WebView2 deseni (bkz. MediaSearchWindow) — sadece dosya adı ROM'la eşleşecek
+    // şekilde zorlanıyor (bkz. MediaSearchWindow.xaml.cs).
+    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action CompletedCallback)>? RequestSearchArtwork;
+
+    [RelayCommand]
+    private void SearchBoxArt(Game game) => SearchArtwork(game, "Box", "kapak resmi (box art)");
+
+    [RelayCommand]
+    private void SearchClearLogoArt(Game game) => SearchArtwork(game, "Logo", "clear logo (şeffaf png)");
+
+    [RelayCommand]
+    private void SearchScreenshotArt(Game game) => SearchArtwork(game, "SS", "oynanış ekran görüntüsü");
+
+    private void SearchArtwork(Game game, string type, string mediaTypeLabel)
+    {
+        var query = $"{game.Title} {game.PlatformDisplayName} {mediaTypeLabel}";
+        var url = "https://www.google.com/search?q=" + Uri.EscapeDataString(query) + "&tbm=isch";
+        var targetFolder = Path.Combine(AppPaths.Images, game.PlatformDisplayName, type);
+        var baseFileName = GetMediaBaseFileName(game);
+
+        RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, game.Title, mediaTypeLabel, () =>
+        {
+            NotifyArtworkDownloaded(game);
+            ApplyFilter();
+        }));
+    }
 
     [RelayCommand]
     private async Task FetchArtwork(Game game)
@@ -1168,7 +1310,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var selectedTypes = RequestArtworkTypeSelection?.Invoke();
+        var selectedTypes = RequestArtworkTypeSelection?.Invoke((game.HasBox, game.HasClearLogo, game.HasScreenshot));
         if (selectedTypes is null || selectedTypes.Count == 0)
             return;
 
@@ -1218,7 +1360,14 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var selectedTypes = RequestArtworkTypeSelection?.Invoke();
+        // Toplu indirimde "zaten var" SEÇİLİ oyunların HEPSİNDE zaten var olması demek — bir
+        // tek oyunda bile eksikse, o tür yine varsayılan işaretli gelir (kullanıcı isteği:
+        // "kapak indirilmişse gene sormasın" tekli senaryo için netti, toplu için en makul
+        // genelleme bu: gereksiz yeniden indirmeyi sadece HERKESTE fazlalıksa engelle).
+        var selectedTypes = RequestArtworkTypeSelection?.Invoke((
+            targets.All(g => g.HasBox),
+            targets.All(g => g.HasClearLogo),
+            targets.All(g => g.HasScreenshot)));
         if (selectedTypes is null || selectedTypes.Count == 0)
             return;
 
@@ -1710,9 +1859,9 @@ public partial class MainViewModel : ObservableObject
 
         query = SelectedChip?.Kind switch
         {
-            PlaylistChipKind.Top250 => ComputeTopRated(query, 250),
-            PlaylistChipKind.Top100 => ComputeTopRated(query, 100),
-            PlaylistChipKind.Top25 => ComputeTopRated(query, 25),
+            PlaylistChipKind.Top250 => ComputeTopRatedForScope(query, 250),
+            PlaylistChipKind.Top100 => ComputeTopRatedForScope(query, 100),
+            PlaylistChipKind.Top25 => ComputeTopRatedForScope(query, 25),
             _ => query,
         };
 
@@ -1779,6 +1928,20 @@ public partial class MainViewModel : ObservableObject
 
     private static IEnumerable<Game> ComputeTopRated(IEnumerable<Game> population, int take) =>
         RankByWeightedRating(population).Take(take);
+
+    // "Tüm Platformlar" seçiliyken düz ComputeTopRated (tüm platformları TEK bir havuzda
+    // sıralayıp kesme) ile Game.TopRankBadge (bkz. ComputeTopRankBadges, HER ZAMAN platform
+    // başına ayrı hesaplanır) birbiriyle ÇELİŞİYORDU: küçük bir platformda gerçekten "Top 25"
+    // olan bir oyun, büyük platformların oylarıyla dolu global sıralamada 100'ün dışında kalıp
+    // "Top 100" listesinde hiç görünmeyebiliyor, ya da tam tersi — kullanıcı geri bildirimi:
+    // "top100'ü açınca gözükenlerin badge'inde top 25 yazıyor". Tek platform seçiliyken zaten
+    // tek bir platform var, sorun yok; "Tüm Platformlar"da HER platformu KENDİ İÇİNDE ayrı ayrı
+    // sıralayıp kesip birleştiriyoruz — böylece listede görünen her oyun, rozetiyle (o platform
+    // içindeki sıralamayla) her zaman tutarlı.
+    private IEnumerable<Game> ComputeTopRatedForScope(IEnumerable<Game> population, int take) =>
+        SelectedPlatform is { IsAllPlatforms: false }
+            ? ComputeTopRated(population, take)
+            : population.GroupBy(g => g.Platform).SelectMany(platformGroup => RankByWeightedRating(platformGroup).Take(take));
 
     // Top 250/100/25 chip'lerinin filtre popülasyonu. Platform daraltması artık burada değil,
     // GetFilterScopePopulation'da TÜM chip'ler için tek/ortak bir yerde uygulanıyor (bkz. orada).
@@ -2048,22 +2211,17 @@ public partial class MainViewModel : ObservableObject
             string.Equals(e.PlatformName, game.Platform, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(e.PlatformName, game.PlatformDisplayName, StringComparison.OrdinalIgnoreCase));
 
-        if (emulator is null || string.IsNullOrWhiteSpace(emulator.ExecutablePath))
+        if (emulator is null)
         {
             RequestShowMessage?.Invoke($"\"{game.PlatformDisplayName}\" platformu için Ayarlar > Emülatörler'de bir emülatör tanımlanmamış.");
             return;
         }
 
-        var arguments = emulator.Parameters.Replace("%ROM%", $"\"{romPath}\"");
-
-        try
-        {
-            Process.Start(new ProcessStartInfo(emulator.ExecutablePath, arguments) { UseShellExecute = true });
-        }
-        catch (Exception ex)
-        {
-            RequestShowMessage?.Invoke($"Emülatör başlatılamadı: {ex.Message}");
-        }
+        // İki modlu (RetroArchCore/StandaloneEXE) yer tutucu doldurma + Process.Start mantığı
+        // artık tek bir yerde, LaunchEngine'de yaşıyor.
+        var result = LaunchEngine.Launch(emulator, romPath);
+        if (!result.Success)
+            RequestShowMessage?.Invoke(result.ErrorMessage ?? "Emülatör başlatılamadı.");
     }
 
     // Gameplay screenshot alanındaki YouTube oynatma — artık dış tarayıcı AÇMIYOR (kullanıcı

@@ -14,10 +14,15 @@ public partial class RomSearchWindow : Window
 {
     private readonly string _searchUrl;
     private readonly string _targetFolder;
+    private readonly string? _forcedFileName;
 
+    // forcedFileName: null ise (grid'deki genel "Web'de Ara") tarayıcının önerdiği isim aynen
+    // korunur (eski davranış). Dolu ise (bkz. MainViewModel.SearchRomForVersion) indirilen dosya
+    // BU isme zorlanır — kullanıcı isteği: "indirirken otomatik o isimle kaydetsin, isim yazmakla
+    // uğraşmayım".
     // completedCallback: bir indirme Completed durumuna geçtiğinde (dosya adıyla) çağrılır —
     // MainWindow bunu MainViewModel.NotifyRomDownloaded'a bağlıyor (bkz. MainWindow.xaml.cs).
-    public RomSearchWindow(string searchUrl, string targetFolder, string gameTitle, Action<string>? completedCallback = null)
+    public RomSearchWindow(string searchUrl, string targetFolder, string gameTitle, Action<string>? completedCallback = null, string? forcedFileName = null)
     {
         InitializeComponent();
         DarkTitleBarHelper.Apply(this);
@@ -25,6 +30,7 @@ public partial class RomSearchWindow : Window
         Title = $"RetroAudit - ROM Ara: {gameTitle}";
         _searchUrl = searchUrl;
         _targetFolder = targetFolder;
+        _forcedFileName = forcedFileName;
 
         Loaded += async (_, _) => await InitializeBrowserAsync(completedCallback);
     }
@@ -68,7 +74,7 @@ public partial class RomSearchWindow : Window
         {
             Directory.CreateDirectory(_targetFolder);
 
-            var fileName = Path.GetFileName(e.ResultFilePath);
+            var fileName = _forcedFileName ?? Path.GetFileName(e.ResultFilePath);
             e.ResultFilePath = Path.Combine(_targetFolder, fileName);
 
             // Handled=true: WebView2'nin kendi indirme çubuğu/"Farklı Kaydet" diyaloğu hiç

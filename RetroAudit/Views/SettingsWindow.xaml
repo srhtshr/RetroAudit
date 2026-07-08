@@ -21,6 +21,65 @@
         </CollectionViewSource>
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:InverseBooleanConverter x:Key="InverseBoolean" />
+        <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:BoolToStatusBrushConverter x:Key="BoolToStatusBrush" />
+        <conv:BoolToStatusGlyphConverter x:Key="BoolToStatusGlyph" />
+        <conv:LauncherTypeToBrushConverter x:Key="LauncherTypeToBrush" />
+        <conv:DownloadSourceTypeToIsCustomConverter x:Key="DownloadSourceTypeToIsCustom" />
+
+        <!-- Mod seçimi ayrı bir sütun değil, "Core Adı" sütunundaki bu rozetin kendisi (bkz.
+             CoreNameColumn) — tıklanınca RetroArchCore/StandaloneEXE arasında geçiş yapan tam
+             işlevsel bir ComboBox. Uygulamanın varsayılan ComboBox şablonunu miras alır
+             (`BasedOn="{StaticResource {x:Type ComboBox}}"`, bkz. ObsidianDark.xaml) — özel bir
+             ControlTemplate YAZILMAMALI, DataGrid içinde sanallaştırılmış satırlarda seçim kırılıyor.
+             Aynı sebeple Background/BorderBrush renklendirmesi bir Style.Trigger yerine doğrudan
+             Binding+Converter (LauncherTypeToBrush) ile yapılıyor. -->
+        <Style x:Key="LauncherTypePillComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+            <Setter Property="Width" Value="88" />
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <!-- Platform adı, Core Adı sütunundaki Mod rozetiyle AYNI görsel dil (rozet), farklı bir
+             renkte (Brush.Accent.Launch — Mod rozetlerinin mor/gri'sinden ayrışsın diye) — kullanıcı
+             isteği: "platform adı yazan kısmıda Core adındaki gibi badge li yap farklı bi renk olsun". -->
+        <Style x:Key="PlatformNameBadge" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource Brush.Accent.Launch}" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="10,3" />
+        </Style>
+
+        <!-- Kullanıcı isteği: "Önerilen ve Alternatiflerin rengi farklı olsun en üstte olsunlar ...
+             açıklamalarıda mouse u üstüne getirince gözüksün ... olmayanları listeden silmede yanda
+             yok olarak işaretle ... önerilen coreları açılır listede bold sarı olarak göstersin" —
+             Core Adı dropdown'ının açılır listesindeki HER öğe (bkz. EmulatorConfig.AvailableChoices
+             sıralaması: Önce Önerilen/Alternatif, sonra "+"la eklenenler/katalog) için
+             ToolTip=Description; Önerilen/Alternatif SARI+KALIN, diskte OLMAYANLAR (Label zaten "(Yok)"
+             ekli, bkz. CoreChoiceOption) soluk renkte. NOT: İLK denemede bu ComboBoxItem'a
+             ItemContainerStyle ile Foreground vermeye çalışıldı — DisplayMemberPath'in ürettiği otomatik
+             TextBlock bu rengi MİRAS ALMIYORDU (kullanıcı testiyle doğrulandı: liste açılıyor ama
+             yazılar hep beyaz kalıyordu). Şimdi DisplayMemberPath yerine doğrudan bir ItemTemplate
+             kullanılıyor, renk/kalınlık TextBlock'un KENDİSİNE uygulanıyor — miras zincirine güvenmiyor.
+             Sıralama zaten AvailableChoices'te yapıldığı için burada SADECE görünüm. -->
+        <DataTemplate x:Key="CoreChoiceItemTemplate">
+            <TextBlock Text="{Binding Label}" ToolTip="{Binding Description}">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPreferredOrAlternative}" Value="True">
+                                <Setter Property="Foreground" Value="Yellow" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsInstalled}" Value="False">
+                                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
+                                <Setter Property="FontWeight" Value="Normal" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </DataTemplate>
     </Window.Resources>
 
     <Grid Background="{StaticResource Brush.Background.Base}">
@@ -189,45 +248,342 @@
 
             <!-- ===================== Emülatörler ===================== -->
             <TabItem Header="Emülatörler">
-                <StackPanel Margin="4,16,4,4">
-                    <TextBlock Text="Emülatör Ayarları" FontWeight="Bold" Margin="0,0,0,4" />
-                    <TextBlock Text="Her platform için önerilen emülatör core'u (ve varsa alternatifi), kendi makinenizdeki gerçek .exe yolu ve başlatma parametrelerini burada tanımlayın. Sağ alttaki BAŞLAT butonu ileride bu tabloyu kullanacak; %ROM% seçili oyunun dosya yolu ile değiştirilecek yer tutucudur."
-                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <Grid Margin="4,16,4,4">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
 
+                    <StackPanel Grid.Row="0">
+                        <TextBlock Text="Emülatör Ayarları" FontWeight="Bold" Margin="0,0,0,4" />
+                        <TextBlock Text="Her platform için önerilen emülatör core'u (ve varsa alternatifi), kendi makinenizdeki gerçek .exe yolu ve başlatma parametrelerini burada tanımlayın. Sağ alttaki BAŞLAT butonu ileride bu tabloyu kullanacak; %ROM% seçili oyunun dosya yolu ile değiştirilecek yer tutucudur."
+                                   Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                        <!-- Kullanıcı isteği: "butonları yatay dizsene ... inenlerde buton kalksın
+                             işarete dönsün en sağa bi yerede kaldırma butonu ekle seçili olanları" —
+                             her emülatör için isim etiketi + YA indirme butonu (kurulu değilse) YA DA
+                             mor tik + kaldırma butonu (kuruluysa, bkz. IsRetroArchInstalled/
+                             StandaloneEmulatorInstallState.IsInstalled). Tamamı TEK bir yatay sırada
+                             (WrapPanel). İlerleme çubuğu/durum sadece o an kuruluyorsa/kaldırılıyorsa
+                             etiketin ALTINDA görünüyor. -->
+                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <!-- RetroArch'ı indirip kurma — resmi buildbot'tan RetroArch + tüm
+                                 çekirdekleri indirip AppPaths.ThirdParty\RetroArch\'a açar (bkz.
+                                 RetroArchInstallerService), RetroArchCore modundaki HER satırın
+                                 ExecutablePath/CorePath'ini otomatik doldurur. -->
+                            <StackPanel Margin="0,0,20,8">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="RetroArch" VerticalAlignment="Center" Margin="0,0,8,0" />
+
+                                    <Button Command="{Binding InstallRetroArchCommand}"
+                                            IsEnabled="{Binding IsInstallingRetroArch, Converter={StaticResource InverseBoolean}}"
+                                            Visibility="{Binding IsRetroArchInstalled, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}"
+                                            Width="26" Height="26" Padding="0" ToolTip="İndir &amp; Kur">
+                                        <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Button>
+
+                                    <StackPanel Orientation="Horizontal" Visibility="{Binding IsRetroArchInstalled, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                   Foreground="{StaticResource Brush.Status.Ok}"
+                                                   Width="26" Height="26" TextAlignment="Center" VerticalAlignment="Center" />
+                                        <Button Command="{Binding UninstallRetroArchCommand}"
+                                                Width="26" Height="26" Padding="0" Margin="4,0,0,0" ToolTip="Kaldır">
+                                            <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Button>
+                                    </StackPanel>
+                                </StackPanel>
+                                <!-- "ilerleme çubuğu oynamıyor yapay gecikme ekleme yüzde göstersin" (kullanıcı
+                                     isteği) — arşiv açma aşamalarında gerçek bir yüzde yok, sahte bir sayı
+                                     yerine IsIndeterminate moduna geçiyor (bkz. RetroArchInstallerService). -->
+                                <ProgressBar Height="14" Margin="0,4,0,0" Minimum="0" Maximum="100"
+                                             Value="{Binding RetroArchInstallProgress, Mode=OneWay}"
+                                             IsIndeterminate="{Binding IsInstallingRetroArchIndeterminate}"
+                                             Visibility="{Binding IsInstallingRetroArch, Converter={StaticResource BoolToVisibility}}" />
+                                <TextBlock Text="{Binding RetroArchInstallStatus}" Margin="0,2,0,0"
+                                           Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11"
+                                           Visibility="{Binding IsInstallingRetroArch, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+
+                            <!-- Kullanıcı isteği: "Standalonelar içinde indirme koyacaz ayrıca" — her
+                                 butonun kendi Is/Progress/Status/Installed durumu StandaloneEmulatorInstallState'te
+                                 (bkz. SettingsViewModel.StandaloneEmulatorInstalls), CommandParameter
+                                 olarak satırın kendisi Install/UninstallStandaloneEmulatorCommand'a veriliyor.
+                                 Manuel URL/Download Source alanları (Dolphin/Ryujinx SADECE manuel URL ile
+                                 çalışır) Ayarlar > Komutlar sekmesinde — tanımlı değilse "İndir & Kur"
+                                 butonu "Manuel indirme linki gerekli" durumunu gösterir — bkz.
+                                 StandaloneEmulatorInstallerService. -->
+                            <ItemsControl ItemsSource="{Binding StandaloneEmulatorInstalls}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <StackPanel Margin="0,0,20,8">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="{Binding DisplayName}" VerticalAlignment="Center" Margin="0,0,8,0" />
+
+                                                <Button Command="{Binding DataContext.InstallStandaloneEmulatorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        IsEnabled="{Binding IsInstalling, Converter={StaticResource InverseBoolean}}"
+                                                        Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}"
+                                                        Width="26" Height="26" Padding="0" ToolTip="İndir &amp; Kur">
+                                                    <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Button>
+
+                                                <StackPanel Orientation="Horizontal" Visibility="{Binding IsInstalled, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                               Foreground="{StaticResource Brush.Status.Ok}"
+                                                               Width="26" Height="26" TextAlignment="Center" VerticalAlignment="Center" />
+                                                    <Button Command="{Binding DataContext.UninstallStandaloneEmulatorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"
+                                                            Width="26" Height="26" Padding="0" Margin="4,0,0,0" ToolTip="Kaldır">
+                                                        <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </StackPanel>
+                                            <ProgressBar Height="14" Margin="0,4,0,0" Minimum="0" Maximum="100"
+                                                         Value="{Binding Progress, Mode=OneWay}"
+                                                         IsIndeterminate="{Binding IsIndeterminate}"
+                                                         Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVisibility}}" />
+                                            <TextBlock Text="{Binding Status}" Margin="0,2,0,0"
+                                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11"
+                                                       Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVisibility}}" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </WrapPanel>
+
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <!-- Platform adına göre tabloyu daraltan arama kutusu (bkz.
+                                 SettingsViewModel.EmulatorSearchText, CollectionViewSource.Filter). -->
+                            <Grid Width="220">
+                                <TextBox VerticalContentAlignment="Center"
+                                         Text="{Binding EmulatorSearchText, UpdateSourceTrigger=PropertyChanged}" />
+                                <TextBlock Text="Platform ara..." IsHitTestVisible="False"
+                                           VerticalAlignment="Center" Margin="10,0,0,0"
+                                           Foreground="{StaticResource Brush.Text.Secondary}">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding EmulatorSearchText}" Value="">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+
+                            <!-- "seçenek koy bide oraya önerilen ve alternatifleri göster veya hepsini
+                                 göster diye seçilen ayara göre göstersin" (kullanıcı isteği) — Core Adı
+                                 dropdown'larının içeriğini TÜM satırlar için birden değiştiren global
+                                 seçici (bkz. SettingsViewModel.CoreChoiceDisplayMode). -->
+                            <TextBlock Text="Core Adı listesi:" VerticalAlignment="Center" Margin="16,0,6,0"
+                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
+                            <ComboBox VerticalContentAlignment="Center" Width="220"
+                                      SelectedValuePath="Tag"
+                                      SelectedValue="{Binding CoreChoiceDisplayMode}">
+                                <ComboBoxItem Content="Sadece Önerilen ve Alternatif" Tag="{x:Static models:CoreChoiceDisplayMode.PreferredAndAlternativeOnly}" />
+                                <ComboBoxItem Content="Hepsini Göster" Tag="{x:Static models:CoreChoiceDisplayMode.ShowAll}" />
+                            </ComboBox>
+
+                            <!-- "ayarla bozulunca önerilenleri seçmek ayarlamak için buton ekle default
+                                 ayarladığımız önerilen düzene çevirsin" (kullanıcı isteği) — TÜM satırların
+                                 Core Adı seçimini tek tıkla PreferredCore'a geri döndürür (bkz.
+                                 ResetToRecommendedCoresCommand). -->
+                            <Button Content="Önerilenlere Sıfırla" Margin="16,0,0,0"
+                                    ToolTip="Tüm platformların Core Adı seçimini önerilen çekirdek/emülatöre geri döndürür"
+                                    Command="{Binding ResetToRecommendedCoresCommand}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Kullanıcı geri bildirimi: "listeyi aşağı doğru doldur, çoğu altta kalıyor" —
+                         sabit Height="330" ~9 satır gösterip geri kalan ~40 platformu (bkz.
+                         SettingsViewModel.Emulators) kesiyordu. Grid'in "*" satırında artık pencere
+                         boyu neyse o kadar (tüm kalan dikey alan) kullanıyor, kendi iç kaydırma
+                         çubuğuyla (DataGrid'in varsayılanı) geri kalanı gösteriyor. -->
                     <!-- Hücre şablonlarındaki butonların DataContext'i satırdaki EmulatorConfig olduğu için,
                          ViewModel komutlarına ulaşmak amacıyla RelativeSource AncestorType=Window ile
                          Window.DataContext (SettingsViewModel) üzerinden komut aranıyor; CommandParameter
                          olarak da satırın kendisi (EmulatorConfig) veriliyor. -->
-                    <DataGrid ItemsSource="{Binding Emulators}" SelectedItem="{Binding SelectedEmulator}"
-                              AutoGenerateColumns="False" CanUserAddRows="False" Height="330" Margin="0,0,0,8">
+                    <DataGrid x:Name="EmulatorsGrid" Grid.Row="1" ItemsSource="{Binding Emulators}" SelectedItem="{Binding SelectedEmulator}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" Margin="0,0,0,8"
+                              ColumnReordered="EmulatorsGrid_ColumnReordered">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Platform" Binding="{Binding PlatformName}" Width="1.6*" />
-                            <DataGridTextColumn Header="Tercih Edilen Core" Binding="{Binding PreferredCore}" Width="1.1*" />
-                            <DataGridTextColumn Header="Alternatif Core" Binding="{Binding AlternativeCore}" Width="1.1*" />
-                            <DataGridTextColumn Header="Emülatör Yolu (.exe)" Binding="{Binding ExecutablePath}" Width="1.8*" />
-                            <DataGridTextColumn Header="Parametreler" Binding="{Binding Parameters}" Width="1*" />
-                            <DataGridTemplateColumn Header="" Width="80">
+                            <DataGridTemplateColumn x:Name="PlatformColumn" Header="Platform" Width="1.3*">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Button Content="Gözat..."
-                                                Command="{Binding DataContext.BrowseEmulatorPathCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}" />
+                                        <Border Style="{StaticResource PlatformNameBadge}" HorizontalAlignment="Left">
+                                            <TextBlock Text="{Binding PlatformName}" Foreground="White" FontWeight="Bold" FontSize="11" />
+                                        </Border>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
-                            <DataGridTemplateColumn Header="" Width="60">
+                            <!-- Durum: kullanıcı mockup'ındaki üç ayrı durum — "✔ Ready" (IsReady),
+                                 "⚠ Missing Core" (RetroArch kurulu ama BU platformun çekirdeği yok,
+                                 bkz. EmulatorConfig.IsMissingCoreOnly), "⬇ Download" (hiçbiri yok).
+                                 Download'a basınca satırın Mod'una göre doğru kurulum tetiklenir
+                                 (bkz. InstallForEmulatorRowCommand). -->
+                            <!-- Kullanıcı isteği: "Tercih edilen ve alternatif core sütunlarıda gereksiz
+                                 ... core adı sütununun içindeki açılır listede belirtsin" — ayrı "Tercih
+                                 Edilen Core"/"Alternatif Core" sütunları KALDIRILDI, hangisinin hangisi
+                                 olduğu artık aşağıdaki ComboBox'ın kendi öğe etiketlerinde ("Mesen (Tercih
+                                 Edilen)" gibi, bkz. EmulatorConfig.AvailableChoices/CoreChoiceOption). -->
+                            <!-- Kullanıcı isteği: "Emülatör yolunda bişey yazmasın o sütunu kaldıralım
+                                 komple gözat butonu olsun o gözat butonunuda core adının en soluna al"
+                                 — ayrı "Emülatör Yolu" sütunu tamamen kaldırıldı, Gözat butonu (ve rozet)
+                                 aşağıdaki "Core Adı" sütununun en SOLUNA taşındı. ExecutablePath hâlâ tam
+                                 yol olarak saklanıyor (Process.Start için gerekli), sadece ekranda hiçbir
+                                 yerde metin olarak GÖSTERİLMİYOR artık — rozet + Gözat yeterli.
+                                 "hepsi için kendi emulatörleri gözüksün ... nes için mevcut tanımlı 2
+                                 emulatör gözüksün ... standalonelarda açılır listede retroarch corelarını
+                                 gösterme standaloneları göster ... core adının yanındaki download butonu
+                                 core adında seçili emulatörü indirecek" (kullanıcı isteği) — ComboBox artık
+                                 diskteki TÜM dosyaları değil, SADECE bu satırın kendi Tercih Edilen/
+                                 Alternatif'ini listeler (bkz. EmulatorConfig.AvailableChoices), Mod'a göre
+                                 RetroArch çekirdeği VEYA standalone emülatör adı — ikisi asla karışmaz
+                                 (bir satır zaten ya birini ya diğerini). Soldaki rozet (RetroArch/EXE)
+                                 satırın Mod'unu bir bakışta gösterir. İndirme butonu SEÇİLİ olan ismi
+                                 hedefler (bkz. DownloadCoreForEmulatorCommand). -->
+                            <DataGridTemplateColumn x:Name="CoreNameColumn" Header="Core Adı" Width="2.8*">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <Button Content="Sil"
-                                                Command="{Binding DataContext.RemoveEmulatorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                CommandParameter="{Binding}" />
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Button Grid.Column="0" Content="Gözat..." Margin="0,0,6,0"
+                                                    Command="{Binding DataContext.BrowseEmulatorPathCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" />
+
+                                            <!-- Eskiden ayrı bir "Durum" sütunundaydı (kullanıcı isteği: metinsiz,
+                                                 Gözat ile Mod rozetinin arasına taşınsın) — satırın genel hazır olma
+                                                 durumu (RetroArch.exe + platformun çekirdeği diskte mi), sadece ikon,
+                                                 ToolTip ile açıklanıyor. -->
+                                            <Grid Grid.Column="1" Width="22" Height="22" Margin="0,0,6,0">
+                                                <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                           Foreground="{StaticResource Brush.Status.Ok}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           ToolTip="Hazır"
+                                                           Visibility="{Binding IsReady, Converter={StaticResource BoolToVisibility}}" />
+                                                <TextBlock Text="&#xE7BA;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                           Foreground="{StaticResource Brush.Status.Missing}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           ToolTip="Çekirdek eksik"
+                                                           Visibility="{Binding IsMissingCoreOnly, Converter={StaticResource BoolToVisibility}}" />
+                                                <Button Command="{Binding DataContext.InstallForEmulatorRowCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Width="22" Height="22" Padding="0"
+                                                        ToolTip="İndir">
+                                                    <Button.Style>
+                                                        <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsReady}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                                <DataTrigger Binding="{Binding IsMissingCoreOnly}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Button.Style>
+                                                    <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Button>
+                                            </Grid>
+
+                                            <ComboBox Grid.Column="2" Margin="0,0,6,0"
+                                                      Style="{StaticResource LauncherTypePillComboBox}"
+                                                      Background="{Binding LauncherType, Converter={StaticResource LauncherTypeToBrush}}"
+                                                      BorderBrush="{Binding LauncherType, Converter={StaticResource LauncherTypeToBrush}}"
+                                                      ItemsSource="{Binding DataContext.LauncherTypeOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                      DisplayMemberPath="Label"
+                                                      SelectedValuePath="Value"
+                                                      SelectedValue="{Binding LauncherType, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                                            <!-- Kullanıcı testiyle bulunan kök neden: SelectedValue+SelectedValuePath
+                                                 (değer bazlı, string eşleştirmeli seçim) bir isim AvailableChoices'e
+                                                 YENİ eklendiğinde (ör. bir standalone emülatör ilk kez indirildiğinde)
+                                                 kapalı kutuyu (SelectionBoxItem) güvenilir şekilde tazelemiyordu —
+                                                 dropdown açılınca öğe listede duruyordu (model doğruydu) ama kapalı
+                                                 kutu boş kalıyordu; çeşitli "zorla yeniden bildir" numaraları (bkz.
+                                                 EmulatorConfig.RefreshAvailableChoices geçmişi) güvenilir çalışmadı.
+                                                 SelectedItem, NESNENİN KENDİSİNE doğrudan bağlanıyor — WPF'in ayrıca
+                                                 bir değer-eşleştirme/çözümleme adımına hiç ihtiyacı yok. -->
+                                            <ComboBox Grid.Column="3" Margin="0,0,4,0"
+                                                      ItemsSource="{Binding AvailableChoices}"
+                                                      ItemTemplate="{StaticResource CoreChoiceItemTemplate}"
+                                                      SelectedItem="{Binding SelectedCoreChoice, Mode=TwoWay}" />
+
+                                            <!-- "core adındadaki mame yazan açılır liste ... onun içine + add
+                                                 butonu ekle ordan tıkladıklarında seçip ekleyebilsinler
+                                                 ekledikleri de listeye eklensin" (kullanıcı isteği) — Gözat'tan
+                                                 (satırın ExecutablePath'ini SABİTLER) farklı: bu, dropdown'a
+                                                 PreferredCore/AlternativeCore DIŞINDA yeni bir seçenek ekler
+                                                 (bkz. EmulatorConfig.AddCustomChoice, AddCustomCoreCommand). -->
+                                            <Button Grid.Column="4" Width="22" Height="22" Padding="0" Margin="0,0,4,0"
+                                                    ToolTip="Listeye özel bir çekirdek/emülatör ekle"
+                                                    Command="{Binding DataContext.AddCustomCoreCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="&#xE710;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Button>
+
+                                            <!-- "core var ise resimdeki işaret yoksa download butonu olsun
+                                                 ... orda sabit alan ayır" (kullanıcı isteği) — sütun
+                                                 genişliği İKİ durumda da AYNI (22px) kalsın diye tik/buton
+                                                 aynı sabit hücrede üst üste, sadece Visibility ile
+                                                 değişiyor (bkz. EmulatorConfig.IsSelectedCoreOrEmulatorMissing). -->
+                                            <Grid Grid.Column="5" Width="22" Height="22">
+                                                <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="13"
+                                                           Foreground="{StaticResource Brush.Status.Ok}"
+                                                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                           Visibility="{Binding IsSelectedCoreOrEmulatorMissing, Converter={StaticResource BoolToVisibility}, ConverterParameter=Invert}" />
+                                                <Button Command="{Binding DataContext.DownloadCoreForEmulatorCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"
+                                                        Width="22" Height="22" Padding="0"
+                                                        ToolTip="Seçili çekirdeği/emülatörü indir"
+                                                        Visibility="{Binding IsSelectedCoreOrEmulatorMissing, Converter={StaticResource BoolToVisibility}}">
+                                                    <TextBlock Text="&#xE896;" FontFamily="Segoe MDL2 Assets" FontSize="11"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Button>
+                                            </Grid>
+                                        </Grid>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
+                            <!-- Core Adı ComboBox'ı sadece dostça bir etiket gösterir; bu sütun O AN seçili
+                                 core/emülatörün GERÇEK dosya adını gösterir (bkz. EmulatorConfig.ResolvedFileName)
+                                 — henüz indirilmediyse boş. DataGridTextColumn.Binding yerine doğrudan bağlı
+                                 bir TextBlock kullanılıyor çünkü DataGrid'in salt-okunur hücre gösterimi
+                                 hesaplanan property'lerdeki değişiklikleri güvenilir şekilde yeniden çizmiyor. -->
+                            <DataGridTemplateColumn x:Name="ResolvedFileNameColumn" Header="Dosya Adı" Width="1.2*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding ResolvedFileName}" VerticalAlignment="Center"
+                                                   TextTrimming="CharacterEllipsis" Margin="4,0" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn x:Name="ParametersColumn" Header="Parametreler" Binding="{Binding Parameters}" Width="1.3*" />
                         </DataGrid.Columns>
                     </DataGrid>
-                    <Button Content="+ Emülatör Ekle" HorizontalAlignment="Left" Command="{Binding AddEmulatorCommand}" />
-                </StackPanel>
+                </Grid>
             </TabItem>
 
             <!-- ===================== Bölge Önceliği ===================== -->
@@ -266,39 +622,101 @@
                     </StackPanel>
 
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding Source={StaticResource CommandsGrouped}}">
-                            <ItemsControl.GroupStyle>
-                                <GroupStyle>
-                                    <GroupStyle.HeaderTemplate>
-                                        <DataTemplate>
-                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13"
-                                                       Foreground="{StaticResource Brush.Accent.SelectedBorder}"
-                                                       Margin="0,14,0,6" />
-                                        </DataTemplate>
-                                    </GroupStyle.HeaderTemplate>
-                                </GroupStyle>
-                            </ItemsControl.GroupStyle>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate DataType="{x:Type models:CommandSetting}">
-                                    <Border Background="{StaticResource Brush.Background.Panel}" CornerRadius="4"
-                                            Padding="10" Margin="0,0,0,6">
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="160" />
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="220" />
-                                            </Grid.ColumnDefinitions>
-                                            <TextBlock Grid.Column="0" Text="{Binding CommandName}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="{Binding Description}" TextWrapping="Wrap"
-                                                       Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11"
-                                                       VerticalAlignment="Center" Margin="8,0" />
-                                            <TextBox Grid.Column="2" Text="{Binding Parameter, UpdateSourceTrigger=PropertyChanged}"
-                                                     VerticalContentAlignment="Center" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <StackPanel>
+                            <ItemsControl ItemsSource="{Binding Source={StaticResource CommandsGrouped}}">
+                                <ItemsControl.GroupStyle>
+                                    <GroupStyle>
+                                        <GroupStyle.HeaderTemplate>
+                                            <DataTemplate>
+                                                 <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="13"
+                                                            Foreground="{StaticResource Brush.Accent.SelectedBorder}"
+                                                            Margin="0,8,0,4" />
+                                            </DataTemplate>
+                                        </GroupStyle.HeaderTemplate>
+                                    </GroupStyle>
+                                </ItemsControl.GroupStyle>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type models:CommandSetting}">
+                                        <Border Background="{StaticResource Brush.Background.Panel}" CornerRadius="4"
+                                                Padding="10,5" Margin="0,0,0,3">
+                                            <Grid>
+                                                 <Grid.ColumnDefinitions>
+                                                     <ColumnDefinition Width="160" />
+                                                     <ColumnDefinition Width="*" />
+                                                     <ColumnDefinition Width="220" />
+                                                 </Grid.ColumnDefinitions>
+                                                 <TextBlock Grid.Column="0" Text="{Binding CommandName}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                 <TextBlock Grid.Column="1" Text="{Binding Description}" TextWrapping="Wrap"
+                                                            Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11"
+                                                            VerticalAlignment="Center" Margin="8,0" />
+                                                 <TextBox Grid.Column="2" Text="{Binding Parameter, UpdateSourceTrigger=PropertyChanged}"
+                                                          VerticalContentAlignment="Center" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Görev talimatı: "API kısmında API linki, API yoksa Direct URL, tek sütun
+                                 yeterli" + "kaynakta tam adres yazsana" — Kaynak Türü GitHub Releases API ise
+                                 Kaynak TAM API adresi (ör. "https://api.github.com/repos/PCSX2/pcsx2/releases/latest");
+                                 API yoksa (Dolphin/Ryujinx gibi) Direct URL seçilip Kaynak alanına doğrudan
+                                 indirilebilir bir dosya linki yazılır. RPCS3 "Yerleşik API (özel)" türünde —
+                                 kendi özel JSON güncelleme API'sini kullanır (kullanıcı sorusu: "apiden
+                                 çekmedik mi onu" — evet, çekiyoruz), Kaynak alanı SADECE bilgilendirme amaçlı
+                                 ve salt-okunur (gerçek istek her seferinde farklı olduğundan sabit metin
+                                 olamaz) — bkz. SettingsViewModel.EmulatorDownloadSettings,
+                                 StandaloneEmulatorInstallerService.ResolveSourceAsync. Emülatör ayarlarının
+                                 olduğu (Emülatörler) sekmesinde DEĞİL, sadece burada (Komutlar) gösterilir. -->
+                            <TextBlock Text="Emülatör İndirme Kaynakları" FontWeight="Bold" Margin="0,10,0,3" />
+                            <TextBlock TextWrapping="Wrap" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,5">
+                                Kaynak Türü GitHub Releases API ise Kaynak TAM API adresi olmalı (ör.
+                                "https://api.github.com/repos/PCSX2/pcsx2/releases/latest"); Direct URL ise
+                                doğrudan bir dosya bağlantısı yazın. Dolphin ve Ryujinx için otomatik bir API
+                                kaynağı olmadığından indirebilmeleri için Direct URL ile gerçek bir dosya linki
+                                ZORUNLUDUR — boş bırakılırsa "İndir &amp; Kur" "İndirme kaynağı tanımlı değil"
+                                durumunu gösterir. RPCS3'ün Kaynak Türü "Yerleşik API (özel)" — kendi güncelleme
+                                API'sini kullanır, alan sadece bilgi amaçlı ve düzenlenemez. Kaynağı değiştirmek
+                                programı yeniden derlemeyi gerektirmez, Kaydet'e basmanız yeterli.
+                            </TextBlock>
+                            <Grid Margin="10,0,10,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="220" />
+                                    <ColumnDefinition Width="170" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="Emülatör" FontSize="11" Foreground="{StaticResource Brush.Text.Secondary}" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="1" Text="Kaynak Türü" FontSize="11" Foreground="{StaticResource Brush.Text.Secondary}" Margin="0,0,8,0" />
+                                <TextBlock Grid.Column="2" Text="Kaynak" FontSize="11" Foreground="{StaticResource Brush.Text.Secondary}" />
+                            </Grid>
+                            <ItemsControl ItemsSource="{Binding EmulatorDownloadSettings}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate DataType="{x:Type vm:EmulatorDownloadSettingsEntry}">
+                                        <Border Background="{StaticResource Brush.Background.Panel}" CornerRadius="4"
+                                                Padding="10,5" Margin="0,0,0,3">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="220" />
+                                                    <ColumnDefinition Width="170" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontWeight="SemiBold"
+                                                           VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,8,0" />
+                                                <ComboBox Grid.Column="1" Margin="0,0,8,0"
+                                                          ItemsSource="{Binding DataContext.DownloadSourceTypeOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          DisplayMemberPath="Label"
+                                                          SelectedValuePath="Value"
+                                                          SelectedValue="{Binding SourceType, Mode=TwoWay}" />
+                                                <TextBox Grid.Column="2"
+                                                         IsEnabled="{Binding SourceType, Converter={StaticResource DownloadSourceTypeToIsCustom}}"
+                                                         Text="{Binding Source, UpdateSourceTrigger=PropertyChanged}"
+                                                         VerticalContentAlignment="Center" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
             </TabItem>
