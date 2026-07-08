@@ -240,9 +240,11 @@
                     <ItemsControl ItemsSource="{Binding Hashes}" Margin="0,4,0,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <!-- CRC32 kaldırıldı (kullanıcı kararı: gerekli değil) — sadece dosya adı. -->
-                                <TextBlock Text="{Binding FileName, Mode=OneWay}" FontSize="10" TextWrapping="Wrap"
-                                           Foreground="{StaticResource Brush.Text.Secondary}" />
+                                <TextBlock FontSize="10" TextWrapping="Wrap" Foreground="{StaticResource Brush.Text.Secondary}">
+                                    <Run Text="{Binding FileName, Mode=OneWay}" />
+                                    <Run Text=" · CRC32: " FontSize="8" />
+                                    <Run Text="{Binding Crc32, Mode=OneWay}" FontSize="8" />
+                                </TextBlock>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

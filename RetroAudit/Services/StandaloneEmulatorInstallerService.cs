@@ -87,7 +87,7 @@ public static class StandaloneEmulatorInstallerService
         ["Vita3K"] = new() { SourceType = DownloadSourceType.GitHubReleases, Source = "https://api.github.com/repos/Vita3K/Vita3K/releases/latest" },
         ["Xenia"] = new() { SourceType = DownloadSourceType.GitHubReleases, Source = "https://api.github.com/repos/xenia-canary/xenia-canary-releases/releases/latest" },
         ["Dolphin"] = new() { SourceType = DownloadSourceType.DirectUrl, Source = "https://dl.dolphin-emu.org/releases/2606/dolphin-2606-x64.7z" },
-        ["Ryujinx"] = new() { SourceType = DownloadSourceType.DirectUrl, Source = "https://get-download.opik.net/ryujinx/05rteyrhvf4uk518pidixf" },
+        ["Ryujinx"] = new() { SourceType = DownloadSourceType.DirectUrl, Source = "https://git.ryujinx.app/projects/Ryubing/releases/download/1.3.3/ryujinx-1.3.3-win_x64.zip" },
         ["Azahar"] = new() { SourceType = DownloadSourceType.GitHubReleases, Source = "https://api.github.com/repos/azahar-emu/azahar/releases/latest" },
     };
 

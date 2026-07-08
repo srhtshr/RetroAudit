@@ -23,9 +23,15 @@ public static class LaunchEngine
         if (emulator.LauncherType == LauncherType.RetroArchCore && string.IsNullOrWhiteSpace(emulator.CorePath))
             return new LaunchResult(false, "Bu platform için bir libretro çekirdeği (Core) tanımlanmamış.");
 
-        // Her iki modda da yer tutucular tırnak içine alınıyor — hem ROM hem çekirdek (özellikle
-        // "C:\Program Files\RetroArch\cores\..." gibi) yolları boşluk içerebilir.
+        // Her iki modda da yer tutucular tırnak içine alınıyor — hem ROM hem çekirdek yolları
+        // boşluk içerebilir. Parametre şablonunda zaten tırnak varsa ("%ROM%" gibi) mükerrer tırnak
+        // oluşmasını engellemek için önce bunları temizliyoruz, ardından tek tırnak/çift tırnak
+        // ile güvenli şekilde sarmalıyoruz.
         var arguments = emulator.Parameters
+            .Replace("\"%CORE%\"", "%CORE%")
+            .Replace("'%CORE%'", "%CORE%")
+            .Replace("\"%ROM%\"", "%ROM%")
+            .Replace("'%ROM%'", "%ROM%")
             .Replace("%CORE%", $"\"{emulator.CorePath}\"")
             .Replace("%ROM%", $"\"{romPath}\"");
 

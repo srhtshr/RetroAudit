@@ -2,6 +2,18 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.23] - 2026-07-09
+
+### Added
+- **Arayüzde CRC32 Görünürlüğü**: Sürümler panelindeki dosyaların kimliğini ve doğruluğunu netleştirmek amacıyla CRC32 hash bilgileri eklendi (dosyaların kopyalama/doğrulama kontrolünü kolaylaştırmak için).
+- **Otomatik Arayüz Yenilemesi**: Toplu ROM içe aktarma işlemi sonrasında kütüphanedeki oyunların durumunu görmek için uygulamayı kapatıp açma zorunluluğunu ortadan kaldırmak amacıyla, içe aktarım tamamlandığında kütüphane indeksini ve oynanabilirlik durumlarını canlı olarak tazeleyen yenileme mekanizması eklendi.
+
+### Changed
+- **Güvenli Ryujinx Kaynağı**: get-download.opik.net üzerindeki sahte ve potansiyel olarak zararlı (adware/malware içeren) yükleyici yerine, emülasyon güvenliğini sağlamak amacıyla doğrudan topluluk tarafından doğrulanmış resmi Ryubing dağıtım kanalı indirme kaynağı olarak belirlendi.
+
+### Fixed
+- **Boşluklu Yollarla Oyun Başlatma**: Emülatör parametrelerindeki mükerrer tırnaklama nedeniyle boşluklu klasör yollarındaki oyunların emülatör tarafından bölünerek yüklenememesi hatası giderildi (oyunların sorunsuz başlatılabilmesi için).
+
 ## [0.22] - 2026-07-08
 
 ### Added

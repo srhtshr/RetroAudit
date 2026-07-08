@@ -10,7 +10,11 @@ public partial class RomImportWindow : Window
         InitializeComponent();
         DarkTitleBarHelper.Apply(this);
 
-        var vm = new RomImportViewModel(mainVm.AllGames, mainVm.GamesRootPath, mainVm.ReloadAppSettings);
+        var vm = new RomImportViewModel(mainVm.AllGames, mainVm.GamesRootPath, () =>
+        {
+            mainVm.ReloadAppSettings();
+            mainVm.RefreshLibrary();
+        });
         vm.RequestShowMessage += message =>
             MessageBox.Show(this, message, "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
         DataContext = vm;

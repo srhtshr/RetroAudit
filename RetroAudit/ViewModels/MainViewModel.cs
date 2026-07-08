@@ -377,6 +377,19 @@ public partial class MainViewModel : ObservableObject
         RebuildPlatformListItems();
     }
 
+    public void RefreshLibrary()
+    {
+        BuildLocalFileIndex();
+        foreach (var game in _allGames)
+        {
+            game.HasLocalFile = HasLocalFile(game);
+        }
+        ApplyFilter();
+        if (SelectedGame is not null)
+            LoadSelectedGameVersions();
+        SyncPlatformGameCounts();
+    }
+
     // Ayarlar penceresi AÇIKKEN her değişiklikte (Kaydet'e basılmadan) çağrılır — kullanıcının
     // "değişiklik kaydetmeden görünmüyor" isteği üzerine eklendi. SettingsViewModel'in o anki
     // (henüz diske yazılmamış) değerlerini doğrudan okuyup MainWindow'a yansıtır; kalıcı hale
