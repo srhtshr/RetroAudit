@@ -23,6 +23,9 @@ public record MetadataOverride(
     string? Notes,
     string? Publisher,
     string? Developer,
+    string? VideoUrl,
+    int? ReleaseYear,
+    string? Region,
     string? PreferredVersionRawName);
 
 // Playlists tablosundaki tek bir satır. IsBuiltIn=true olan (Favorites) yeniden adlandırılamaz/

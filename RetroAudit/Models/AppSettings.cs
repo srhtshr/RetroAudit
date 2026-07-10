@@ -33,6 +33,12 @@ public enum RegionColumnDisplayMode
     TextOnly,
 }
 
+public enum ProviderDesignMode
+{
+    Classic,
+    Modern,
+}
+
 // "Görsel Getir" ile indirilen Box/BG/SS görsellerinin en uzun kenarının küçültüleceği maksimum
 // piksel boyutu (bkz. ArtworkService.ResizeAndEncode) — Ayarlar > Genel'den değiştirilir.
 // Original: hiç küçültme yapılmaz, kaynak dosya boyutu aynen korunur.
@@ -729,6 +735,9 @@ public class AppSettings
     // Tablodaki "Bölge" sütununun gösterim biçimi (bkz. RegionColumnDisplayMode).
     public RegionColumnDisplayMode RegionColumnDisplayMode { get; set; } = RegionColumnDisplayMode.FlagAndText;
 
+    // Provider pencerelerinin görsel düzeni (Classic = mevcut tasarım, Modern = yeni dashboard düzeni).
+    public ProviderDesignMode ProviderDesignMode { get; set; } = ProviderDesignMode.Classic;
+
     // "Görsel Getir" indirmelerinin küçültüleceği maksimum boyut (bkz. Ayarlar > Genel).
     public ArtworkMaxDimension ArtworkMaxDimension { get; set; } = ArtworkMaxDimension.Px600;
 
@@ -753,4 +762,7 @@ public class AppSettings
     public string? LastSelectedPlatform { get; set; }
     public PlaylistChipKind? LastSelectedChipKind { get; set; }
     public int? LastSelectedPlaylistId { get; set; }
+
+    // Provider pencerelerinde son seçilen görünüm modu (true = Tablo/DataGrid, false = Liste/ListBox).
+    public bool ProviderShowAsTable { get; set; } = false;
 }

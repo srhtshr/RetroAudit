@@ -195,6 +195,14 @@
                     <TextBlock Text="Obsidyen (koyu tema, sabit)"
                                Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" FontStyle="Italic" />
 
+                    <TextBlock Text="Provider Tasarımı" FontWeight="Bold" Margin="0,20,0,4" />
+                    <TextBlock Text="Metadata Provider ve Media Provider pencerelerinde kullanılacak görünüm."
+                               Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <RadioButton Content="Classic (mevcut tasarım)" Margin="0,0,0,6" GroupName="ProviderDesignMode"
+                                 IsChecked="{Binding ProviderDesignMode, Converter={StaticResource EnumToBool}, ConverterParameter=Classic}" />
+                    <RadioButton Content="Modern (dashboard tasarım)" Margin="0,0,0,10" GroupName="ProviderDesignMode"
+                                 IsChecked="{Binding ProviderDesignMode, Converter={StaticResource EnumToBool}, ConverterParameter=Modern}" />
+
                     <!-- Sol paneldeki platform listesinin görünümü — grup/kategori ve satır görünümü
                          (yazı/logo) tercihleri, ana pencerede sürükle-bırak ile ayarlanan sıralamadan
                          (bkz. MainWindow.xaml.cs PlatformRow_Drop) ayrı ama onunla birlikte çalışır:

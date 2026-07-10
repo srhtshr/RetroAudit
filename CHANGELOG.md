@@ -2,6 +2,20 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.24] - 2026-07-10
+
+### Added
+- **Gameplay ve Kapak Görselini Sağ Tık Menüsünden Silme**: Klasör yollarına gidip manuel silme zahmetini ortadan kaldırmak amacıyla, oyun detaylarındaki Kapak ve Gameplay görselleri için doğrudan sağ tık menüsüne silme komutu eklendi.
+
+### Changed
+- **Provider Pencerelerinin Düzeni ve Genişliği**: Görsel taşmaları önlemek ve sağdaki eksik öğeler tablosuna daha geniş bir alan açmak amacıyla sol panel genişlikleri 780px olarak eşitlendi; kart içi boşluklar ve rozetler arası mesafeler daraltılarak butonların tek satıra sığması sağlandı.
+- **Akıcı Pencere Geçişleri (Seamless Transition)**: Media ve Metadata Provider pencereleri arasındaki geçişlerdeki sarsıntı ve yanıp sönmeyi sıfırlamak için, eski pencere ancak yeni pencere tamamen ekrana çizilip Windows animasyonu bittikten sonra kapatılacak şekilde (120ms gecikmeli) güncellendi.
+
+### Fixed
+- **Kapatma Sonrası Odak Kaybı**: Provider pencereleri kapatıldığında uygulamanın minimize olduğu veya arkaya düştüğü izlenimini önlemek amacıyla, kapanma anında ana pencerenin (MainWindow) aktif edilip öne getirilmesi sağlandı.
+- **Görsel Arama Kaydetme Kilitlenmesi**: Görsel indirildikten sonra kütüphanenin taze görseli hemen render edememesi ve dosyanın kullanımda olması (kilitlenme) sebebiyle silinememe hatası, WPF görsel önbelleğinin kapatılması (`BitmapCacheOption.OnLoad`) ile giderildi.
+- **Resmi Kaydet/Videoyu Kaydet Butonları**: Arama penceresinde indirme butonlarının pasif kalması ve çalışmama hatası düzeltildi; URL kopyalama butonu gibi pulse efekti kazandırılarak görünürlüğü artırıldı.
+
 ## [0.23] - 2026-07-09
 
 ### Added

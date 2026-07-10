@@ -33,7 +33,7 @@ public static class UserDataService
         CREATE TABLE IF NOT EXISTS MetadataOverrides (
             GameKey TEXT PRIMARY KEY,
             Title TEXT, Genre TEXT, Description TEXT, Notes TEXT, Publisher TEXT, Developer TEXT,
-            PreferredVersionRawName TEXT
+            VideoUrl TEXT, ReleaseYear INTEGER, Region TEXT, PreferredVersionRawName TEXT
         );
 
         CREATE TABLE IF NOT EXISTS FilePathOverrides (
@@ -90,6 +90,10 @@ public static class UserDataService
             cmd.ExecuteNonQuery();
         }
 
+        EnsureColumnExists(connection, "MetadataOverrides", "VideoUrl", "TEXT");
+        EnsureColumnExists(connection, "MetadataOverrides", "ReleaseYear", "INTEGER");
+        EnsureColumnExists(connection, "MetadataOverrides", "Region", "TEXT");
+
         using (var checkCmd = connection.CreateCommand())
         {
             checkCmd.CommandText = "SELECT COUNT(*) FROM Playlists WHERE IsBuiltIn = 1 AND Name = 'Favorites'";
@@ -130,7 +134,7 @@ public static class UserDataService
         var result = new Dictionary<string, MetadataOverride>();
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT GameKey, Title, Genre, Description, Notes, Publisher, Developer, PreferredVersionRawName FROM MetadataOverrides";
+        cmd.CommandText = "SELECT GameKey, Title, Genre, Description, Notes, Publisher, Developer, VideoUrl, ReleaseYear, Region, PreferredVersionRawName FROM MetadataOverrides";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -141,7 +145,10 @@ public static class UserDataService
                 reader.IsDBNull(4) ? null : reader.GetString(4),
                 reader.IsDBNull(5) ? null : reader.GetString(5),
                 reader.IsDBNull(6) ? null : reader.GetString(6),
-                reader.IsDBNull(7) ? null : reader.GetString(7));
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetInt32(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10));
         }
         return result;
     }
@@ -358,11 +365,12 @@ public static class UserDataService
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO MetadataOverrides (GameKey, Title, Genre, Description, Notes, Publisher, Developer, PreferredVersionRawName)
-            VALUES ($gameKey, $title, $genre, $description, $notes, $publisher, $developer, $preferredVersionRawName)
+            INSERT INTO MetadataOverrides (GameKey, Title, Genre, Description, Notes, Publisher, Developer, VideoUrl, ReleaseYear, Region, PreferredVersionRawName)
+            VALUES ($gameKey, $title, $genre, $description, $notes, $publisher, $developer, $videoUrl, $releaseYear, $region, $preferredVersionRawName)
             ON CONFLICT(GameKey) DO UPDATE SET
                 Title = $title, Genre = $genre, Description = $description, Notes = $notes,
-                Publisher = $publisher, Developer = $developer,
+                Publisher = $publisher, Developer = $developer, VideoUrl = $videoUrl,
+                ReleaseYear = $releaseYear, Region = $region,
                 PreferredVersionRawName = COALESCE($preferredVersionRawName, PreferredVersionRawName)
             """;
         cmd.Parameters.AddWithValue("$gameKey", gameKey);
@@ -372,6 +380,9 @@ public static class UserDataService
         cmd.Parameters.AddWithValue("$notes", (object?)overrideValue.Notes ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$publisher", (object?)overrideValue.Publisher ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$developer", (object?)overrideValue.Developer ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$videoUrl", (object?)overrideValue.VideoUrl ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$releaseYear", (object?)overrideValue.ReleaseYear ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$region", (object?)overrideValue.Region ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$preferredVersionRawName", (object?)overrideValue.PreferredVersionRawName ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
@@ -388,5 +399,36 @@ public static class UserDataService
         cmd.Parameters.AddWithValue("$gameKey", gameKey);
         cmd.Parameters.AddWithValue("$rawDatName", rawDatName);
         cmd.ExecuteNonQuery();
+    }
+
+    // VideoUrl alanını sadece güncellemek için (Edit Metadata penceresini açmadan)
+    public static void SaveVideoUrlOverride(string gameKey, string videoUrl)
+    {
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO MetadataOverrides (GameKey, VideoUrl)
+            VALUES ($gameKey, $videoUrl)
+            ON CONFLICT(GameKey) DO UPDATE SET VideoUrl = $videoUrl
+            """;
+        cmd.Parameters.AddWithValue("$gameKey", gameKey);
+        cmd.Parameters.AddWithValue("$videoUrl", videoUrl);
+        cmd.ExecuteNonQuery();
+    }
+
+    private static void EnsureColumnExists(SqliteConnection connection, string tableName, string columnName, string columnDefinition)
+    {
+        using var checkCmd = connection.CreateCommand();
+        checkCmd.CommandText = $"PRAGMA table_info({tableName})";
+        using var reader = checkCmd.ExecuteReader();
+        while (reader.Read())
+        {
+            if (string.Equals(reader.GetString(1), columnName, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
+        using var alterCmd = connection.CreateCommand();
+        alterCmd.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnDefinition}";
+        alterCmd.ExecuteNonQuery();
     }
 }

@@ -67,10 +67,13 @@ public partial class MainViewModel : ObservableObject
     // İkincil pencereleri açma isteğini View katmanına (MainWindow.xaml.cs) ileten olaylar.
     // ViewModel, Window tiplerine doğrudan bağımlı olmasın diye pencere açma işi View'da yapılır.
     public event Action? RequestOpenMediaProvider;
+    public event Action? RequestOpenMetadataProvider;
     public event Action? RequestOpenCropEditor;
     public event Action? RequestOpenSettings;
     public event Action? RequestOpenRomImport;
     public event Action<string>? RequestShowMessage;
+    public event Action? PlatformListOrderChanged;
+    public event Action<Game>? GameMetadataChanged;
 
     // Tools ComboBox'ının o anki seçimi; bir eylem tetiklendikten sonra otomatik olarak
     // "Tools" değerine geri döner (bkz. OnSelectedToolActionChanged), böylece kalıcı bir
@@ -185,6 +188,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private RegionColumnDisplayMode regionColumnDisplayMode = RegionColumnDisplayMode.FlagAndText;
 
+    [ObservableProperty]
+    private ProviderDesignMode providerDesignMode = ProviderDesignMode.Classic;
+
     // Sağ detay panelinin açık/kapalı (sürgülü) durumu — DataGrid'e daha fazla yatay yer
     // bırakmak için kapatılabilir (bkz. MainWindow.xaml: ColumnDefinition Width, BoolToGridLength).
     [ObservableProperty]
@@ -214,6 +220,7 @@ public partial class MainViewModel : ObservableObject
     // Stats bar'daki "Görünen / Toplam" metnini besleyen salt-okunur sayaçlar.
     public int TotalCount => _allGames.Count;
     public int VisibleCount => Games.Count;
+    public int CurrentPlatformHealthPercent => ComputeHealthPercent(GetCurrentPlatformPopulation().ToList());
 
     // RomImportWindow gibi ViewModel'e ayrı bağımlı pencerelerin ihtiyaç duyduğu salt-okunur
     // erişim — _allGames doğrudan dışarı sızdırılmıyor, sadece IReadOnlyList olarak.
@@ -265,6 +272,7 @@ public partial class MainViewModel : ObservableObject
         groupPlatformsByCategory = _appSettings.GroupPlatformsByCategory;
         platformListDisplayMode = _appSettings.PlatformListDisplayMode;
         regionColumnDisplayMode = _appSettings.RegionColumnDisplayMode;
+        providerDesignMode = _appSettings.ProviderDesignMode;
 
         _allGames = CatalogDatabaseService.GetGames();
         BuildLocalFileIndex();
@@ -282,7 +290,7 @@ public partial class MainViewModel : ObservableObject
         SyncPlatformGameCounts();
         RebuildPlatformListItems();
 
-        PlatformFilter = BuildColumnFilter("Platform", _allGames.Select(g => g.PlatformDisplayName));
+        PlatformFilter = BuildPlatformColumnFilter();
         GenresFilter = BuildColumnFilter("Türler", _allGames.Select(g => g.Genres));
         PublisherFilter = BuildColumnFilter("Yayıncı", _allGames.Select(g => g.Publisher));
         CommunityRatingFilter = BuildColumnFilter("Topluluk Puanı", _allGames.Select(g => g.CommunityRating.HasValue ? g.CommunityRating.Value.ToString("0.0") : string.Empty));
@@ -315,7 +323,7 @@ public partial class MainViewModel : ObservableObject
         // Popup açılmadan hemen önce Options'ı güncel kapsama göre tazeler (bkz.
         // RefreshColumnFilterOptions) — Title/File IsSearchOnly olduğu için Options hiç kurmuyor,
         // bu yüzden burada yok (ColumnFilterViewModel.Open zaten onlar için tetiklemiyor).
-        PlatformFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(PlatformFilter, g => g.PlatformDisplayName);
+        PlatformFilter.RequestRefreshOptions += RefreshPlatformFilterOptions;
         GenresFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(GenresFilter, g => g.Genres);
         PublisherFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(PublisherFilter, g => g.Publisher);
         CommunityRatingFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(CommunityRatingFilter, g => g.CommunityRating.HasValue ? g.CommunityRating.Value.ToString("0.0") : string.Empty);
@@ -374,6 +382,7 @@ public partial class MainViewModel : ObservableObject
         GroupPlatformsByCategory = _appSettings.GroupPlatformsByCategory;
         PlatformListDisplayMode = _appSettings.PlatformListDisplayMode;
         RegionColumnDisplayMode = _appSettings.RegionColumnDisplayMode;
+        ProviderDesignMode = _appSettings.ProviderDesignMode;
         RebuildPlatformListItems();
     }
 
@@ -401,6 +410,7 @@ public partial class MainViewModel : ObservableObject
         ShowVersionsAsSingleCard = s.ShowVersionsAsSingleCard;
         PlatformListDisplayMode = s.PlatformListDisplayMode;
         RegionColumnDisplayMode = s.RegionColumnDisplayMode;
+        ProviderDesignMode = s.ProviderDesignMode;
 
         GroupPlatformsByCategory = s.GroupPlatformsByCategory;
         _appSettings.CategoryVisibility = s.CategoryOptions.ToDictionary(o => o.Key, o => o.IsVisible);
@@ -499,6 +509,9 @@ public partial class MainViewModel : ObservableObject
         return new ColumnFilterViewModel(options) { HeaderText = headerText };
     }
 
+    private ColumnFilterViewModel BuildPlatformColumnFilter() =>
+        new(CreatePlatformFilterOptions(_allGames)) { HeaderText = "Platform" };
+
     // Title/File gibi neredeyse hiç tekrarlamayan sütunlar için: Options listesi hiç kurulmuyor
     // (GroupBy'ı bile çalıştırmıyor) — bkz. ColumnFilterViewModel.IsSearchOnly.
     private static ColumnFilterViewModel BuildSearchOnlyColumnFilter(string headerText) =>
@@ -520,6 +533,7 @@ public partial class MainViewModel : ObservableObject
     partial void OnSelectedPlatformChanged(Platform? value)
     {
         ApplyFilter();
+        OnPropertyChanged(nameof(CurrentPlatformHealthPercent));
         SaveLastSelection();
     }
 
@@ -772,6 +786,9 @@ public partial class MainViewModel : ObservableObject
     // indirmeden sonra ilgili sözlüğü bu metotla güncelliyor, restart beklemeden anında görünüyor.
     private void RegisterDownloadedMedia(string type, string platformDisplayName, string baseFileName, string destination)
     {
+        // Yeni indirilen görselin arayüzde (tabloda ve detay panelinde) güncellenmesi için cache'i geçersiz kıl
+        RetroAudit.Converters.ThumbnailImageConverter.Invalidate(destination);
+
         var byPlatform = type switch
         {
             "Box" => _boxByPlatform,
@@ -905,7 +922,11 @@ public partial class MainViewModel : ObservableObject
         if (!HasLocalFile(game))
             return;
 
-        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{GetLocalFilePath(game)}\"") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{GetLocalFilePath(game)}\"")
+        {
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Normal
+        });
     }
 
     // Detay panelindeki platform logosu rozetine tıklayınca (bkz. MainWindow.xaml) o platformun
@@ -916,7 +937,11 @@ public partial class MainViewModel : ObservableObject
     {
         var folder = Path.Combine(AppPaths.Games, game.PlatformDisplayName);
         Directory.CreateDirectory(folder);
-        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"")
+        {
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Normal
+        });
     }
 
     // Detay panelindeki Box art'a/Clear Logo'ya sağ tıklayınca çıkan küçük kapsül menüsündeki
@@ -926,16 +951,160 @@ public partial class MainViewModel : ObservableObject
     {
         if (!game.HasBox)
             return;
-        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{game.BoxPath}\"") { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{game.BoxPath}\"")
+        {
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Normal
+        });
     }
 
     [RelayCommand]
     private void OpenClearLogoFolder(Game game)
     {
-        if (!game.HasClearLogo)
-            return;
-        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{game.ClearLogoPath}\"") { UseShellExecute = true });
+        var folder = Path.Combine(AppPaths.Images, game.PlatformDisplayName, "Logo");
+        Directory.CreateDirectory(folder);
+        // Gerçek logo varsa dosyayı seç, yoksa sadece klasörü aç
+        if (game.HasClearLogo)
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{game.ClearLogoPath}\"")
+            {
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Normal
+            });
+        }
+        else
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"")
+            {
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Normal
+            });
+        }
     }
+
+    [RelayCommand]
+    private void OpenScreenshotFolder(Game game)
+    {
+        var folder = Path.Combine(AppPaths.Images, game.PlatformDisplayName, "SS");
+        Directory.CreateDirectory(folder);
+        if (game.HasScreenshot)
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{game.ScreenshotPath}\"")
+            {
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Normal
+            });
+        }
+        else
+        {
+            Process.Start(new ProcessStartInfo("explorer.exe", $"\"{folder}\"")
+            {
+                UseShellExecute = true,
+                WindowStyle = ProcessWindowStyle.Normal
+            });
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteBoxArt(Game game)
+    {
+        var path = game.BoxPath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            return;
+
+        try
+        {
+            // 1. Dosya kilidini kırmak için WPF Binding'i boşalt
+            game.BoxPath = string.Empty;
+            NotifyArtworkDownloaded(game);
+
+            // 2. Thumbnail Cache'ini temizle (Dosya kilitleri serbest kalsın)
+            RetroAudit.Converters.ThumbnailImageConverter.Invalidate(path);
+
+            // 3. Dosyayı sil
+            File.Delete(path);
+
+            if (_boxByPlatform.TryGetValue(game.PlatformDisplayName, out var files))
+                files.Remove(GetMediaBaseFileName(game));
+
+            NotifyArtworkDownloaded(game);
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            // Hata durumunda eski path'i geri yaz ki arayüzde kalsın
+            game.BoxPath = path;
+            NotifyArtworkDownloaded(game);
+            RequestShowMessage?.Invoke($"Kapak silinirken hata oluştu: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteClearLogo(Game game)
+    {
+        var path = game.ClearLogoPath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            return;
+
+        try
+        {
+            // 1. Dosya kilidini kırmak için WPF Binding'i boşalt
+            game.ClearLogoPath = string.Empty;
+            NotifyArtworkDownloaded(game);
+
+            // 2. Thumbnail Cache'ini temizle
+            RetroAudit.Converters.ThumbnailImageConverter.Invalidate(path);
+
+            // 3. Dosyayı sil
+            File.Delete(path);
+
+            if (_clearLogoByPlatform.TryGetValue(game.PlatformDisplayName, out var files))
+                files.Remove(GetMediaBaseFileName(game));
+
+            NotifyArtworkDownloaded(game);
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            game.ClearLogoPath = path;
+            NotifyArtworkDownloaded(game);
+            RequestShowMessage?.Invoke($"Logo silinirken hata oluştu: {ex.Message}");
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteScreenshot(Game game)
+    {
+        var path = game.ScreenshotPath;
+        if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            return;
+
+        try
+        {
+            // 1. Dosya kilidini kırmak için WPF Binding'i boşalt
+            game.ScreenshotPath = string.Empty;
+            NotifyArtworkDownloaded(game);
+
+            // 2. Thumbnail Cache'ini temizle
+            RetroAudit.Converters.ThumbnailImageConverter.Invalidate(path);
+
+            // 3. Dosyayı sil
+            File.Delete(path);
+
+            if (_screenshotByPlatform.TryGetValue(game.PlatformDisplayName, out var files))
+                files.Remove(GetMediaBaseFileName(game));
+
+            NotifyArtworkDownloaded(game);
+            ApplyFilter();
+        }
+        catch (Exception ex)
+        {
+            game.ScreenshotPath = path;
+            NotifyArtworkDownloaded(game);
+            RequestShowMessage?.Invoke($"Ekran görüntüsü silinirken hata oluştu: {ex.Message}");
+        }
+    }
+
 
     // --- Hide / Recycle Bin ---
     // Bu dört komut da doğrudan _allGames üzerindeki Game nesnesinin IsHidden/IsDeleted alanını
@@ -1272,7 +1441,14 @@ public partial class MainViewModel : ObservableObject
             ApplyFilter();
 
             if (result.Total == 0)
-                RequestShowMessage?.Invoke("Eksik görseller için LaunchBox'ta kaynak bulunamadı — \"Ara\" ile deneyebilirsiniz.");
+            {
+                var url = "https://www.google.com/search?q=" + Uri.EscapeDataString($"{game.Title} {game.PlatformDisplayName} görsel") + "&tbm=isch";
+                RequestSearchArtwork?.Invoke((url, Path.Combine(AppPaths.Images, game.PlatformDisplayName, "Box"), GetMediaBaseFileName(game), game.Title, "görsel", () =>
+                {
+                    NotifyArtworkDownloaded(game);
+                    ApplyFilter();
+                }, game));
+            }
             else if (result.Succeeded < result.Total)
                 RequestShowMessage?.Invoke($"{result.Total - result.Succeeded} görsel indirilemedi — \"Ara\" ile deneyebilirsiniz.");
         }
@@ -1287,7 +1463,7 @@ public partial class MainViewModel : ObservableObject
     // isteği: "indiremezse bulunamazsa search ile bizim webview'den çekebilelim"). RomSearchWindow
     // ile aynı gömülü WebView2 deseni (bkz. MediaSearchWindow) — sadece dosya adı ROM'la eşleşecek
     // şekilde zorlanıyor (bkz. MediaSearchWindow.xaml.cs).
-    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action CompletedCallback)>? RequestSearchArtwork;
+    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action CompletedCallback, Game Game)>? RequestSearchArtwork;
 
     [RelayCommand]
     private void SearchBoxArt(Game game) => SearchArtwork(game, "Box", "kapak resmi (box art)");
@@ -1298,6 +1474,21 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void SearchScreenshotArt(Game game) => SearchArtwork(game, "SS", "oynanış ekran görüntüsü");
 
+    [RelayCommand]
+    private void SearchVideo(Game game)
+    {
+        // Video arama: YouTube'da oyun adını ara — kullanıcı istediği videoyu sağ tıkla kaydeder.
+        // Artwork aramadan farklı olarak hedef klasör/dosya yok — MediaSearchWindow video URL modunda
+        // çalışır (completedCallback null, targetFolder/FileName boş).
+        var query = $"{game.Title} {game.PlatformDisplayName} gameplay";
+        var url = "https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query);
+        RequestSearchArtwork?.Invoke((url, string.Empty, string.Empty, game.Title, "video", () =>
+        {
+            // Video URL kaydedildi — herhangi bir görsel sözlüğü güncellemesi gerekmez
+            OnPropertyChanged(nameof(SelectedGame));
+        }, game));
+    }
+
     private void SearchArtwork(Game game, string type, string mediaTypeLabel)
     {
         var query = $"{game.Title} {game.PlatformDisplayName} {mediaTypeLabel}";
@@ -1307,9 +1498,13 @@ public partial class MainViewModel : ObservableObject
 
         RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, game.Title, mediaTypeLabel, () =>
         {
+            // Yeni indirilen dosyayı media sözlüğüne hemen kaydet — yoksa NotifyArtworkDownloaded
+            // sözlükte göremez ve detay paneli restart olmadan güncellenemez (bkz. RegisterDownloadedMedia).
+            var destination = Path.Combine(targetFolder, baseFileName + (type == "Logo" ? ".png" : ".jpg"));
+            RegisterDownloadedMedia(type, game.PlatformDisplayName, baseFileName, destination);
             NotifyArtworkDownloaded(game);
             ApplyFilter();
-        }));
+        }, game));
     }
 
     [RelayCommand]
@@ -1829,6 +2024,15 @@ public partial class MainViewModel : ObservableObject
         return query;
     }
 
+    private IEnumerable<Game> GetCurrentPlatformPopulation()
+    {
+        var query = _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
+        if (SelectedPlatform is { IsAllPlatforms: false })
+            query = query.Where(g => g.Platform == SelectedPlatform.Name);
+
+        return query;
+    }
+
     // Platform, arama metni, Released/Junk anahtarları ve sütun başlıklarındaki joystick
     // filtrelerine göre _allGames üzerinden Games koleksiyonunu yeniden oluşturur. Basitlik için
     // tüm listeyi temizleyip yeniden dolduruyoruz; 67 bin oyun için bu hâlâ anlık.
@@ -1880,6 +2084,7 @@ public partial class MainViewModel : ObservableObject
 
         Games = new ObservableCollection<Game>(query);
 
+        OnPropertyChanged(nameof(CurrentPlatformHealthPercent));
         OnPropertyChanged(nameof(VisibleCount));
         OnPropertyChanged(nameof(TotalCount));
     }
@@ -1908,6 +2113,24 @@ public partial class MainViewModel : ObservableObject
         filter.Options.Clear();
         foreach (var option in freshOptions)
             filter.Options.Add(option);
+    }
+
+    private void RefreshPlatformFilterOptions()
+    {
+        var previousChecked = PlatformFilter.Options.ToDictionary(o => o.Value, o => o.IsChecked, StringComparer.OrdinalIgnoreCase);
+
+        var freshOptions = CreatePlatformFilterOptions(GetFilterScopePopulation())
+            .Select(option => new FilterOption
+            {
+                Value = option.Value,
+                Count = option.Count,
+                HealthPercent = option.HealthPercent,
+                IsChecked = !previousChecked.TryGetValue(option.Value, out var wasChecked) || wasChecked,
+            });
+
+        PlatformFilter.Options.Clear();
+        foreach (var option in freshOptions)
+            PlatformFilter.Options.Add(option);
     }
 
     // "Top 250/100/25" chip'leri için ağırlıklı ortalama (IMDb'nin kendi Top 250'sinde kullandığı
@@ -1997,6 +2220,44 @@ public partial class MainViewModel : ObservableObject
         return query.Where(g => selected.Contains(NormalizeForFilter(selector(g))));
     }
 
+    private static bool HasMatchedMetadata(Game game) => game.MetadataSourceId.HasValue || game.StatusOk;
+
+    private static int ComputeHealthPercent(IReadOnlyCollection<Game> games)
+    {
+        var totalGames = games.Count;
+        if (totalGames == 0)
+            return 0;
+
+        var matchedCount = games.Count(HasMatchedMetadata);
+        var missingLogoCount = games.Count(g => !g.HasClearLogo);
+        var missingBoxCount = games.Count(g => !g.HasBox);
+        var missingScreenshotCount = games.Count(g => !g.HasScreenshot);
+
+        var healthPercent = (int)Math.Round(
+            (matchedCount / (double)totalGames * 50d) +
+            ((totalGames - missingLogoCount) / (double)totalGames * 15d) +
+            ((totalGames - missingBoxCount) / (double)totalGames * 20d) +
+            ((totalGames - missingScreenshotCount) / (double)totalGames * 15d),
+            MidpointRounding.AwayFromZero);
+
+        return Math.Clamp(healthPercent, 0, 100);
+    }
+
+    private static IEnumerable<FilterOption> CreatePlatformFilterOptions(IEnumerable<Game> games) =>
+        games.GroupBy(g => NormalizeForFilter(g.PlatformDisplayName), StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                var groupedGames = g.ToList();
+                return new FilterOption
+                {
+                    Value = g.Key,
+                    Count = groupedGames.Count,
+                    HealthPercent = ComputeHealthPercent(groupedGames),
+                };
+            });
+
     // Her platformun rozetindeki sayıyı _allGames içinde o platforma ait kaç kayıt olduğuna göre
     // hesaplar ("All Platforms" toplam sayıyı gösterir). GetPlatforms()'taki sabit GameCount
     // değerleri sadece ilk yapım aşamasının kalıntısıydı; artık tek doğru kaynak gerçek oyun listesi.
@@ -2077,6 +2338,8 @@ public partial class MainViewModel : ObservableObject
             foreach (var platform in platformsInCategory)
                 PlatformListItems.Add(new PlatformListItem { Platform = platform });
         }
+
+        PlatformListOrderChanged?.Invoke();
     }
 
     // _appSettings.PlatformOrder'daki (kullanıcının sürükle-bırakla ayarladığı) sıraya göre
@@ -2115,7 +2378,10 @@ public partial class MainViewModel : ObservableObject
         var oldIndex = PlatformListItems.IndexOf(draggedItem);
         var newIndex = PlatformListItems.IndexOf(targetItem);
         if (oldIndex != newIndex)
+        {
             PlatformListItems.Move(oldIndex, newIndex);
+            PlatformListOrderChanged?.Invoke();
+        }
     }
 
     // Sürükleme bittiğinde (bkz. MainWindow.xaml.cs PlatformRow_MouseMove, DragDrop.DoDragDrop
@@ -2134,6 +2400,19 @@ public partial class MainViewModel : ObservableObject
 
         _appSettings.PlatformOrder = visibleOrder;
         ConfigService.SaveDefault(_appSettings);
+        PlatformListOrderChanged?.Invoke();
+    }
+
+    public IReadOnlyList<Platform> GetVisiblePlatformOrder() =>
+        PlatformListItems
+            .Where(i => i.Platform is not null)
+            .Select(i => i.Platform!)
+            .ToList();
+
+    public void NotifyMetadataEdited(Game game)
+    {
+        ApplyFilter();
+        GameMetadataChanged?.Invoke(game);
     }
 
     // "OTHERS" başlığına tıklanınca açar/kapatır.
@@ -2276,6 +2555,9 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void OpenMediaProvider() => RequestOpenMediaProvider?.Invoke();
+
+    [RelayCommand]
+    private void OpenMetadataProvider() => RequestOpenMetadataProvider?.Invoke();
 
     [RelayCommand]
     private void OpenCropEditor() => RequestOpenCropEditor?.Invoke();

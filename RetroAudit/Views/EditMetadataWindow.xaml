@@ -11,27 +11,59 @@
         </Grid.RowDefinitions>
 
         <ScrollViewer Grid.Row="0" Margin="16" VerticalScrollBarVisibility="Auto">
-            <StackPanel>
-                <TextBlock Text="Başlık" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
-                <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="16" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
 
-                <TextBlock Text="Tür" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
-                <TextBox Text="{Binding Genre, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
+                <StackPanel Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,10">
+                    <TextBlock Text="Başlık" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
 
-                <TextBlock Text="Açıklama" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
-                <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
-                         TextWrapping="Wrap" AcceptsReturn="True" Height="70" Margin="0,0,0,10" />
+                <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,0,10">
+                    <TextBlock Text="Tür" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Genre, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="1" Grid.Column="2" Margin="0,0,0,10">
+                    <TextBlock Text="Publisher" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Publisher, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
 
-                <TextBlock Text="Notlar" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
-                <TextBox Text="{Binding Notes, UpdateSourceTrigger=PropertyChanged}"
-                         TextWrapping="Wrap" AcceptsReturn="True" Height="70" Margin="0,0,0,10" />
+                <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,0,10">
+                    <TextBlock Text="Developer" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Developer, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="2" Grid.Column="2" Margin="0,0,0,10">
+                    <TextBlock Text="Video URL" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding VideoUrl, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
 
-                <TextBlock Text="Publisher" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
-                <TextBox Text="{Binding Publisher, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
+                <StackPanel Grid.Row="3" Grid.Column="0" Margin="0,0,0,10">
+                    <TextBlock Text="Yıl" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding ReleaseYearText, UpdateSourceTrigger=PropertyChanged}" />
+                </StackPanel>
+                <StackPanel Grid.Row="3" Grid.Column="2" Margin="0,0,0,10">
+                    <TextBlock Text="Region" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
+                    <ComboBox ItemsSource="{Binding RegionOptions}" Text="{Binding Region, UpdateSourceTrigger=PropertyChanged}"
+                              IsEditable="True" IsTextSearchEnabled="False" />
+                </StackPanel>
 
-                <TextBlock Text="Developer" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
-                <TextBox Text="{Binding Developer, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,10" />
-            </StackPanel>
+                <StackPanel Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,0,0,10">
+                    <TextBlock Text="Açıklama" Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding Description, UpdateSourceTrigger=PropertyChanged}"
+                             TextWrapping="Wrap" AcceptsReturn="True" Height="72" VerticalScrollBarVisibility="Auto" />
+                </StackPanel>
+            </Grid>
         </ScrollViewer>
 
         <Border Grid.Row="1" Background="{StaticResource Brush.Background.Panel}"

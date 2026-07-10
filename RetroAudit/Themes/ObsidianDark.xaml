@@ -32,6 +32,7 @@
     <SolidColorBrush x:Key="Brush.Text.Secondary" Color="{StaticResource Color.Text.Secondary}" />
     <SolidColorBrush x:Key="Brush.Accent.Selected" Color="{StaticResource Color.Accent.Selected}" />
     <SolidColorBrush x:Key="Brush.Accent.SelectedBorder" Color="{StaticResource Color.Accent.SelectedBorder}" />
+    <SolidColorBrush x:Key="Brush.Accent" Color="{StaticResource Color.Accent.SelectedBorder}" />
     <SolidColorBrush x:Key="Brush.Accent.Amber" Color="{StaticResource Color.Accent.Amber}" />
     <SolidColorBrush x:Key="Brush.Accent.AmberText" Color="{StaticResource Color.Accent.AmberText}" />
     <SolidColorBrush x:Key="Brush.Status.Ok" Color="{StaticResource Color.Status.Ok}" />

@@ -5,40 +5,25 @@ using RetroAudit.ViewModels;
 
 namespace RetroAudit.Views;
 
-// Kullanıcı isteği: "media provider tool'u mevcut yapıya entegre et, eksik olanları görsün,
-// ordan da indirme yapabilelim" — sürükle-bırak/sahte arama sonucu kartları kaldırıldı (bkz.
-// MediaProviderViewModel), pencere artık MainViewModel'in gerçek oyun listesi üzerinden çalışıyor
-// (RomImportWindow(mainVm) ile AYNI desen).
-public partial class MediaProviderWindow : Window
+public partial class MetadataProviderWindow : Window
 {
     private readonly MainViewModel _mainVm;
 
-    public MediaProviderWindow(MainViewModel mainVm)
+    public MetadataProviderWindow(MainViewModel mainVm)
     {
         InitializeComponent();
         DarkTitleBarHelper.Apply(this);
         _mainVm = mainVm;
 
-        var vm = new MediaProviderViewModel(mainVm.AllGames, game =>
-        {
-            mainVm.NotifyArtworkDownloaded(game);
-            mainVm.ApplyFilter();
-        }, () => mainVm.GetVisiblePlatformOrder(), mainVm.ProviderDesignMode == ProviderDesignMode.Modern);
+        var vm = new MetadataProviderViewModel(
+            mainVm.AllGames,
+            game => mainVm.NotifyMetadataEdited(game),
+            () => mainVm.GetVisiblePlatformOrder(),
+            mainVm.ProviderDesignMode == ProviderDesignMode.Modern);
         Action<Game> metadataChangedHandler = _ => vm.RefreshAll();
 
         vm.RequestShowMessage += message =>
             MessageBox.Show(this, message, "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
-
-        vm.RequestEditMetadata += request =>
-        {
-            var (game, completedCallback) = request;
-            var dialog = new EditMetadataWindow(game) { Owner = this };
-            if (dialog.ShowDialog() == true)
-            {
-                mainVm.NotifyMetadataEdited(game);
-                completedCallback();
-            }
-        };
 
         mainVm.PlatformListOrderChanged += vm.RefreshPlatformOrder;
         Closed += (_, _) => mainVm.PlatformListOrderChanged -= vm.RefreshPlatformOrder;
@@ -56,16 +41,19 @@ public partial class MediaProviderWindow : Window
             }
         };
 
-        // Embedded arama penceresi — MainViewModel.RequestSearchArtwork İLE AYNI handler deseni
-        // (bkz. MainWindow.xaml.cs), burada ayrıca Media Provider'ın kendi MissingItems listesini
-        // de güncelliyor (completedCallback zaten bunu ViewModel içinde yapıyor).
+        vm.RequestEditMetadata += request =>
+        {
+            var (game, completedCallback) = request;
+            var dialog = new EditMetadataWindow(game) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                completedCallback();
+        };
+
         vm.RequestSearchArtwork += request =>
         {
             var (url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback, game) = request;
             new MediaSearchWindow(url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback, game)
-            {
-                Owner = this,
-            }.Show();
+                { Owner = Owner ?? this }.Show();
         };
 
         DataContext = vm;
@@ -73,7 +61,7 @@ public partial class MediaProviderWindow : Window
 
     private void MissingItemsList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (DataContext is MediaProviderViewModel vm && vm.EditSelectedCommand.CanExecute(null))
+        if (DataContext is MetadataProviderViewModel vm && vm.EditSelectedCommand.CanExecute(null))
             vm.EditSelectedCommand.Execute(null);
     }
 
@@ -95,11 +83,11 @@ public partial class MediaProviderWindow : Window
         e.Handled = true;
     }
 
-    private void OpenMetadataProvider_Click(object sender, RoutedEventArgs e)
+    private void OpenMediaProvider_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            var nextWin = new MetadataProviderWindow(_mainVm)
+            var nextWin = new MediaProviderWindow(_mainVm)
             {
                 Owner = Owner,
                 WindowStartupLocation = WindowStartupLocation.Manual,
@@ -121,15 +109,15 @@ public partial class MediaProviderWindow : Window
         }
         catch (Exception ex)
         {
-            MessageBox.Show(this, $"Metadata Provider acilamadi:\n{ex.Message}", "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(this, $"Media Provider acilamadi:\n{ex.Message}", "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
     private void SearchItem_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement fe && fe.DataContext is MissingMediaItem item)
+        if (sender is FrameworkElement fe && fe.DataContext is MissingMetadataItem item)
         {
-            if (DataContext is MediaProviderViewModel vm)
+            if (DataContext is MetadataProviderViewModel vm)
             {
                 vm.SelectedMissingItem = item;
                 if (vm.SearchSelectedCommand.CanExecute(null))

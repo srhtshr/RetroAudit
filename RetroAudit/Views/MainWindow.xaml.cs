@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -80,6 +80,7 @@ public partial class MainWindow : Window
             };
 
             vm.RequestOpenMediaProvider += () => new MediaProviderWindow(vm) { Owner = this }.Show();
+            vm.RequestOpenMetadataProvider += () => new MetadataProviderWindow(vm) { Owner = this }.Show();
             vm.RequestOpenCropEditor += () => new CropEditorDialog { Owner = this }.ShowDialog();
             vm.RequestOpenSettings += () =>
             {
@@ -157,8 +158,8 @@ public partial class MainWindow : Window
             // hedef dosya adı ROM'la eşleşecek şekilde zorlanıyor (bkz. MediaSearchWindow).
             vm.RequestSearchArtwork += request =>
             {
-                var (url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback) = request;
-                new MediaSearchWindow(url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback)
+                var (url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback, game) = request;
+                new MediaSearchWindow(url, targetFolder, targetFileNameWithoutExtension, gameTitle, mediaTypeLabel, completedCallback, game)
                 {
                     Owner = this,
                 }.Show();

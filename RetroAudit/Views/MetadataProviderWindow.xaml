@@ -1,17 +1,16 @@
-<Window x:Class="RetroAudit.Views.MediaProviderWindow"
+<Window x:Class="RetroAudit.Views.MetadataProviderWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:RetroAudit.ViewModels"
         xmlns:models="clr-namespace:RetroAudit.Models"
         xmlns:conv="clr-namespace:RetroAudit.Converters"
-        Title="Media Provider"
+        Title="Metadata Provider"
         Height="760"
         Width="1520"
         MinWidth="1280"
         MinHeight="720"
         WindowStartupLocation="CenterOwner">
     <Window.Resources>
-        <conv:InverseBooleanConverter x:Key="InverseBoolean" />
         <conv:PercentageToWidthConverter x:Key="PercentageToWidth" />
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
 
@@ -93,6 +92,7 @@
             <Setter Property="Foreground" Value="White" />
             <Setter Property="Cursor" Value="Arrow" />
         </Style>
+
         <Style x:Key="TableSearchButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Width" Value="24" />
             <Setter Property="Height" Value="24" />
@@ -218,15 +218,15 @@
                     CornerRadius="6">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Top" Margin="10,10,10,8">
-                        <TextBlock FontSize="16" FontWeight="Bold" Text="Media Audit" />
+                        <TextBlock FontSize="16" FontWeight="Bold" Text="Metadata Audit" />
                         <WrapPanel Margin="0,12,0,0">
                             <Button Content="Metadata Provider"
-                                    Click="OpenMetadataProvider_Click"
-                                    Style="{StaticResource ProviderSwitchButtonStyle}" />
-                            <Button Content="Media Provider"
                                     IsHitTestVisible="False"
                                     Focusable="False"
                                     Style="{StaticResource ActiveProviderSwitchButtonStyle}" />
+                            <Button Content="Media Provider"
+                                    Click="OpenMediaProvider_Click"
+                                    Style="{StaticResource ProviderSwitchButtonStyle}" />
                         </WrapPanel>
                     </StackPanel>
 
@@ -268,7 +268,7 @@
                             </Style>
                         </ListBox.ItemContainerStyle>
                         <ListBox.ItemTemplate>
-                            <DataTemplate DataType="{x:Type models:PlatformAuditSummary}">
+                            <DataTemplate DataType="{x:Type models:PlatformMetadataAuditSummary}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="110" />
@@ -321,58 +321,58 @@
                                     <StackPanel Grid.Column="4" VerticalAlignment="Center" Margin="0">
                                         <WrapPanel>
                                             <ToggleButton Style="{StaticResource CardFilterBadgeToggle}"
-                                                          IsChecked="{Binding DataContext.ShowMissingLogo, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          IsChecked="{Binding DataContext.ShowMissingGenres, RelativeSource={RelativeSource AncestorType=Window}}"
                                                           PreviewMouseLeftButtonDown="FilterBadge_PreviewMouseLeftButtonDown">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE114;" Foreground="#FFFF9F0A" Margin="0,0,4,0" VerticalAlignment="Center" />
-                                                        <TextBlock Text="Logo" />
+                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE8EC;" Foreground="#FFA970FF" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                                        <TextBlock Text="Tür" />
                                                     </StackPanel>
-                                                    <TextBlock Text="{Binding MissingLogoCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                    <TextBlock Text="{Binding MissingGenresCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </ToggleButton>
                                             <ToggleButton Style="{StaticResource CardFilterBadgeToggle}"
-                                                          IsChecked="{Binding DataContext.ShowMissingBox, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          IsChecked="{Binding DataContext.ShowMissingPublisher, RelativeSource={RelativeSource AncestorType=Window}}"
                                                           PreviewMouseLeftButtonDown="FilterBadge_PreviewMouseLeftButtonDown">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE7B8;" Foreground="#FFBF5AF2" Margin="0,0,4,0" VerticalAlignment="Center" />
-                                                        <TextBlock Text="Box" />
+                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE77B;" Foreground="#FFFF9F0A" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                                        <TextBlock Text="Yayıncı" />
                                                     </StackPanel>
-                                                    <TextBlock Text="{Binding MissingBoxCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                    <TextBlock Text="{Binding MissingPublisherCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </ToggleButton>
                                             <ToggleButton Style="{StaticResource CardFilterBadgeToggle}"
-                                                          IsChecked="{Binding DataContext.ShowMissingScreenshot, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          IsChecked="{Binding DataContext.ShowMissingDescription, RelativeSource={RelativeSource AncestorType=Window}}"
                                                           PreviewMouseLeftButtonDown="FilterBadge_PreviewMouseLeftButtonDown">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE914;" Foreground="#FF30D158" Margin="0,0,4,0" VerticalAlignment="Center" />
-                                                        <TextBlock Text="SS" />
+                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE7C3;" Foreground="#FF30B0C7" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                                        <TextBlock Text="Açıklama" />
                                                     </StackPanel>
-                                                    <TextBlock Text="{Binding MissingScreenshotCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                    <TextBlock Text="{Binding MissingDescriptionCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </ToggleButton>
                                             <ToggleButton Style="{StaticResource CardFilterBadgeToggle}"
-                                                          IsChecked="{Binding DataContext.ShowMissingVideo, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          IsChecked="{Binding DataContext.ShowMissingYear, RelativeSource={RelativeSource AncestorType=Window}}"
                                                           PreviewMouseLeftButtonDown="FilterBadge_PreviewMouseLeftButtonDown">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE714;" Foreground="#FFFF453A" Margin="0,0,4,0" VerticalAlignment="Center" />
-                                                        <TextBlock Text="Video" />
+                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE787;" Foreground="#FF64D2FF" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                                        <TextBlock Text="Yıl" />
                                                     </StackPanel>
-                                                    <TextBlock Text="{Binding MissingVideoCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                    <TextBlock Text="{Binding MissingYearCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </ToggleButton>
                                             <ToggleButton Style="{StaticResource CardFilterBadgeToggle}"
-                                                          IsChecked="{Binding DataContext.ShowMissingWiki, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          IsChecked="{Binding DataContext.ShowMissingVersion, RelativeSource={RelativeSource AncestorType=Window}}"
                                                           PreviewMouseLeftButtonDown="FilterBadge_PreviewMouseLeftButtonDown">
                                                 <StackPanel HorizontalAlignment="Center">
                                                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE8F2;" Foreground="#FF0A84FF" Margin="0,0,4,0" VerticalAlignment="Center" />
-                                                        <TextBlock Text="Wiki" />
+                                                        <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="10.5" Text="&#xE81E;" Foreground="#FF0A84FF" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                                        <TextBlock Text="Sürüm" />
                                                     </StackPanel>
-                                                    <TextBlock Text="{Binding MissingWikipediaCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                                    <TextBlock Text="{Binding MissingVersionCount, StringFormat={}{0:N0}, Mode=OneWay}" FontWeight="SemiBold" Foreground="{StaticResource Brush.Text.Primary}" HorizontalAlignment="Center" Margin="0,2,0,0" />
                                                 </StackPanel>
                                             </ToggleButton>
                                         </WrapPanel>
@@ -387,7 +387,6 @@
                     </ListBox>
                 </DockPanel>
             </Border>
-
             <Border Grid.Column="2"
                     Padding="0"
                     Background="Transparent"
@@ -433,7 +432,7 @@
                                 </Style>
                             </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>
-                                <DataTemplate DataType="{x:Type vm:MissingMediaItem}">
+                                <DataTemplate DataType="{x:Type vm:MissingMetadataItem}">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -443,7 +442,8 @@
                                                 Style="{StaticResource TableSearchButtonStyle}"
                                                 Click="SearchItem_Click"
                                                 VerticalAlignment="Center"
-                                                Margin="0,0,10,0">
+                                                Margin="0,0,10,0"
+                                                ToolTip="Görsel Ara">
                                             <Grid Width="14" Height="14">
                                                 <Ellipse Width="9" Height="9" Stroke="{StaticResource Brush.Text.Secondary}"
                                                          StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" />
@@ -489,12 +489,12 @@
                             <DataGrid.Columns>
                                 <DataGridTemplateColumn Width="32">
                                     <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate DataType="{x:Type vm:MissingMediaItem}">
+                                        <DataTemplate DataType="{x:Type vm:MissingMetadataItem}">
                                             <Button Style="{StaticResource TableSearchButtonStyle}"
                                                     Click="SearchItem_Click"
                                                     HorizontalAlignment="Center"
                                                     VerticalAlignment="Center"
-                                                    ToolTip="Görsel Ara">
+                                                    ToolTip="Arama Yap">
                                                 <Grid Width="14" Height="14">
                                                     <Ellipse Width="9" Height="9" Stroke="{StaticResource Brush.Text.Secondary}"
                                                              StrokeThickness="1.5" HorizontalAlignment="Left" VerticalAlignment="Top" />
@@ -523,7 +523,8 @@
                 BorderThickness="1"
                 CornerRadius="6">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Padding="14,7" Command="{Binding FetchSelectedAsyncCommand}" Content="Otomatik &#x0130;ndir" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}" />
+                <Button Margin="0,0,8,0" Padding="14,7" Command="{Binding EditSelectedCommand}" Content="D&#x00FC;zenle" />
+                <Button Padding="14,7" Command="{Binding ReMatchSelectedCommand}" Content="Yeniden E&#x015F;le&#x015F;tir" />
             </StackPanel>
         </Border>
     </Grid>

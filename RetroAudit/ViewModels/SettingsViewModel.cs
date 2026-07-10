@@ -244,6 +244,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private RegionColumnDisplayMode regionColumnDisplayMode = RegionColumnDisplayMode.FlagAndText;
 
+    [ObservableProperty]
+    private ProviderDesignMode providerDesignMode = ProviderDesignMode.Classic;
+
     // "seçenek koy bide oraya önerilen ve alternatifleri göster veya hepsini göster diye seçilen
     // ayara göre göstersin" (kullanıcı isteği) — bkz. Ayarlar > Emülatörler'deki seçici,
     // EmulatorConfig.AvailableChoices/DisplayMode (static, TÜM satırları etkiler).
@@ -299,6 +302,7 @@ public partial class SettingsViewModel : ObservableObject
         groupPlatformsByCategory = settings.GroupPlatformsByCategory;
         platformListDisplayMode = settings.PlatformListDisplayMode;
         regionColumnDisplayMode = settings.RegionColumnDisplayMode;
+        providerDesignMode = settings.ProviderDesignMode;
         artworkMaxDimension = settings.ArtworkMaxDimension;
         coreChoiceDisplayMode = settings.CoreChoiceDisplayMode;
         EmulatorConfig.DisplayMode = coreChoiceDisplayMode;
@@ -1275,6 +1279,7 @@ public partial class SettingsViewModel : ObservableObject
         settings.GroupPlatformsByCategory = GroupPlatformsByCategory;
         settings.PlatformListDisplayMode = PlatformListDisplayMode;
         settings.RegionColumnDisplayMode = RegionColumnDisplayMode;
+        settings.ProviderDesignMode = ProviderDesignMode;
         settings.ArtworkMaxDimension = ArtworkMaxDimension;
         settings.CoreChoiceDisplayMode = CoreChoiceDisplayMode;
         settings.CategoryVisibility = CategoryOptions.ToDictionary(o => o.Key, o => o.IsVisible);
@@ -1296,6 +1301,7 @@ public partial class SettingsViewModel : ObservableObject
         GroupPlatformsByCategory = settings.GroupPlatformsByCategory;
         PlatformListDisplayMode = settings.PlatformListDisplayMode;
         RegionColumnDisplayMode = settings.RegionColumnDisplayMode;
+        ProviderDesignMode = settings.ProviderDesignMode;
         ArtworkMaxDimension = settings.ArtworkMaxDimension;
         CoreChoiceDisplayMode = settings.CoreChoiceDisplayMode;
         BuildCategoryOptions(settings);

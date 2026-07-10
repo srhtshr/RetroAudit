@@ -59,6 +59,24 @@ public static class ArtworkService
         }
     }
 
+    // Tarayıcının kendi fetch()'i ile alınan ham baytları boyutlandırıp diske yazar.
+    // MediaSearchWindow, korumalı/çerez gerektiren sitelerde HttpClient yerine
+    // bunu kullanır (bkz. HandleCustomImageDownloadAsync).
+    public static async Task<bool> ProcessAndSaveAsync(byte[] sourceBytes, string destinationPath, bool preserveTransparency, int maxDimension)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            var encoded = ResizeAndEncode(sourceBytes, preserveTransparency, maxDimension);
+            await File.WriteAllBytesAsync(destinationPath, encoded);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static byte[] ResizeAndEncode(byte[] sourceBytes, bool preserveTransparency, int maxDimension)
     {
         using var sourceStream = new MemoryStream(sourceBytes);
@@ -79,6 +97,8 @@ public static class ArtworkService
         // kodlama orijinalden BÜYÜK çıkabiliyor (PNG bu tür içerikte JPEG'den daha iyi sıkıştırıyor,
         // ölçek zaten 1.0 kalıyorsa küçültmenin de bir kazancı olmuyor) — doğrulandı (bkz. gerçek
         // dosyalarla manuel test). Bu durumda orijinal baytlar korunuyor, asla büyütülmüyor.
+        if (preserveTransparency)
+            return encoded; // Şeffaflık garantisi için Logo'larda her zaman kodlanmış PNG dönülmeli
         return encoded.Length < sourceBytes.Length ? encoded : sourceBytes;
     }
 }

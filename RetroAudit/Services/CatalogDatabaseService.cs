@@ -269,6 +269,9 @@ public static class CatalogDatabaseService
                 if (ov.Notes is { Length: > 0 }) game.Notes = ov.Notes;
                 if (ov.Publisher is { Length: > 0 }) game.Publisher = ov.Publisher;
                 if (ov.Developer is { Length: > 0 }) game.Developer = ov.Developer;
+                if (ov.VideoUrl is { Length: > 0 }) game.VideoUrl = ov.VideoUrl;
+                if (ov.ReleaseYear is { } releaseYear) game.ReleaseYear = releaseYear;
+                if (ov.Region is { Length: > 0 }) game.Region = ov.Region;
             }
         }
     }
@@ -301,6 +304,9 @@ public static class CatalogDatabaseService
     {
         var versions = new List<GameVersion>();
         if (!DatabaseExists)
+            return versions;
+
+        if (string.IsNullOrWhiteSpace(gameKey))
             return versions;
 
         using var connection = OpenConnection();

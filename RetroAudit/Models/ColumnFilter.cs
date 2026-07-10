@@ -12,6 +12,8 @@ public partial class FilterOption : ObservableObject
 {
     public string Value { get; init; } = string.Empty;
     public int Count { get; init; }
+    public int? HealthPercent { get; init; }
+    public bool HasHealthPercent => HealthPercent.HasValue;
 
     [ObservableProperty]
     private bool isChecked = true;
