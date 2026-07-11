@@ -116,17 +116,38 @@ public partial class MainWindow : Window
             };
             vm.RequestPermanentDeleteConfirmation += game =>
             {
-                var result = MessageBox.Show(
-                    $"\"{game.Title}\" çöp kutusundan kalıcı olarak silinsin mi? Bu işlem geri alınamaz.",
-                    "Kalıcı Sil", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (result == MessageBoxResult.Yes)
-                    vm.PermanentlyDeleteGameCommand.Execute(game);
+                var dialog = new PermanentDeleteConfirmationDialog(game.Title) { Owner = this };
+                if (dialog.ShowDialog() == true)
+                    vm.PermanentlyDeleteGame(game, dialog.DeleteRom, dialog.DeleteBox, dialog.DeleteScreenshot, dialog.DeleteLogo);
+            };
+            vm.RequestBulkPermanentDeleteConfirmation += games =>
+            {
+                var dialog = new PermanentDeleteConfirmationDialog($"{games.Count} oyun") { Owner = this };
+                if (dialog.ShowDialog() == true)
+                    vm.BulkPermanentlyDeleteGames(games, dialog.DeleteRom, dialog.DeleteBox, dialog.DeleteScreenshot, dialog.DeleteLogo);
             };
             vm.RequestEditMetadata += game =>
             {
                 var dialog = new EditMetadataWindow(game) { Owner = this };
                 if (dialog.ShowDialog() == true)
                     vm.ApplyFilter(); // Title/Genre/... ObservableProperty değil, satırı tazelemek gerekiyor
+            };
+            // Kullanıcı isteği: "tablodan bağlama yapmak istediğimde klasörden değil tablodaki
+            // oyunların listesinden seçmeli" — ROM İçe Aktar'daki ManualLinkWindow'un AYNI arama
+            // kutulu oyun listesi burada da kullanılıyor (kaynak oyunun kendisi listeden hariç
+            // tutulur, bir oyun kendine bağlanamaz); "+ Yeni Oyun" seçilirse (bkz.
+            // ManualLinkViewModel.NewGameSentinelKey) RegisterNewCustomGame ile AYNI yol.
+            vm.RequestLinkToGameSelection += async (game, filePath) =>
+            {
+                var candidates = vm.AllGames.Where(g => g != game).ToList();
+                var dialog = new ManualLinkWindow(candidates, game.PlatformDisplayName, Path.GetFileName(filePath)) { Owner = this };
+                if (dialog.ShowDialog() != true || dialog.SelectedGame is not { } selectedGame)
+                    return;
+
+                var targetGame = selectedGame.GameKey == ManualLinkViewModel.NewGameSentinelKey
+                    ? vm.RegisterNewCustomGame(selectedGame.Title, game.PlatformDisplayName)
+                    : selectedGame;
+                await vm.LinkGameFileToGameAsync(game, targetGame, dialog.SelectedVersion);
             };
             vm.RequestShowMessage += message => MessageBox.Show(message, "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
 
@@ -168,7 +189,24 @@ public partial class MainWindow : Window
             // Kullanıcının kendi ROM arşivinden toplu içe aktarma penceresi (bkz. RomImportWindow/
             // RomImportViewModel). Kapanmasını beklemeye gerek yok: pencere her başarılı içe
             // aktarma turunun sonunda kendi içinde vm.ReloadAppSettings'i zaten çağırıyor.
-            vm.RequestOpenRomImport += () => new RomImportWindow(vm) { Owner = this }.Show();
+            vm.RequestOpenRomImport += () =>
+            {
+                var romImportWindow = new RomImportWindow(vm) { Owner = this };
+
+                // SettingsWindow'daki AYNI kullanıcı geri bildirimi ("çarpıya basınca minimize
+                // yapıyor") burada da yaşandı — WindowChrome tabanlı özel başlık çubuğu (bkz.
+                // DarkTitleBarHelper) ile sahip (Owner) zincirindeki etkileşim yüzünden pencere X
+                // ile kapanınca MainWindow bazen aktifleşmek yerine simge durumuna küçülüyor/arkada
+                // kalıyor. Kapanışta MainWindow'u açıkça eski haline getirip öne almak (bkz. yukarıda
+                // settingsWindow.Closed ile AYNI desen) bunu güvenilir şekilde düzeltiyor.
+                romImportWindow.Closed += (_, _) =>
+                {
+                    if (WindowState == WindowState.Minimized)
+                        WindowState = WindowState.Normal;
+                    Activate();
+                };
+                romImportWindow.Show();
+            };
 
             WireColumnVisibility(vm);
             WireDetailPanelWidth(vm);
@@ -468,25 +506,66 @@ public partial class MainWindow : Window
             YouTubePlayer.CoreWebView2.Navigate("about:blank");
     }
 
-    // VersionsList'in kendi iç kaydırması bilinçli olarak kapalı (bkz. MainWindow.xaml
-    // ScrollViewer.VerticalScrollBarVisibility="Disabled" — dıştaki tek ScrollViewer'a bırakılıyor),
-    // ama WPF'in ListBox'ı yine de fare tekerleği olayını kendi içinde "handled" işaretleyip
-    // yutuyor, dıştaki ScrollViewer'a hiç ulaşmıyordu (kullanıcı geri bildirimi: üstüne gelince
-    // kaydırma çalışmıyor). Olayı burada durdurup aynı tekerlek verisiyle üst elemana yeniden
-    // fırlatmak (bubbling routed event) standart WPF çözümü — üstteki ScrollViewer onu normal
-    // şekilde yakalayıp kaydırıyor.
+    // Kullanıcı geri bildirimi: "genel olarak kartın üstündeyken çalışmıyor ... scrollbar'a getirince
+    // çalışıyor" — ListBox seviyesindeki önlemler (CanContentScroll=False, bu handler'ın kendisi)
+    // yeterli gelmedi; alttaki ListBoxItem'lar tekerlek olayını daha derinde tüketip yukarı hiç
+    // çıkarmıyordu. Asıl düzeltme artık dıştaki ScrollViewer'ın KENDİSİNDE (bkz.
+    // GameDetailScrollViewer_PreviewMouseWheel, MainWindow.xaml) — bu metot orada zaten
+    // "Handled=true" olarak işaretlendiği için burası çoğu zaman hiç çalışmaz, sadece ekstra bir
+    // güvence olarak duruyor.
     private void VersionsList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (e.Handled || sender is not FrameworkElement element)
+        if (e.Handled || sender is not DependencyObject element)
+            return;
+
+        var scrollViewer = FindVisualParent<ScrollViewer>(element);
+        if (scrollViewer is null)
             return;
 
         e.Handled = true;
-        var forwarded = new MouseWheelEventArgs(e.MouseDevice, e.Timestamp, e.Delta)
+        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
+    }
+
+    // Kullanıcı geri bildirimi: "kartın üstündeyken çalışmıyor, scrollbar'a getirince çalışıyor" —
+    // bkz. MainWindow.xaml GameDetailScrollViewer yorumu: tünelleme (Preview) olayı yukarıdan
+    // aşağıya inerken bu ScrollViewer'ın KENDİSİNDE yakalanıp elle kaydırılıyor, altındaki
+    // ListBox/ListBoxItem/sanal panel gibi elemanların olayı DAHA DERİNDE tüketmesine hiç fırsat
+    // kalmıyor — sağlam ve dolaylı olmayan tek nokta çözümü.
+    private void GameDetailScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer scrollViewer)
+            return;
+
+        // Kullanıcı geri bildirimi: "kapsüldekinde çalışıyor ama şu alanda çalışmıyor" — "Sürümler"
+        // tek-kart görünümündeki "▾" popup'ı (bkz. MainWindow.xaml VersionCardMenuScrollViewer)
+        // XAML'de bu ScrollViewer'ın İÇİNDE tanımlı (görsel olarak ayrı bir katmanda render olsa da) —
+        // bu yüzden tekerlek olayı popup'ın KENDİ PreviewMouseWheel'ına hiç ulaşmadan burada
+        // (dıştaki ana panelde) tüketiliyordu. Popup açıkken olay BURAYA değil, doğrudan popup'ın
+        // kendi ScrollViewer'ına yönlendiriliyor.
+        if (VersionCardMenuScrollViewer is { IsVisible: true } popupScrollViewer)
         {
-            RoutedEvent = MouseWheelEvent,
-            Source = sender,
-        };
-        (element.Parent as UIElement)?.RaiseEvent(forwarded);
+            popupScrollViewer.ScrollToVerticalOffset(popupScrollViewer.VerticalOffset - e.Delta);
+            e.Handled = true;
+            return;
+        }
+
+        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
+    }
+
+    // Kullanıcı geri bildirimi: "kartları açtığımdaki açılır listede kaydırmıyor yani arkasındaki
+    // detaylar panelini kaydırıyor" — Sürümler'in İKİ ayrı Popup'ı (bkz. MainWindow.xaml
+    // IsVersionsPopupOpen ve IsVersionCardMenuOpen) kendi ScrollViewer'larına rağmen tekerlek
+    // olayını ALTTAKİ ana pencereye (GameDetailScrollViewer) sızdırıyordu — GameDetailScrollViewer_
+    // PreviewMouseWheel ile AYNI "burada dur, elle kaydır" çözümü, sadece Popup'ın KENDİ
+    // ScrollViewer'ına uygulanıyor.
+    private void PopupScrollViewer_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (sender is not ScrollViewer scrollViewer)
+            return;
+
+        scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
     }
 
     private static T? FindVisualParent<T>(DependencyObject? element) where T : DependencyObject

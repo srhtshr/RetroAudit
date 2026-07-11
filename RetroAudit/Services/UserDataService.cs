@@ -54,6 +54,13 @@ public static class UserDataService
             GameKey TEXT NOT NULL,
             PRIMARY KEY (PlaylistId, GameKey)
         );
+
+        CREATE TABLE IF NOT EXISTS CustomGames (
+            GameKey TEXT PRIMARY KEY,
+            Title TEXT NOT NULL,
+            Platform TEXT NOT NULL,
+            PlatformDisplayName TEXT NOT NULL
+        );
         """;
 
     private static bool _initialized;
@@ -93,6 +100,24 @@ public static class UserDataService
         EnsureColumnExists(connection, "MetadataOverrides", "VideoUrl", "TEXT");
         EnsureColumnExists(connection, "MetadataOverrides", "ReleaseYear", "INTEGER");
         EnsureColumnExists(connection, "MetadataOverrides", "Region", "TEXT");
+
+        // Kullanıcı isteği: "manuel bağlanan kayıtlar ... Linked (Manual) olarak işaretlensin ...
+        // hangi Game/GameVersion'a bağlandığı görülebilsin" — bkz. FilePathOverrideInfo.
+        EnsureColumnExists(connection, "FilePathOverrides", "MatchMethod", "TEXT");
+        EnsureColumnExists(connection, "FilePathOverrides", "TargetVersionRawName", "TEXT");
+
+        // Kullanıcı isteği: "bu eşleşmeyenlerin crc32'sini zip içinden veya dosyadan alıp
+        // yazamıyormu buraya" — bkz. FilePathOverrideInfo yorumu.
+        EnsureColumnExists(connection, "FilePathOverrides", "ZipEntryName", "TEXT");
+        EnsureColumnExists(connection, "FilePathOverrides", "Crc32", "TEXT");
+
+        // Kullanıcı geri bildirimi: "sormasın ayrı bir sürüm gibi sürümlerine eklesin" — gerçek
+        // kullanımda yakalandı: GameKey PRIMARY KEY olduğu için bir oyuna İKİNCİ bir dosya (otomatik
+        // ya da manuel) bağlanınca ÖNCEKİ (çalışan) bağlantı sessizce siliniyordu. Artık bir Game'in
+        // BİRDEN FAZLA bağlı dosyası olabilir — biri "genel" (TargetVersionRawName NULL, BAŞLAT
+        // butonunun kullandığı tek dosya) diğerleri belirli sürümlere özel (bkz.
+        // MainViewModel.ResolveVersionFilePath, her GameVersion kendi bağlantısını bulur).
+        EnsureFilePathOverridesAllowMultipleRows(connection);
 
         using (var checkCmd = connection.CreateCommand())
         {
@@ -153,29 +178,247 @@ public static class UserDataService
         return result;
     }
 
-    public static Dictionary<string, string> GetAllFilePathOverrides()
+    // Kullanıcı geri bildirimi: "sormasın ayrı bir sürüm gibi sürümlerine eklesin" — bir oyunun
+    // BİRDEN FAZLA bağlı dosyası olabilir (bkz. EnsureFilePathOverridesAllowMultipleRows), bu yüzden
+    // artık GameKey -> TEK bir override değil, o oyuna bağlı TÜM override'ların listesi dönüyor.
+    public static Dictionary<string, List<FilePathOverrideInfo>> GetAllFilePathOverrides()
     {
-        var result = new Dictionary<string, string>();
+        var result = new Dictionary<string, List<FilePathOverrideInfo>>();
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT GameKey, FilePath FROM FilePathOverrides";
+        cmd.CommandText = "SELECT GameKey, FilePath, MatchMethod, TargetVersionRawName, ZipEntryName, Crc32 FROM FilePathOverrides";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
-            result[reader.GetString(0)] = reader.GetString(1);
+        {
+            var gameKey = reader.GetString(0);
+            if (!result.TryGetValue(gameKey, out var list))
+            {
+                list = new List<FilePathOverrideInfo>();
+                result[gameKey] = list;
+            }
+            list.Add(new FilePathOverrideInfo(
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5)));
+        }
         return result;
     }
 
-    public static void SaveFilePathOverride(string gameKey, string filePath)
+    // matchMethod/targetVersionRawName — bkz. FilePathOverrideInfo. Otomatik ROM İçe Aktar akışı
+    // (RomImportViewModel.ApplyImport, "Şu anki yoldan kullan") targetVersionRawName'i BİLEREK null
+    // bırakır (Game seviyesi genel bağlantı); manuel bağlama (ManualLinkViewModel) ikisini de
+    // doldurabilir. Kullanıcı geri bildirimi: bir oyuna İKİNCİ bir dosya bağlanınca ÖNCEKİ (farklı
+    // sürüme ait) bağlantı ARTIK silinmiyor — sadece AYNI (GameKey, TargetVersionRawName) çiftine
+    // sahip önceki kayıt (varsa) değiştiriliyor, böylece "genel" bağlantıdan biri, her sürümden de
+    // birer tane olabiliyor.
+    public static void SaveFilePathOverride(string gameKey, string filePath, string? matchMethod = null, string? targetVersionRawName = null, string? zipEntryName = null, string? crc32 = null)
+    {
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
+
+        using (var deleteCmd = connection.CreateCommand())
+        {
+            deleteCmd.Transaction = transaction;
+            deleteCmd.CommandText = targetVersionRawName is null
+                ? "DELETE FROM FilePathOverrides WHERE GameKey = $gameKey AND TargetVersionRawName IS NULL"
+                : "DELETE FROM FilePathOverrides WHERE GameKey = $gameKey AND TargetVersionRawName = $targetVersionRawName";
+            deleteCmd.Parameters.AddWithValue("$gameKey", gameKey);
+            if (targetVersionRawName is not null)
+                deleteCmd.Parameters.AddWithValue("$targetVersionRawName", targetVersionRawName);
+            deleteCmd.ExecuteNonQuery();
+        }
+
+        using (var insertCmd = connection.CreateCommand())
+        {
+            insertCmd.Transaction = transaction;
+            insertCmd.CommandText = """
+                INSERT INTO FilePathOverrides (GameKey, FilePath, MatchMethod, TargetVersionRawName, ZipEntryName, Crc32)
+                VALUES ($gameKey, $filePath, $matchMethod, $targetVersionRawName, $zipEntryName, $crc32)
+                """;
+            insertCmd.Parameters.AddWithValue("$gameKey", gameKey);
+            insertCmd.Parameters.AddWithValue("$filePath", filePath);
+            insertCmd.Parameters.AddWithValue("$matchMethod", (object?)matchMethod ?? DBNull.Value);
+            insertCmd.Parameters.AddWithValue("$targetVersionRawName", (object?)targetVersionRawName ?? DBNull.Value);
+            insertCmd.Parameters.AddWithValue("$zipEntryName", (object?)zipEntryName ?? DBNull.Value);
+            insertCmd.Parameters.AddWithValue("$crc32", (object?)crc32 ?? DBNull.Value);
+            insertCmd.ExecuteNonQuery();
+        }
+
+        transaction.Commit();
+    }
+
+    // Kullanıcı isteği: "unknown değilde manuel bağlamaya yönlendirebilirsin ... aynı yani" — bkz.
+    // CustomGameInfo yorumu. RetroAudit.db'nin GetGames()'ine EK olarak MainViewModel._allGames'e
+    // eklenir (bkz. MainViewModel.RegisterNewCustomGame), böylece Builder'ın "her koşu temiz"
+    // davranışından (bu dosyanın aksine) etkilenmez.
+    public static List<CustomGameInfo> GetAllCustomGames()
+    {
+        var result = new List<CustomGameInfo>();
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT GameKey, Title, Platform, PlatformDisplayName FROM CustomGames";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            result.Add(new CustomGameInfo(reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3)));
+        return result;
+    }
+
+    // Kullanıcı geri bildirimi (ekran görüntüsü — aynı "Legend of Zelda, The" iki ayrı satırda):
+    // "manuellerdede aynı isimdekileri tek bi yerde toplasın ayrı ayrı açmasın". Bundan SONRAKİ
+    // bağlamalar için tekilleştirme MainViewModel.RegisterNewCustomGame'de yapılıyor — bu metot
+    // SADECE o düzeltmeden ÖNCE yanlışlıkla oluşturulmuş, aynı başlık+platforma sahip AYRI
+    // CustomGames satırlarını BİR KEZ birleştirir: hepsinin FilePathOverrides'ı TEK bir hayatta
+    // kalan GameKey'e taşınır, fazlalık CustomGames satırları silinir. MainViewModel açılışta,
+    // GetAllCustomGames'ten ÖNCE çağırır.
+    public static void MergeDuplicateCustomGames()
+    {
+        var duplicateGroups = GetAllCustomGames()
+            .GroupBy(c => $"{c.Title}|{c.PlatformDisplayName}", StringComparer.OrdinalIgnoreCase)
+            .Where(g => g.Count() > 1)
+            .ToList();
+
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        foreach (var group in duplicateGroups)
+        {
+            var ordered = group.ToList();
+            var survivorKey = ordered[0].GameKey;
+            foreach (var duplicate in ordered.Skip(1))
+            {
+                using (var updateCmd = connection.CreateCommand())
+                {
+                    updateCmd.Transaction = transaction;
+                    updateCmd.CommandText = "UPDATE FilePathOverrides SET GameKey = $survivorKey WHERE GameKey = $duplicateKey";
+                    updateCmd.Parameters.AddWithValue("$survivorKey", survivorKey);
+                    updateCmd.Parameters.AddWithValue("$duplicateKey", duplicate.GameKey);
+                    updateCmd.ExecuteNonQuery();
+                }
+                using (var deleteCmd = connection.CreateCommand())
+                {
+                    deleteCmd.Transaction = transaction;
+                    deleteCmd.CommandText = "DELETE FROM CustomGames WHERE GameKey = $duplicateKey";
+                    deleteCmd.Parameters.AddWithValue("$duplicateKey", duplicate.GameKey);
+                    deleteCmd.ExecuteNonQuery();
+                }
+            }
+        }
+
+        // Kullanıcı geri bildirimi (ekran görüntüsü — açılır listede AYNI "Famicom Wars ...
+        // Rev 0B" kartı iki kez): yukarıdaki GameKey birleştirmesi, iki "kopya" oyunun
+        // YANLIŞLIKLA aynı dosyayı ayrı ayrı taşıdığı durumda (GameKey, TargetVersionRawName)
+        // çiftini çakıştırabiliyor — bu da LoadSelectedGameVersions'ın sentetik kart üretiminde
+        // AYNI kartın iki kez görünmesine yol açıyordu. Her (GameKey, TargetVersionRawName)
+        // çifti için sadece EN bilgili satır (Crc32 dolu olan, yoksa en eski OverrideId) kalır.
+        // Sadece yukarıdaki birleştirmenin bir yan etkisi değil, genel bir güvenlik ağı olarak da
+        // her açılışta çalışır (ucuz — FilePathOverrides satır sayısı küçük).
+        DeduplicateFilePathOverrides(connection, transaction);
+
+        transaction.Commit();
+    }
+
+    // Kullanıcı geri bildirimi (ekran görüntüsü — gerçek katalog "Pinball" ile manuel "Pinball"
+    // ayrı satırlarda): "bu 2 pinball'ı birleştirirsem kartlar tek bir yerde toplanacak dimi" —
+    // MainViewModel.FoldCustomGamesIntoMatchingCatalogGames'in bir custom oyunu, aynı başlık+
+    // platforma sahip GERÇEK bir katalog oyununa taşırken kullandığı iki adım. GameKey/GameKey ile
+    // AYNI (GameKey, TargetVersionRawName) çakışması burada da olabileceğinden çağıran ardından
+    // DeduplicateFilePathOverrides'ı da çağırmalı.
+    public static void ReassignFilePathOverrides(string fromGameKey, string toGameKey)
+    {
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "UPDATE FilePathOverrides SET GameKey = $toGameKey WHERE GameKey = $fromGameKey";
+        cmd.Parameters.AddWithValue("$toGameKey", toGameKey);
+        cmd.Parameters.AddWithValue("$fromGameKey", fromGameKey);
+        cmd.ExecuteNonQuery();
+    }
+
+    public static void DeleteCustomGame(string gameKey)
+    {
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM CustomGames WHERE GameKey = $gameKey";
+        cmd.Parameters.AddWithValue("$gameKey", gameKey);
+        cmd.ExecuteNonQuery();
+    }
+
+    // MainViewModel.LinkGameFileToGameAsync'in "tablodan bağla" akışı için — bir dosyayı bir
+    // oyundan (kaynak) çıkarıp başka bir oyuna (hedef, bkz. SaveFilePathOverride) taşırken kaynağın
+    // KENDİ override'ını siler.
+    public static void RemoveFilePathOverride(string gameKey, string filePath)
+    {
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM FilePathOverrides WHERE GameKey = $gameKey AND FilePath = $filePath";
+        cmd.Parameters.AddWithValue("$gameKey", gameKey);
+        cmd.Parameters.AddWithValue("$filePath", filePath);
+        cmd.ExecuteNonQuery();
+    }
+
+    public static int CountFilePathOverrides(string gameKey)
+    {
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT COUNT(*) FROM FilePathOverrides WHERE GameKey = $gameKey";
+        cmd.Parameters.AddWithValue("$gameKey", gameKey);
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    public static void DeduplicateFilePathOverrides()
+    {
+        using var connection = OpenConnection();
+        using var transaction = connection.BeginTransaction();
+        DeduplicateFilePathOverrides(connection, transaction);
+        transaction.Commit();
+    }
+
+    private static void DeduplicateFilePathOverrides(SqliteConnection connection, SqliteTransaction transaction)
+    {
+        var rows = new List<(long OverrideId, string GameKey, string? TargetVersionRawName, bool HasCrc32)>();
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.Transaction = transaction;
+            cmd.CommandText = "SELECT OverrideId, GameKey, TargetVersionRawName, Crc32 FROM FilePathOverrides";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                rows.Add((
+                    reader.GetInt64(0),
+                    reader.GetString(1),
+                    reader.IsDBNull(2) ? null : reader.GetString(2),
+                    !reader.IsDBNull(3) && !string.IsNullOrEmpty(reader.GetString(3))));
+            }
+        }
+
+        var duplicateOverrideIds = rows
+            .GroupBy(r => (r.GameKey, TargetVersionRawName: r.TargetVersionRawName?.ToLowerInvariant()))
+            .Where(g => g.Count() > 1)
+            .SelectMany(g => g.OrderByDescending(r => r.HasCrc32).ThenBy(r => r.OverrideId).Skip(1))
+            .Select(r => r.OverrideId);
+
+        foreach (var overrideId in duplicateOverrideIds)
+        {
+            using var deleteCmd = connection.CreateCommand();
+            deleteCmd.Transaction = transaction;
+            deleteCmd.CommandText = "DELETE FROM FilePathOverrides WHERE OverrideId = $overrideId";
+            deleteCmd.Parameters.AddWithValue("$overrideId", overrideId);
+            deleteCmd.ExecuteNonQuery();
+        }
+    }
+
+    public static void AddCustomGame(CustomGameInfo info)
     {
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO FilePathOverrides (GameKey, FilePath)
-            VALUES ($gameKey, $filePath)
-            ON CONFLICT(GameKey) DO UPDATE SET FilePath = $filePath
+            INSERT INTO CustomGames (GameKey, Title, Platform, PlatformDisplayName)
+            VALUES ($gameKey, $title, $platform, $platformDisplayName)
             """;
-        cmd.Parameters.AddWithValue("$gameKey", gameKey);
-        cmd.Parameters.AddWithValue("$filePath", filePath);
+        cmd.Parameters.AddWithValue("$gameKey", info.GameKey);
+        cmd.Parameters.AddWithValue("$title", info.Title);
+        cmd.Parameters.AddWithValue("$platform", info.Platform);
+        cmd.Parameters.AddWithValue("$platformDisplayName", info.PlatformDisplayName);
         cmd.ExecuteNonQuery();
     }
 
@@ -430,5 +673,45 @@ public static class UserDataService
         using var alterCmd = connection.CreateCommand();
         alterCmd.CommandText = $"ALTER TABLE {tableName} ADD COLUMN {columnName} {columnDefinition}";
         alterCmd.ExecuteNonQuery();
+    }
+
+    // Eski şemada GameKey PRIMARY KEY'di (oyun başına TEK satır) — SQLite'ta bir PRIMARY KEY'i
+    // ALTER TABLE ile kaldırmak mümkün olmadığı için (kullanıcı verisi kaybı riski almadan) tabloyu
+    // yeni şemayla YENİDEN oluşturup TÜM mevcut satırları kopyalıyoruz (idempotent — OverrideId
+    // sütunu zaten varsa hiçbir şey yapmaz, bkz. EnsureColumnExists ile AYNI "bir kere kontrol et"
+    // deseni).
+    private static void EnsureFilePathOverridesAllowMultipleRows(SqliteConnection connection)
+    {
+        using (var checkCmd = connection.CreateCommand())
+        {
+            checkCmd.CommandText = "PRAGMA table_info(FilePathOverrides)";
+            using var reader = checkCmd.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "OverrideId", StringComparison.OrdinalIgnoreCase))
+                    return; // Zaten göç edilmiş.
+            }
+        }
+
+        using var transaction = connection.BeginTransaction();
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.Transaction = transaction;
+            cmd.CommandText = """
+                CREATE TABLE FilePathOverrides_New (
+                    OverrideId INTEGER PRIMARY KEY AUTOINCREMENT,
+                    GameKey TEXT NOT NULL,
+                    FilePath TEXT NOT NULL,
+                    MatchMethod TEXT,
+                    TargetVersionRawName TEXT
+                );
+                INSERT INTO FilePathOverrides_New (GameKey, FilePath, MatchMethod, TargetVersionRawName)
+                SELECT GameKey, FilePath, MatchMethod, TargetVersionRawName FROM FilePathOverrides;
+                DROP TABLE FilePathOverrides;
+                ALTER TABLE FilePathOverrides_New RENAME TO FilePathOverrides;
+                """;
+            cmd.ExecuteNonQuery();
+        }
+        transaction.Commit();
     }
 }

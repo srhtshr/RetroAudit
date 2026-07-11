@@ -55,6 +55,7 @@ public partial class Game : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasBox))]
     [NotifyPropertyChangedFor(nameof(BoxDisplayPath))]
     [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
+    [NotifyPropertyChangedFor(nameof(CanFetchArtwork))]
     private string boxPath = string.Empty;
 
     [ObservableProperty]
@@ -63,6 +64,7 @@ public partial class Game : ObservableObject
     [NotifyPropertyChangedFor(nameof(ClearLogoDisplayPath))]
     [NotifyPropertyChangedFor(nameof(ShowClearLogoArea))]
     [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
+    [NotifyPropertyChangedFor(nameof(CanFetchArtwork))]
     private string screenshotPath = string.Empty;
 
     [ObservableProperty]
@@ -71,6 +73,7 @@ public partial class Game : ObservableObject
     [NotifyPropertyChangedFor(nameof(ClearLogoThumbnailPath))]
     [NotifyPropertyChangedFor(nameof(ShowClearLogoArea))]
     [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
+    [NotifyPropertyChangedFor(nameof(CanFetchArtwork))]
     private string clearLogoPath = string.Empty;
 
     public bool HasBox => !string.IsNullOrWhiteSpace(BoxPath);
@@ -80,6 +83,14 @@ public partial class Game : ObservableObject
     // Detay panelindeki tek Download/Search butonlarının görünürlüğü (kullanıcı isteği:
     // "bütün resimler varsa gösterme indirme ve arama butonunu") — üçünden BİRİ bile eksikse true.
     public bool HasMissingArtwork => !HasBox || !HasClearLogo || !HasScreenshot;
+
+    // Kullanıcı geri bildirimi: "tabloda artwork butonuna tıklayıp indirme yaptıktan sonra artwork
+    // butonu hala sanki resim indirmemişim gibi gözüküyor canlı güncellemiyor" — tablodaki (grid
+    // Actions sütunu) "Görsel Getir" düğmesi eskiden sadece HasArtworkSource'a bağlıydı, indirilip
+    // indirilmediğini hiç yansıtmıyordu. Detay panelindeki AYNI düğme (HasMissingArtwork) zaten
+    // tüm görseller tamamsa gizleniyordu — burada satır düzeni bozulmasın diye gizlemek yerine
+    // devre dışı bırakılıp soluklaşıyor (bkz. MainWindow.xaml grid Actions sütunu).
+    public bool CanFetchArtwork => HasArtworkSource && HasMissingArtwork;
 
     // Detay panelinde gösterilecek gerçek yol — Has* bayrakları (yukarıda) gerçek görselin var
     // olup olmadığını (grid noktaları, "Görsel Getir" gibi yerlerde) yansıtmaya devam eder, bu
@@ -134,6 +145,15 @@ public partial class Game : ObservableObject
     public string Publisher { get; set; } = string.Empty;
     public string GameMode { get; set; } = "Single Player";
     public int MaxPlayers { get; set; } = 1;
+
+    // Kullanıcı isteği: "manuel eklenenlerde oyuncu sayısını otomatik 1 yazıyor" — MaxPlayers==0
+    // zaten "bilinmiyor" anlamına geliyordu (bkz. MainViewModel'in MaxPlayersFilter'ı, 0'ı boş
+    // string'e çeviriyor), ama DataGrid sütunu doğrudan MaxPlayers'a bağlıydı ve 0'ı olduğu gibi
+    // "0" yazardı — bu yüzden Publisher/ReleaseYear'daki AYNI "boş kalsın" deseni burada da: 0 ise
+    // boş, değilse sayı (bkz. Views/MainWindow.xaml MaxPlayersColumn, RetroAudit.Models.Game
+    // BuildCustomGame'de custom oyunlar için MaxPlayers=0 set edilir).
+    public string MaxPlayersDisplay => MaxPlayers > 0 ? MaxPlayers.ToString() : string.Empty;
+
     public string Description { get; set; } = string.Empty;
 
     // LaunchBox'tan gelen ek zenginleştirme alanları (bkz. CatalogDatabaseService.GetGames).
@@ -255,4 +275,17 @@ public partial class Game : ObservableObject
     // MainViewModel.HasLocalFile ile yükleme sırasında bir kere hesaplanır (henüz gerçek bir ROM
     // taraması yok, bkz. o metodun yorumu) — DataGrid'deki "eksik ROM'u ara" sütunu buna bakar.
     public bool HasLocalFile { get; set; }
+
+    // Kullanıcı isteği: "manuel bağlanan kayıtlar detay panelinde ve ana tabloda açıkça 'Manual
+    // Link' rozetiyle gösterilsin" — ROM İçe Aktar'ın Eşleşmeyenler sekmesinden ELLE bağlanmış
+    // (bkz. ManualLinkViewModel, MatchMethods.ManualLink) bir dosyaya sahipse true. Normal
+    // otomatik eşleşmelerden (Tier 1-5) veya "Şu anki yoldan kullan"dan AYRI — CRC doğrulanmış
+    // bir eşleşme gibi SUNULMAMASI gerektiği için ayrı bir bayrak (bkz. MainViewModel.
+    // ApplyManualLinkInfo, HasLocalFile ile aynı yükleme noktalarında dolduruluyor).
+    public bool IsManuallyLinked { get; set; }
+
+    // Doluysa manuel bağlantı BELİRLİ bir sürüme yapılmış (bkz. GameVersion.RawDatName) — boşsa
+    // Game seviyesinde genel bir bağlantı.
+    public string ManualLinkTargetVersionLabel { get; set; } = string.Empty;
+    public bool HasManualLinkTargetVersion => !string.IsNullOrWhiteSpace(ManualLinkTargetVersionLabel);
 }

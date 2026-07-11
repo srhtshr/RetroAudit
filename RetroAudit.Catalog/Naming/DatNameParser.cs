@@ -54,6 +54,9 @@ public static partial class DatNameParser
     [GeneratedRegex(@"^Rev\s*[A-Za-z0-9]+$|^v[\d.]+$", RegexOptions.IgnoreCase)]
     private static partial Regex VersionLabelRegex();
 
+    [GeneratedRegex(@"^Rev\s*([A-Za-z0-9]+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex RevisionTokenRegex();
+
     public static ParsedDatName Parse(string rawName)
     {
         var regions = new List<string>();
@@ -137,6 +140,60 @@ public static partial class DatNameParser
         }
 
         return false;
+    }
+
+    // ContainsExcludedTag ile AYNI mantık ama HANGİ etiketin eşleştiğini de döndürür (null = hiçbiri
+    // eşleşmedi) — RetroAudit (WPF)'nin ROM İçe Aktar penceresindeki "Eşleşmeyenler" listesini
+    // kategoriye göre (Beta/Unl/Proto vb.) gruplayıp toplu seçebilmesi için (bkz.
+    // RomImportService.ScanFolder, RomImportViewModel.ExcludedTagGroups) — kullanıcı isteği: "adam
+    // belki betaları tutmak isticek diğerlerini silmek isticek", yani TEK bir "kasıtlı dışlanan"
+    // bayrağı yetmiyor, hangi etiket olduğu ayrı ayrı seçilebilmeli.
+    public static string? TryGetExcludedTag(string text)
+    {
+        foreach (Match match in ParenGroupRegex().Matches(text))
+        {
+            var content = match.Groups[1].Value.Trim();
+            if (content.Length == 0)
+                continue;
+            var found = ExcludedParenKeywords.FirstOrDefault(keyword => content.Contains(keyword, StringComparison.OrdinalIgnoreCase));
+            if (found is not null)
+                return found;
+        }
+
+        foreach (Match match in BracketGroupRegex().Matches(text))
+        {
+            var content = match.Groups[1].Value.Trim();
+            if (content.Length == 0)
+                continue;
+
+            var code = content.Split(' ', 2)[0];
+            if (ExcludedBracketCodes.Contains(code))
+                return code.ToUpperInvariant();
+        }
+
+        return null;
+    }
+
+    // Gerçek kullanıcı verisiyle doğrulandı (bkz. RomImportService.ResolveCandidate "Tier 3"):
+    // No-Intro bir dönem revizyonları HARFLE ("Rev A", "Rev B") etiketlerken sonradan SAYIYLA
+    // ("Rev 1", "Rev 2") etiketlemeye geçti — aynı revizyon, farklı isim. Eski bir ROM setinden
+    // gelen "Rev A" ile kataloğun kullandığı "Rev 1" karşılaştırılabilsin diye ikisi de bu
+    // metotla aynı kanonik forma indirgeniyor (A/B/C -> 1/2/3). Harf DEĞİLSE (zaten "Rev 1" gibi
+    // sayısal ya da tanınmayan bir biçimse) olduğu gibi döner.
+    public static string? NormalizeVersionLabel(string? label)
+    {
+        if (string.IsNullOrWhiteSpace(label))
+            return null;
+
+        var match = RevisionTokenRegex().Match(label.Trim());
+        if (!match.Success)
+            return label.Trim();
+
+        var token = match.Groups[1].Value;
+        if (token.Length == 1 && char.IsAsciiLetterUpper(char.ToUpperInvariant(token[0])))
+            return $"Rev {char.ToUpperInvariant(token[0]) - 'A' + 1}";
+
+        return $"Rev {token}";
     }
 }
 

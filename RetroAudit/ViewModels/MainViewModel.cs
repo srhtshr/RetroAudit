@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RetroAudit.Catalog.Grouping;
 using RetroAudit.Catalog.Metadata;
+using RetroAudit.Catalog.Naming;
 using RetroAudit.Models;
 using RetroAudit.Services;
 
@@ -275,10 +276,25 @@ public partial class MainViewModel : ObservableObject
         providerDesignMode = _appSettings.ProviderDesignMode;
 
         _allGames = CatalogDatabaseService.GetGames();
+        // Kullanıcı isteği: "unknown değilde manuel bağlamaya yönlendirebilirsin ... aynı yani" —
+        // katalogda hiç karşılığı olmayan, ROM İçe Aktar'ın Eşleşmeyenler sekmesinden "+ Yeni Oyun"
+        // ile önceden oluşturulmuş bağımsız oyunlar (bkz. RegisterNewCustomGame) — Builder her
+        // koşuda RetroAudit.db'yi baştan yazdığı için bunlar AYRI (RetroAuditUserData.db) saklanır.
+        // MergeDuplicateCustomGames: kullanıcı geri bildirimi (aynı başlık iki ayrı satırda) —
+        // RegisterNewCustomGame'deki tekilleştirme kontrolünden ÖNCE yanlışlıkla oluşmuş kayıtları
+        // bir kez birleştirir (bkz. UserDataService.MergeDuplicateCustomGames yorumu).
+        UserDataService.MergeDuplicateCustomGames();
+        _allGames.AddRange(UserDataService.GetAllCustomGames().Select(BuildCustomGame));
+        // Ekran görüntüsü: gerçek katalog "Pinball" ile manuel "Pinball" ayrı satırlarda — "bu 2
+        // pinball'ı birleştirirsem kartlar tek bir yerde toplanacak dimi". Yukarıdaki birleştirme
+        // sadece custom-custom arasındaydı; bu, custom bir oyunu aynı başlık+platforma sahip
+        // GERÇEK bir katalog oyunu VARSA ona taşır (bkz. FoldCustomGamesIntoMatchingCatalogGames).
+        FoldCustomGamesIntoMatchingCatalogGames();
         BuildLocalFileIndex();
         foreach (var game in _allGames)
         {
             game.HasLocalFile = HasLocalFile(game);
+            ApplyManualLinkInfo(game);
             NotifyArtworkDownloaded(game);
         }
         ComputeTopRankBadges();
@@ -392,6 +408,7 @@ public partial class MainViewModel : ObservableObject
         foreach (var game in _allGames)
         {
             game.HasLocalFile = HasLocalFile(game);
+            ApplyManualLinkInfo(game);
         }
         ApplyFilter();
         if (SelectedGame is not null)
@@ -712,10 +729,21 @@ public partial class MainViewModel : ObservableObject
     // (platform sayısı kadar, ~40) ile veriyor.
     private Dictionary<string, HashSet<string>>? _filesByPlatform;
 
-    // Kullanıcının "Şu anki yoldan kullan" ile içe aktardığı ROM'lar — RetroAudit'in kendi
-    // {Platform}\{File} kuralına taşınmadan, kullanıcının kendi arşivindeki orijinal konumundan
-    // kullanılır (bkz. RomImportService/RomImportViewModel). GameKey -> tam dosya yolu.
-    private Dictionary<string, string> _filePathOverrides = new();
+    // Kullanıcının "Şu anki yoldan kullan" ile içe aktardığı VEYA ROM İçe Aktar'ın Eşleşmeyenler
+    // sekmesinden ELLE bir oyuna (isterse belirli bir sürümüne) bağladığı (bkz. ManualLinkViewModel)
+    // ROM'lar — RetroAudit'in kendi {Platform}\{File} kuralına taşınmadan, kullanıcının kendi
+    // arşivindeki orijinal konumundan kullanılır. GameKey -> o oyuna bağlı TÜM override'lar (kullanıcı
+    // geri bildirimi: "sormasın ayrı bir sürüm gibi sürümlerine eklesin" — bir oyunun BİRDEN FAZLA
+    // bağlı dosyası olabilir, biri "genel" (TargetVersionRawName null) diğerleri sürüme özel).
+    private Dictionary<string, List<FilePathOverrideInfo>> _filePathOverrides = new();
+
+    // BAŞLAT butonu/"eksik ROM'u ara" ikonu gibi TEK bir dosya gerektiren yerler için: Game
+    // seviyesindeki GENEL bağlantı (TargetVersionRawName null) varsa o, yoksa listede bulunan
+    // İLK override (hangisi olursa) — hiçbiri yoksa null (standart disk taramasına düşülür).
+    private FilePathOverrideInfo? GetPrimaryOverride(Game game) =>
+        _filePathOverrides.TryGetValue(game.GameKey, out var overrides) && overrides.Count > 0
+            ? overrides.FirstOrDefault(o => string.IsNullOrEmpty(o.TargetVersionRawName)) ?? overrides[0]
+            : null;
 
     // Box/BG/Logo/SS için ayrı ayrı (görünen platform adı -> uzantısız dosya adı -> tam yol)
     // dizinleri — "Görsel Getir" ile indirilen dosyaların koyduğu yer (bkz. ArtworkService.
@@ -824,8 +852,8 @@ public partial class MainViewModel : ObservableObject
     // AppPaths.Games\{PlatformDisplayName}\{File} var mı?
     public bool HasLocalFile(Game game)
     {
-        if (_filePathOverrides.TryGetValue(game.GameKey, out var overridePath))
-            return File.Exists(overridePath);
+        if (GetPrimaryOverride(game) is { } primary)
+            return File.Exists(primary.FilePath);
 
         if (string.IsNullOrWhiteSpace(game.File))
             return false;
@@ -837,9 +865,187 @@ public partial class MainViewModel : ObservableObject
     }
 
     private string GetLocalFilePath(Game game) =>
-        _filePathOverrides.TryGetValue(game.GameKey, out var overridePath)
-            ? overridePath
+        GetPrimaryOverride(game) is { } primary
+            ? primary.FilePath
             : Path.Combine(AppPaths.Games, game.PlatformDisplayName, game.File);
+
+    // Kullanıcı isteği: "manuel bağlanan kayıtlar detay panelinde ve ana tabloda açıkça 'Manual
+    // Link' rozetiyle gösterilsin ve hangi Game/GameVersion'a bağlandığı görülebilsin" — bkz.
+    // Game.IsManuallyLinked/ManualLinkTargetVersionLabel, HasLocalFile ile AYNI yükleme noktalarında
+    // çağrılır (bkz. bu metodun tüm çağıranları). SADECE BAŞLAT'ın kullanacağı (GetPrimaryOverride)
+    // dosya manuel bağlıysa rozet gösterilir — oyunun BAŞKA bir sürümü ayrıca manuel bağlıysa o,
+    // sadece kendi sürüm kartında işaretlenir (bkz. LoadSelectedGameVersions), Game rozetini etkilemez.
+    private void ApplyManualLinkInfo(Game game)
+    {
+        var primary = GetPrimaryOverride(game);
+        if (primary is not null && string.Equals(primary.MatchMethod, MatchMethods.ManualLink, StringComparison.Ordinal))
+        {
+            game.IsManuallyLinked = true;
+            game.ManualLinkTargetVersionLabel = primary.TargetVersionRawName ?? string.Empty;
+        }
+        else
+        {
+            game.IsManuallyLinked = false;
+            game.ManualLinkTargetVersionLabel = string.Empty;
+        }
+    }
+
+    // UserDataService.GetAllCustomGames'ten gelen bir kaydı, katalogdan gelen bir Game ile AYNI
+    // şekilde tabloda/detay panelinde görüntülenebilecek bir Game'e çevirir (bkz. CustomGameInfo
+    // yorumu) — Title/Platform dışındaki tüm alanlar (Yayıncı, Tür, Yıl, kapak...) bilinçli olarak
+    // boş bırakılıyor: Game'in kendi varsayılanları zaten "Unknown"/"-" gösteriyor (bkz.
+    // Game.PublisherDisplay/ReleaseYearDisplay), burada AYRICA doldurmaya gerek yok.
+    private static Game BuildCustomGame(CustomGameInfo info) => new()
+    {
+        GameId = 0,
+        GameKey = info.GameKey,
+        Title = info.Title,
+        Platform = info.Platform,
+        PlatformDisplayName = info.PlatformDisplayName,
+        PlatformLogoPath = CatalogDatabaseService.GetPlatformLogoPath(info.PlatformDisplayName),
+        Version = "Released",
+        // Kullanıcı isteği: "oyuncu sayısını otomatik 1 yazıyor ... boş olmalı manueller için" —
+        // Game.MaxPlayers'ın sınıf varsayılanı 1 (bilinen tek oyunculu oyunlar için), custom
+        // oyunlarda bu YANLIŞ bir bilgi iddiası olurdu; 0 = bilinmiyor (bkz. MaxPlayersDisplay).
+        MaxPlayers = 0,
+    };
+
+    // ManualLinkViewModel'in "+ Yeni Oyun" seçeneği (bkz. ManualLinkViewModel.NewGameSentinelKey)
+    // seçildiğinde RomImportWindow.xaml.cs tarafından çağrılır — kataloktaki HİÇBİR Game'e karşılık
+    // gelmeyen, dosyanın kendi adından türetilmiş bağımsız bir oyun kaydı oluşturur. Bundan sonraki
+    // adım (dosyanın KENDİSİNİ bu yeni oyuna bağlamak) BİLEREK burada YAPILMIYOR — çağıran, döndürülen
+    // Game'i normal RomImportViewModel.CompleteManualLink'e (AYNI SaveFilePathOverride/
+    // MatchMethods.ManualLink çağrısı) geçirir, böylece "yeni oyun oluştur" ile "mevcut oyuna
+    // bağla" TEK bir mekanizmayı paylaşır (kullanıcı isteği: "2 ayrı eşleştirme şekli olmasın").
+    // scannedFolderName ile eşleşen bilinen bir katalog platformu varsa (bkz.
+    // RomImportService.PlatformNameMatchesFolder) onun Platform/PlatformDisplayName'i kullanılır —
+    // böylece yeni oyun de o platformun logosu/gruplamasıyla tutarlı görünür; yoksa klasör adının
+    // kendisi ham platform adı olarak kullanılır.
+    public Game RegisterNewCustomGame(string title, string scannedFolderName)
+    {
+        var matchingPlatformGame = _allGames.FirstOrDefault(g => RomImportService.PlatformNameMatchesFolder(g, scannedFolderName));
+        var platform = matchingPlatformGame?.Platform ?? scannedFolderName;
+        var platformDisplayName = matchingPlatformGame?.PlatformDisplayName ?? scannedFolderName;
+
+        // Kullanıcı isteği: "manuellerdede aynı isimdekileri tek bi yerde toplasın ayrı ayrı
+        // açmasın ... tabloda tek [satır], sürüm kartları ayrı yani" — aynı başlık+platform için
+        // önceden oluşturulmuş bir oyun varsa (custom VEYA GERÇEK katalog oyunu) YENİ bir satır
+        // AÇILMAZ, o oyun geri döndürülür; çağıran (RomImportViewModel.CompleteManualLinkAsync/
+        // ImportUnmatchedFileAsNewGameAsync) yeni dosyayı bu oyunun override'larına EK bir sürüm
+        // kartı olarak ekler (bkz. LoadSelectedGameVersions'daki sentetik kart üretimi, bir GameKey
+        // birden fazla override taşıyabilir). GERÇEK katalog eşleşmesi TERCİH EDİLİR — kapak/tür/
+        // yayıncı gibi tam metadata taşıdığı için custom'un "Unknown" görünümünden daha iyi.
+        var existing = _allGames.FirstOrDefault(g =>
+            string.Equals(g.Title, title, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(g.PlatformDisplayName, platformDisplayName, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null)
+            return existing;
+
+        var info = new CustomGameInfo($"custom:{Guid.NewGuid():N}", title, platform, platformDisplayName);
+        UserDataService.AddCustomGame(info);
+
+        var game = BuildCustomGame(info);
+        _allGames.Add(game);
+        SyncPlatformGameCounts();
+        RebuildPlatformListItems();
+        return game;
+    }
+
+    // Ekran görüntüsü: gerçek katalog "Pinball" (tam metadata) ile daha önce manuel bağlanmış
+    // custom "Pinball" (kapak/tür/yayıncı yok, kırmızı çarpı) ayrı satırlarda — "bu 2 pinball'ı
+    // birleştirirsem kartlar tek bir yerde toplanacak dimi". RegisterNewCustomGame'deki kontrol
+    // BUNDAN SONRAKİ bağlamalar için bu duruma hiç düşülmesini engelliyor; bu metot SADECE o
+    // düzeltmeden ÖNCE (ya da katalog Builder ile yeniden üretilip "Pinball" artık gerçekten
+    // eklendiğinde) oluşmuş custom satırları, aynı başlık+platforma sahip GERÇEK bir katalog
+    // oyunu varsa ona bir kez taşır — custom satır tamamen kaldırılır, dosyası gerçek oyunun
+    // Sürümler listesine (bkz. LoadSelectedGameVersions'daki sentetik kart üretimi) eklenmiş olur.
+    private void FoldCustomGamesIntoMatchingCatalogGames()
+    {
+        var customGames = _allGames.Where(g => g.GameKey.StartsWith("custom:", StringComparison.Ordinal)).ToList();
+        if (customGames.Count == 0)
+            return;
+
+        var catalogGames = _allGames.Where(g => !g.GameKey.StartsWith("custom:", StringComparison.Ordinal)).ToList();
+        var anyFolded = false;
+        foreach (var custom in customGames)
+        {
+            var match = catalogGames.FirstOrDefault(g =>
+                string.Equals(g.Title, custom.Title, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(g.PlatformDisplayName, custom.PlatformDisplayName, StringComparison.OrdinalIgnoreCase));
+            if (match is null)
+                continue;
+
+            UserDataService.ReassignFilePathOverrides(custom.GameKey, match.GameKey);
+            UserDataService.DeleteCustomGame(custom.GameKey);
+            _allGames.Remove(custom);
+            anyFolded = true;
+        }
+
+        if (anyFolded)
+            UserDataService.DeduplicateFilePathOverrides();
+    }
+
+    // Ana tablodaki kapsül (sağ tık) menüsündeki "Bağla" — kullanıcı isteği: "tablodan bağlama
+    // yapmak istediğimde klasörden değil tablodaki oyunların listesinden seçmeli". Bilgisayardan
+    // dosya seçmek YERİNE (eski davranış), bu satırın dosyasını tablodaki BAŞKA bir oyuna taşımak
+    // için ManualLinkWindow'daki AYNI arama kutulu oyun listesi açılır (bkz. MainWindow.xaml.cs) —
+    // ör. yanlışlıkla ayrı kalmış bir custom oyunu gerçek katalog karşılığına elle birleştirmek gibi.
+    public event Action<Game, string>? RequestLinkToGameSelection;
+
+    [RelayCommand]
+    private void RequestLinkToGame(Game game)
+    {
+        if (!HasLocalFile(game))
+        {
+            RequestShowMessage?.Invoke("Bu oyunun bağlanacak bir dosyası yok.");
+            return;
+        }
+        RequestLinkToGameSelection?.Invoke(game, GetLocalFilePath(game));
+    }
+
+    // MainWindow.xaml.cs, ManualLinkWindow'dan "Bağla" ile dönünce çağırır. sourceGame'in dosyası
+    // targetGame'e taşınır: targetGame'e yeni bir override eklenir; sourceGame'in kendi override'ı
+    // (varsa) silinir. sourceGame custom bir oyunsa VE başka hiç dosyası kalmadıysa (bkz.
+    // FoldCustomGamesIntoMatchingCatalogGames ile AYNI mantık) satırın kendisi de kaldırılır —
+    // "birleştirme" gerçekten TEK satırda toplanmış olsun diye. Standart (override'sız, kataloğun
+    // Games\{Platform}\{File} kuralıyla diskte bulunan) bir dosyaysa sourceGame'den DETACH
+    // edilemiyor (fiziksel dosyayı taşımak/silmek kapsam dışı) — bu durumda dosya HER İKİ oyunda da
+    // "sahiplenilmiş" görünür, sourceGame'e dokunulmaz.
+    public async Task LinkGameFileToGameAsync(Game sourceGame, Game targetGame, GameVersion? targetVersion)
+    {
+        var filePath = GetLocalFilePath(sourceGame);
+
+        var sourceOverride = _filePathOverrides.TryGetValue(sourceGame.GameKey, out var sourceOverrides)
+            ? sourceOverrides.FirstOrDefault(o => string.Equals(o.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        var zipEntryName = sourceOverride?.ZipEntryName ?? RomImportService.GetSoleZipEntryName(filePath);
+        string? crc32;
+        try
+        {
+            crc32 = sourceOverride?.Crc32 ?? await Task.Run(() => RomImportService.ComputeCrc32(filePath, zipEntryName));
+        }
+        catch (Exception)
+        {
+            crc32 = null;
+        }
+
+        UserDataService.SaveFilePathOverride(targetGame.GameKey, filePath, MatchMethods.ManualLink, targetVersion?.RawDatName, zipEntryName, crc32);
+
+        if (sourceOverride is not null)
+        {
+            UserDataService.RemoveFilePathOverride(sourceGame.GameKey, filePath);
+
+            if (sourceGame.GameKey.StartsWith("custom:", StringComparison.Ordinal) && UserDataService.CountFilePathOverrides(sourceGame.GameKey) == 0)
+            {
+                UserDataService.DeleteCustomGame(sourceGame.GameKey);
+                _allGames.Remove(sourceGame);
+            }
+        }
+
+        RefreshLibrary();
+        RequestShowMessage?.Invoke($"\"{Path.GetFileName(filePath)}\" -> \"{targetGame.Title}\" oyununa bağlandı.");
+    }
 
     // View katmanı (MainWindow.xaml.cs) bunu dinleyip embedded WebView2 penceresini açıyor —
     // ViewModel doğrudan bir Window tipine bağımlı olmasın diye (bkz. RequestOpenMediaProvider
@@ -908,6 +1114,7 @@ public partial class MainViewModel : ObservableObject
     public void NotifyRomDownloaded(Game game)
     {
         game.HasLocalFile = HasLocalFile(game);
+        ApplyManualLinkInfo(game);
         ApplyFilter();
 
         // Sürüm kartından (SearchRomForVersion) indirilmiş olabilir — Sürümler listesindeki
@@ -1146,13 +1353,61 @@ public partial class MainViewModel : ObservableObject
     // Çöp kutusundan kalıcı silme — RetroAudit.db'nin kendisinden bir satır silmez (Builder zaten
     // bir sonraki koşuda o oyunu yeniden üretir), bunun yerine kalıcı bir dışlama listesine
     // eklenir (bkz. UserDataService/CatalogDatabaseService.ApplyUserData). Onay MainWindow
-    // code-behind'ında bir MessageBox ile alınır (bkz. context menü kablolaması).
-    [RelayCommand]
-    private void PermanentlyDeleteGame(Game game)
+    // code-behind'ında PermanentDeleteConfirmationDialog ile alınır (bkz. context menü kablolaması,
+    // RequestPermanentDeleteConfirmation) — [RelayCommand] YOK, çünkü kalıcı silme her zaman bu
+    // onay penceresinden geçmeli.
+    //
+    // Kullanıcı isteği: "yani rom u resmi vs herşeyiyle silmeli çöp kutusundan temizlediğimde ...
+    // rom box ss vs silinecekleri tikle işaretleyebilmeli kullanıcı" — oyunun kendisi (RetroAudit
+    // kütüphanesinden kaldırma) HER ZAMAN gerçekleşir; deleteRom/deleteBox/deleteScreenshot/
+    // deleteLogo SADECE hangi GERÇEK dosyaların da (Windows Çöp Kutusu'na taşınarak, kalıcı
+    // File.Delete DEĞİL — bkz. RecycleBinService, RomImportService.DeleteSelectedFiles ile AYNI
+    // güvenli yöntem) silineceğini belirler.
+    public void PermanentlyDeleteGame(Game game, bool deleteRom, bool deleteBox, bool deleteScreenshot, bool deleteLogo)
     {
+        foreach (var path in CollectGameFilePaths(game, deleteRom, deleteBox, deleteScreenshot, deleteLogo))
+        {
+            if (File.Exists(path))
+                RecycleBinService.MoveToRecycleBin(path);
+        }
+
         UserDataService.PermanentlyDelete(game.GameKey);
         _allGames.Remove(game);
         ApplyFilter();
+    }
+
+    // PermanentlyDeleteGame'in sildiği dosyaların tam listesi — ROM'lar (kataloktaki her sürüm,
+    // override varsa onun yolu, standart Games\{Platform}\{FileName} kuralı yoksa) + manuel bağlı/
+    // custom oyunların (kataloğun hiç bilmediği) dosyaları + indirilmiş görseller (Box/SS/Logo),
+    // her biri kendi bool parametresiyle devre dışı bırakılabilir (bkz. PermanentDeleteConfirmationDialog).
+    private IEnumerable<string> CollectGameFilePaths(Game game, bool includeRom, bool includeBox, bool includeScreenshot, bool includeLogo)
+    {
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        if (includeRom)
+        {
+            foreach (var version in CatalogDatabaseService.GetVersions(game.GameId, game.GameKey))
+            {
+                var path = ResolveVersionFilePath(game, version);
+                if (path is not null)
+                    paths.Add(path);
+            }
+
+            if (_filePathOverrides.TryGetValue(game.GameKey, out var overrides))
+            {
+                foreach (var o in overrides)
+                    paths.Add(o.FilePath);
+            }
+        }
+
+        if (includeBox && game.HasBox)
+            paths.Add(game.BoxPath);
+        if (includeScreenshot && game.HasScreenshot)
+            paths.Add(game.ScreenshotPath);
+        if (includeLogo && game.HasClearLogo)
+            paths.Add(game.ClearLogoPath);
+
+        return paths;
     }
 
     // --- Kapsül sağ tık menüsü ---
@@ -1191,6 +1446,13 @@ public partial class MainViewModel : ObservableObject
 
     public ObservableCollection<Game> ContextMenuSelection { get; } = new();
 
+    // Kullanıcı geri bildirimi: "çöp kutusunda toplu silmede delete butonu çıkıyor delete perma
+    // butonu çıkmıyor ... delete butonu geri dönüşüm kutusuna gönderiyordu, çöp kutusu içinde
+    // tekrar çıkmasının anlamı yok" — tekil moddaki IsDeleted DataTrigger'ıyla AYNI mantık, toplu
+    // seçim için: seçili TÜM satırlar zaten silinmişse (Recycle Bin görünümündeyken pratikte hep
+    // öyle olur) Sil yerine Geri Yükle + Kalıcı Sil gösterilir (bkz. MainWindow.xaml bulk panel).
+    public bool IsContextMenuSelectionAllDeleted => ContextMenuSelection.Count > 0 && ContextMenuSelection.All(g => g.IsDeleted);
+
     public void OpenContextMenuFor(Game game)
     {
         IsBulkContextMenu = false;
@@ -1208,6 +1470,7 @@ public partial class MainViewModel : ObservableObject
         ContextMenuSelection.Clear();
         foreach (var game in games)
             ContextMenuSelection.Add(game);
+        OnPropertyChanged(nameof(IsContextMenuSelectionAllDeleted));
         IsAddToPlaylistPopupOpen = false;
         IsVersionsPopupOpen = false;
         IsContextMenuOpen = true;
@@ -1241,6 +1504,51 @@ public partial class MainViewModel : ObservableObject
         }
 
         IsContextMenuOpen = false;
+        ApplyFilter();
+    }
+
+    // Tekil moddaki RestoreGame ile AYNI, sadece TÜM seçim için (bkz. IsContextMenuSelectionAllDeleted).
+    [RelayCommand]
+    private void BulkRestore()
+    {
+        foreach (var game in ContextMenuSelection)
+        {
+            UserDataService.RestoreFromRecycleBin(game.GameKey);
+            game.IsDeleted = false;
+        }
+
+        IsContextMenuOpen = false;
+        ApplyFilter();
+    }
+
+    // Tekil moddaki RequestPermanentDeleteConfirmation ile AYNI desen — kalıcı silme geri
+    // alınamaz olduğu için doğrudan gitmiyor, View katmanına (PermanentDeleteConfirmationDialog)
+    // bir istek gönderir. Onaylanırsa MainWindow.xaml.cs BulkPermanentlyDeleteGames'i çağırır.
+    public event Action<IReadOnlyList<Game>>? RequestBulkPermanentDeleteConfirmation;
+
+    [RelayCommand]
+    private void RequestBulkPermanentDelete()
+    {
+        IsContextMenuOpen = false;
+        RequestBulkPermanentDeleteConfirmation?.Invoke(ContextMenuSelection.ToList());
+    }
+
+    // PermanentlyDeleteGame'in toplu hali — ApplyFilter'ı N kez değil bir kez çağırması dışında
+    // aynı mantık (bkz. o metodun yorumu: ROM/görsel silme Windows Çöp Kutusu'na taşıyarak).
+    public void BulkPermanentlyDeleteGames(IReadOnlyList<Game> games, bool deleteRom, bool deleteBox, bool deleteScreenshot, bool deleteLogo)
+    {
+        foreach (var game in games)
+        {
+            foreach (var path in CollectGameFilePaths(game, deleteRom, deleteBox, deleteScreenshot, deleteLogo))
+            {
+                if (File.Exists(path))
+                    RecycleBinService.MoveToRecycleBin(path);
+            }
+
+            UserDataService.PermanentlyDelete(game.GameKey);
+            _allGames.Remove(game);
+        }
+
         ApplyFilter();
     }
 
@@ -1279,8 +1587,8 @@ public partial class MainViewModel : ObservableObject
     }
 
     // Kalıcı silme geri alınamaz olduğu için doğrudan UserDataService'e gitmiyor — View katmanına
-    // (MessageBox onayı) bir istek gönderir. Onaylanırsa MainWindow.xaml.cs
-    // PermanentlyDeleteGameCommand'ı kendisi çalıştırır.
+    // (PermanentDeleteConfirmationDialog) bir istek gönderir. Onaylanırsa MainWindow.xaml.cs
+    // PermanentlyDeleteGame'i seçilen dosya türleriyle kendisi çağırır.
     public event Action<Game>? RequestPermanentDeleteConfirmation;
 
     [RelayCommand]
@@ -1705,11 +2013,65 @@ public partial class MainViewModel : ObservableObject
         SelectedGameVersions.Clear();
         if (SelectedGame is not null)
         {
+            var versions = new List<GameVersion>();
             foreach (var version in CatalogDatabaseService.GetVersions(SelectedGame.GameId, SelectedGame.GameKey))
             {
                 version.IsOwned = IsVersionOwned(SelectedGame, version);
-                SelectedGameVersions.Add(version);
+                version.IsManuallyLinked = _filePathOverrides.TryGetValue(SelectedGame.GameKey, out var overrides)
+                    && overrides.Any(o => string.Equals(o.MatchMethod, MatchMethods.ManualLink, StringComparison.Ordinal)
+                        && string.Equals(o.TargetVersionRawName, version.RawDatName, StringComparison.OrdinalIgnoreCase));
+                versions.Add(version);
             }
+
+            // Kullanıcı isteği: "yeni olsun bi tane ona tıklayınca dosya ismi neyse onunla açsın" —
+            // ManualLinkWindow'da kataloktaki HİÇBİR sürüme zorlanmadan "dosyanın kendi adıyla"
+            // bağlanan kayıtlar (bkz. GameVersion.IsCustomEntry) RetroAudit.db'de hiç yok, yukarıdaki
+            // GetVersions döngüsünde hiç görünmezler — bu yüzden burada AYRICA, TargetVersionRawName'i
+            // yukarıdaki GERÇEK sürümlerin HİÇBİRİYLE eşleşmeyen her override için sentetik bir kart
+            // ekleniyor, aksi halde bu bağlantı hiçbir yerde görünmez kalırdı.
+            if (_filePathOverrides.TryGetValue(SelectedGame.GameKey, out var gameOverrides))
+            {
+                var realRawNames = new HashSet<string>(versions.Select(v => v.RawDatName), StringComparer.OrdinalIgnoreCase);
+                foreach (var custom in gameOverrides.Where(o => !string.IsNullOrEmpty(o.TargetVersionRawName) && !realRawNames.Contains(o.TargetVersionRawName!)))
+                {
+                    // Kullanıcı geri bildirimi: "böyle gözüküyor" (kart boş, sadece ikonlar) — Region/
+                    // VersionLabel/Hashes hiç doldurulmuyordu, kart şablonu bunlara bağlı olduğu için
+                    // boş görünüyordu. RawDatName zaten No-Intro kalıbında (ör. "... (USA) (Rev A)
+                    // (GameCube Edition)") — DatNameParser.Parse ile AYNI mantıkla ayrıştırılıp
+                    // gerçek kartlarla TUTARLI görünmesi sağlanıyor.
+                    var parsed = DatNameParser.Parse(custom.TargetVersionRawName!);
+                    versions.Add(new GameVersion
+                    {
+                        RawDatName = custom.TargetVersionRawName!,
+                        Region = parsed.Regions.Length > 0 ? string.Join(", ", parsed.Regions) : "Manuel",
+                        VersionLabel = parsed.VersionLabel ?? string.Empty,
+                        SourceDat = "manuel",
+                        IsOwned = File.Exists(custom.FilePath),
+                        IsManuallyLinked = true,
+                        IsCustomEntry = true,
+                        // Kullanıcı isteği: "bu eşleşmeyenlerin crc32'sini zip içinden veya dosyadan
+                        // alıp yazamıyormu buraya" — bkz. FilePathOverrideInfo.Crc32 (MainViewModel.
+                        // LinkFile / RomImportViewModel.CompleteManualLinkAsync/
+                        // ImportUnmatchedFileAsNewGameAsync tarafından önceden hesaplanıp kaydedilir).
+                        Hashes = new List<GameHash> { new() { FileName = Path.GetFileName(custom.FilePath), Crc32 = custom.Crc32 ?? string.Empty } },
+                    });
+
+                    // Kullanıcı geri bildirimi: "gözükmüyor crc32 leri tekrar taradım dosyayı" — bu
+                    // CRC32 desteğinden ÖNCE kaydedilmiş eski manuel bağlantılarda Crc32 hiç
+                    // yazılmamıştı; klasörü yeniden taramak bunu geriye dönük düzeltmiyor (Eşleşmeyenler
+                    // taraması FilePathOverrides'tan tamamen bağımsız). Kart ilk açıldığında (Crc32 boş
+                    // + dosya hâlâ diskteyse) arka planda BİR KEZ hesaplanıp kalıcı olarak kaydedilir.
+                    if (string.IsNullOrEmpty(custom.Crc32) && File.Exists(custom.FilePath))
+                        _ = BackfillMissingCrc32Async(SelectedGame.GameKey, custom);
+                }
+            }
+
+            // Kullanıcı isteği: "oynamaya hazır olan versiyonlar kart listesinde her zaman üstte
+            // gözüksün" — OrderByDescending KARARLI (stable) bir sıralama, yani sahip olunan/olunmayan
+            // gruplarının KENDİ İÇİNDEKİ sıra (katalogdan geldiği sıra, ya da manuel eklenenler en
+            // sonda) korunur, sadece "sahip olunanlar" bloğu başa taşınır.
+            foreach (var version in versions.OrderByDescending(v => v.IsOwned))
+                SelectedGameVersions.Add(version);
         }
 
         // Sürümler (Region) artık tek kart gösteriyor (kullanıcı isteği: "sürümlerde tek kart
@@ -1719,6 +2081,36 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(OtherVersionCards));
         OnPropertyChanged(nameof(SingleVersionCard));
         IsVersionCardMenuOpen = false;
+    }
+
+    // Bkz. LoadSelectedGameVersions'daki çağrı yorumu. Eski kayıtlarda ZipEntryName de hiç
+    // kaydedilmemiş olabilir (bu alan Crc32 ile AYNI anda eklendi) — LinkFile ile AYNI mantıkla,
+    // dosya TEK girdili bir zip'se o girdi otomatik bulunur. Task.Run: PS2/PS3 boyutundaki
+    // dosyalarda UI donmasın diye.
+    private async Task BackfillMissingCrc32Async(string gameKey, FilePathOverrideInfo overrideInfo)
+    {
+        var zipEntryName = overrideInfo.ZipEntryName ?? RomImportService.GetSoleZipEntryName(overrideInfo.FilePath);
+        string crc32;
+        try
+        {
+            crc32 = await Task.Run(() => RomImportService.ComputeCrc32(overrideInfo.FilePath, zipEntryName));
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        UserDataService.SaveFilePathOverride(gameKey, overrideInfo.FilePath, overrideInfo.MatchMethod, overrideInfo.TargetVersionRawName, zipEntryName, crc32);
+
+        if (_filePathOverrides.TryGetValue(gameKey, out var overrides))
+        {
+            var index = overrides.IndexOf(overrideInfo);
+            if (index >= 0)
+                overrides[index] = overrideInfo with { ZipEntryName = zipEntryName, Crc32 = crc32 };
+        }
+
+        if (SelectedGame?.GameKey == gameKey)
+            LoadSelectedGameVersions();
     }
 
     // Sürümler (Region) tek-kart alanı: o an gösterilen tek sürüm + birden fazlaysa "▾" ile
@@ -1808,16 +2200,30 @@ public partial class MainViewModel : ObservableObject
     // birini içeriyorsa. Eşleşme yoksa null.
     private string? ResolveVersionFilePath(Game game, GameVersion version)
     {
-        if (_filePathOverrides.TryGetValue(game.GameKey, out var overridePath))
+        if (_filePathOverrides.TryGetValue(game.GameKey, out var overrides))
         {
-            if (string.Equals(Path.GetExtension(overridePath), ".zip", StringComparison.OrdinalIgnoreCase))
+            // Kullanıcı isteği: "istenirse GameVersion seviyesinde de" manuel bağlanabilsin, "sormasın
+            // ayrı bir sürüm gibi sürümlerine eklesin" — bu sürüme ÖZEL bir override varsa (bkz.
+            // ManualLinkViewModel, FilePathOverrideInfo.TargetVersionRawName), hash/dosya adı hiç
+            // uyuşmasa bile (zaten bu yüzden otomatik eşleşmemişti) kullanıcının kendi elle onayı
+            // SADECE o sürüm için "sahip olunan" sayılır. Diğer TÜM sürümler kendi override'ı yoksa
+            // aşağıdaki GENEL override/disk taramasına düşer, birbirlerini ETKİLEMEZLER.
+            var versionSpecific = overrides.FirstOrDefault(o => string.Equals(o.TargetVersionRawName, version.RawDatName, StringComparison.OrdinalIgnoreCase));
+            if (versionSpecific is not null)
+                return versionSpecific.FilePath;
+
+            var general = overrides.FirstOrDefault(o => string.IsNullOrEmpty(o.TargetVersionRawName));
+            if (general is not null)
             {
-                if (ZipContainsAnyHashFile(overridePath, version.Hashes))
-                    return overridePath;
-            }
-            else if (version.Hashes.Any(h => string.Equals(h.FileName, Path.GetFileName(overridePath), StringComparison.OrdinalIgnoreCase)))
-            {
-                return overridePath;
+                if (string.Equals(Path.GetExtension(general.FilePath), ".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (ZipContainsAnyHashFile(general.FilePath, version.Hashes))
+                        return general.FilePath;
+                }
+                else if (version.Hashes.Any(h => string.Equals(h.FileName, Path.GetFileName(general.FilePath), StringComparison.OrdinalIgnoreCase)))
+                {
+                    return general.FilePath;
+                }
             }
         }
 
@@ -1964,6 +2370,7 @@ public partial class MainViewModel : ObservableObject
             // önizlemeleri) da yeniden hesaplanmalı — aksi halde ör. USA'ya geçince Japan sürümünün
             // eski medya/ROM eşleşmesi bir süre daha ekranda kalırdı.
             game.HasLocalFile = HasLocalFile(game);
+            ApplyManualLinkInfo(game);
             NotifyArtworkDownloaded(game);
         }
     }

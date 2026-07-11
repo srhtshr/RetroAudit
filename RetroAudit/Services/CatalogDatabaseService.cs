@@ -24,6 +24,10 @@ public static class CatalogDatabaseService
         return File.Exists(path) ? path : string.Empty;
     }
 
+    // MainViewModel.RegisterNewCustomGame'in (kataloktan gelmeyen, elle oluşturulan bir oyun için)
+    // AYNI logo çözümlemesini kullanabilmesi için ResolveLogoPath'in genel erişilebilir hali.
+    public static string GetPlatformLogoPath(string displayName) => ResolveLogoPath(displayName);
+
     // "PC Engine CD - TurboGrafx-CD" kullanıcı kararıyla programdan tamamen çıkarıldı (temel
     // "PC Engine - TurboGrafx-16" yeterli kabul edildi, ikisi kafa karıştırıyordu). RetroAudit.db
     // önceden üretilmiş bir dosya olduğu için (bkz. sınıf yorumu) Builder'ı yeniden çalıştırmadan
@@ -279,6 +283,118 @@ public static class CatalogDatabaseService
     // "Görsel Getir" komutu için: bir oyunun Builder'da önceden çözülmüş görsel varlık dosya
     // adları (bkz. ArtworkAssets, LaunchBoxMetadataReader.GetArtwork). Type -> FileName;
     // MainViewModel bu FileName'i bir indirme URL'sine çevirip diske kaydeder.
+    // GameId -> o oyunun TÜM sürüm/dump varyantlarının (FileName, Crc32) çiftleri (sadece tercih
+    // edilen sürümün değil — bkz. RomImportService.ScanFolder). Kullanıcı geri bildirimi 1: "İçe
+    // Aktar, sadece USA/tercih edilen sürümün dosya adını tanıyor, Europe/Japan dump'ları
+    // eşleşmiyor" — Games.File (bkz. GetGames) sadece TEK bir (tercih edilen) dosya adı taşıdığı
+    // için, toplu eşleştirme öncesi TÜM GameHashes satırlarını tek seferde (67 binin üzerinde oyun
+    // için ayrı ayrı sorgu atmadan) çekmek için bu bulk metot eklendi. Kullanıcı geri bildirimi 2:
+    // dosya adı DAT revizyonları arasında değişebiliyor (ör. "Rev A" -> "Rev 1") ama İÇERİK
+    // (CRC32) aynı kalıyor — Crc32 de aynı sorguda döndürülüyor ki RomImportService dosya adı
+    // eşleşmezse İÇERİĞE göre de bir deneme yapabilsin (bkz. RomImportService.BuildCandidatesByFile).
+    public static Dictionary<int, List<(string FileName, string Crc32)>> GetAllVersionRecordsByGame()
+    {
+        var result = new Dictionary<int, List<(string FileName, string Crc32)>>();
+        if (!DatabaseExists)
+            return result;
+
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT gv.GameId, gh.FileName, gh.Crc32
+            FROM GameVersions gv
+            JOIN GameHashes gh ON gh.GameVersionId = gv.GameVersionId
+            """;
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var gameId = reader.GetInt32(0);
+            if (!result.TryGetValue(gameId, out var list))
+            {
+                list = new List<(string, string)>();
+                result[gameId] = list;
+            }
+            list.Add((reader.GetString(1), reader.GetString(2)));
+        }
+        return result;
+    }
+
+    // BEŞİNCİ eşleştirme katmanı (bkz. RomImportService.ResolveCandidate "Tier 5") için: LaunchBox'ın
+    // AlternateNames'i (bölgesel/yeniden isimlendirilmiş sürümler — ör. "Kage" (Japan) = "Shadow of
+    // the Ninja" (USA) — DAT bunları AYRI Game kayıtları olarak tutar, sadece LaunchBox bu bağlantıyı
+    // bilir). Gerçek veriyle doğrulandı: doğru katalogda (proje kökü RetroAudit.db) 138 "başlık hiç
+    // tutmuyor" dosyasından 81'i TEK bir Game'e, 70'i sürüm seviyesinde de kesin eşleşiyor.
+    public static Dictionary<int, List<string>> GetAllAlternateNames()
+    {
+        var result = new Dictionary<int, List<string>>();
+        if (!DatabaseExists)
+            return result;
+
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT GameId, Name FROM AlternateNames";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var gameId = reader.GetInt32(0);
+            if (!result.TryGetValue(gameId, out var list))
+            {
+                list = new List<string>();
+                result[gameId] = list;
+            }
+            list.Add(reader.GetString(1));
+        }
+        return result;
+    }
+
+    // Kullanıcı geri bildirimi: "eşleşmeyenlerden 447'si aslında normal oyun, sadece CRC/dosya adı
+    // tutmuyor" (gerçek CSV verisiyle doğrulandı: %55'i başlık+bölge+revizyon eşleşiyor ama farklı
+    // dump nesli) — RomImportService'in ÜÇÜNCÜ eşleştirme katmanı (bkz. RomImportService.
+    // ResolveCandidate "Tier 3") için, her GameVersion'ın bölge(leri)/revizyon etiketi VE o
+    // sürüme ait TÜM dosya adları tek seferde (67 bin oyun için ayrı sorgu atmadan) çekiliyor.
+    // GetAllVersionRecordsByGame'den (Tier 2, CRC32) BİLEREK ayrı — o metodun dönüş şekli
+    // (FileName, Crc32) çiftleri, bunun ihtiyacı (bölge/etiket) farklı, birleştirmek gereksiz
+    // karmaşıklık katardı.
+    public static Dictionary<int, List<CatalogVersionRecord>> GetAllVersionDetailsByGame()
+    {
+        var result = new Dictionary<int, List<CatalogVersionRecord>>();
+        if (!DatabaseExists)
+            return result;
+
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT gv.GameId, gv.GameVersionId, gv.AllRegionsRaw, gv.VersionLabel, gv.RawDatName, gh.FileName
+            FROM GameVersions gv
+            JOIN GameHashes gh ON gh.GameVersionId = gv.GameVersionId
+            """;
+        using var reader = cmd.ExecuteReader();
+        var recordsByVersionId = new Dictionary<int, CatalogVersionRecord>();
+        while (reader.Read())
+        {
+            var gameId = reader.GetInt32(0);
+            var versionId = reader.GetInt32(1);
+            var allRegionsRaw = reader.IsDBNull(2) ? null : reader.GetString(2);
+            var versionLabel = reader.IsDBNull(3) ? null : reader.GetString(3);
+            var rawDatName = reader.GetString(4);
+            var fileName = reader.GetString(5);
+
+            if (!recordsByVersionId.TryGetValue(versionId, out var record))
+            {
+                record = new CatalogVersionRecord(allRegionsRaw, versionLabel, rawDatName, new List<string>());
+                recordsByVersionId[versionId] = record;
+                if (!result.TryGetValue(gameId, out var list))
+                {
+                    list = new List<CatalogVersionRecord>();
+                    result[gameId] = list;
+                }
+                list.Add(record);
+            }
+            record.FileNames.Add(fileName);
+        }
+        return result;
+    }
+
     public static Dictionary<string, string> GetArtworkAssets(int gameId)
     {
         var result = new Dictionary<string, string>();

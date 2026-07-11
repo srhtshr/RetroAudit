@@ -7,6 +7,10 @@
     <Window.Resources>
         <conv:EnumToBoolConverter x:Key="EnumToBool" />
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <!-- Kullanıcı isteği: "filtreleme butonu ekle bide seçili olanları sadece göstermek için
+             toggle olsun" — Eşleşmeyenler DataGrid'i doğrudan Unmatched'a değil bu view'a bağlanır;
+             Filter kod-arkasında (RomImportWindow.xaml.cs) ayarlanıyor. -->
+        <CollectionViewSource x:Key="UnmatchedView" Source="{Binding Unmatched}" />
     </Window.Resources>
 
     <Grid Background="{StaticResource Brush.Background.Base}">
@@ -35,26 +39,174 @@
             </Grid>
         </StackPanel>
 
-        <!-- Eşleşme sonuçları -->
-        <DataGrid Grid.Row="1" Margin="16,0,16,10" ItemsSource="{Binding Matches}"
-                  AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False">
-            <DataGrid.Columns>
-                <DataGridCheckBoxColumn Header="" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="36" />
-                <DataGridTemplateColumn Header="" Width="32">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="14"
-                                       Foreground="{StaticResource Brush.Accent.SelectedBorder}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center"
-                                       Visibility="{Binding IsImported, Converter={StaticResource BoolToVisibility}}" />
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-                <DataGridTextColumn Header="Başlık" Binding="{Binding Game.Title}" Width="2*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Platform" Binding="{Binding Game.PlatformDisplayName}" Width="1.3*" IsReadOnly="True" />
-                <DataGridTextColumn Header="Kaynak Yol" Binding="{Binding SourcePath}" Width="3*" IsReadOnly="True" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <!-- Eşleşme sonuçları — kullanıcı isteği: "önce eklenmeyenleri tespit etmek lazım", artık
+             eşleşenler ve (sebebiyle birlikte) eşleşmeyenler ayrı sekmelerde gösteriliyor. -->
+        <TabControl Grid.Row="1" Margin="16,0,16,10">
+            <TabItem>
+                <!-- Kullanıcı isteği: "buraya icon koy x iconu ve onay iconu programdakilerden" —
+                     &#xE73E; (onay, Brush.Status.Ok) ve &#xE711; (X, Brush.Status.Missing) —
+                     SettingsWindow'daki "Hazır"/MainWindow'daki "eksik" rozetleriyle AYNI glifler,
+                     yeni bir ikon uydurulmadı. -->
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                   Foreground="{StaticResource Brush.Status.Ok}"
+                                   VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <TextBlock Text="{Binding Matches.Count, StringFormat='Eşleşenler ({0})'}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </TabItem.Header>
+                <DataGrid ItemsSource="{Binding Matches}"
+                          AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False">
+                    <DataGrid.Columns>
+                        <DataGridCheckBoxColumn Header="" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="36" />
+                        <DataGridTemplateColumn Header="" Width="32">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                               Foreground="{StaticResource Brush.Accent.SelectedBorder}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Visibility="{Binding IsImported, Converter={StaticResource BoolToVisibility}}" />
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
+                        <DataGridTextColumn Header="Başlık" Binding="{Binding Game.Title}" Width="2*" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Platform" Binding="{Binding Game.PlatformDisplayName}" Width="1.3*" IsReadOnly="True" />
+                        <!-- Kullanıcı isteği: "eşleşme türünü ... sakla veya logla; CRC doğrulanmış
+                             gibi gösterme" — hangi katmanla eşleştiği (Dosya Adı/CRC32/Başlık+Bölge/
+                             Normalize Edilmiş Başlık) her satırda açıkça görünür. -->
+                        <DataGridTextColumn Header="Eşleşme Türü" Binding="{Binding MatchMethod}" Width="1.6*" IsReadOnly="True" />
+                        <DataGridTextColumn Header="Kaynak Yol" Binding="{Binding SourcePath}" Width="2.4*" IsReadOnly="True" />
+                    </DataGrid.Columns>
+                </DataGrid>
+            </TabItem>
+            <TabItem>
+                <TabItem.Header>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE711;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                                   Foreground="{StaticResource Brush.Status.Missing}"
+                                   VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <TextBlock Text="{Binding Unmatched.Count, StringFormat='Eşleşmeyenler ({0})'}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </TabItem.Header>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <!-- Kullanıcı isteği: "tıklamalı seçenekli yap onları seçili olanları silsin" —
+                         Matches grid'indeki IsSelected onay kutusuyla AYNI desen. Hiçbir satır
+                         taramada otomatik işaretli GELMİYOR (bkz. RomImportService.ScanFolder) —
+                         kullanıcı ya tek tek işaretler ya da aşağıdaki kategori butonlarını kullanır. -->
+                    <DataGrid Grid.Row="0" ItemsSource="{Binding Source={StaticResource UnmatchedView}}"
+                              AutoGenerateColumns="False" CanUserAddRows="False" IsReadOnly="False">
+                        <DataGrid.Columns>
+                            <DataGridCheckBoxColumn Header="" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="36" />
+                            <DataGridTextColumn Header="Dosya Adı" Binding="{Binding FileName}" Width="2*" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Sebep" Binding="{Binding Reason}" Width="2.5*" IsReadOnly="True" />
+                            <DataGridTextColumn Header="Kaynak Yol" Binding="{Binding SourcePath}" Width="2.5*" IsReadOnly="True" />
+                            <!-- Kullanıcı isteği: "eşleşmese bile açabilmeli bi yerden" — kataloğun
+                                 bilmediği bölge/revizyon olsa bile kullanıcı dosyayı elle bir oyuna
+                                 (isterse belirli bir sürümüne) bağlayabilsin (bkz. ManualLinkWindow). -->
+                            <DataGridTemplateColumn Header="" Width="90">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Button Content="Bir Oyuna Bağla" Padding="6,3" FontSize="11"
+                                                Command="{Binding DataContext.ManualLinkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <Grid Grid.Row="1" Margin="0,8,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Kullanıcı isteği: "sağdakiler soldakilerden sildikçe sola geliyor o
+                             olmasın sağa sabitle onları" — kategori butonları (sayısı taramaya göre
+                             değişken, silindikçe azalır) ve sabit eylem butonları (Hepsini Seç/Hepsi/
+                             Sil/Dışa Aktar) artık AYNI WrapPanel'de değil; iki ayrı sütun (* / Auto),
+                             sağ sütun HER ZAMAN sağa yaslı sabit kalıyor, sol taraftaki kategori
+                             butonu sayısından bağımsız. -->
+                        <Grid Grid.Row="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Kullanıcı isteği: "solda seçilenleri sil in olduğu kısımda onları
+                                 seçebileceğimiz bişey yok tıklayınca betaları işaretlesin mesela ...
+                                 adam belki betaları tutmak isticek diğerlerini silmek isticek" — o
+                                 taramada GERÇEKTEN görülen etiketlerden, kaç dosyayı etkileyeceği
+                                 sayısıyla birlikte (bkz. RomImportViewModel.ExcludedTagGroups,
+                                 kullanıcı isteği: "sayıları yazarsa daha iyi olur") veri odaklı
+                                 üretilen hızlı-seçim butonları; hiçbiri sabit/hardcoded değil,
+                                 taramada "Hack" yoksa "Hack" butonu da çıkmaz. -->
+                            <ItemsControl Grid.Column="0" ItemsSource="{Binding ExcludedTagGroups}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <!-- Kullanıcı isteği: "seçili olan butonlar belli olsun" —
+                                             IsActive (bu etiketin TÜM satırları şu an işaretli mi,
+                                             bkz. RomImportViewModel.OnUnmatchedItemPropertyChanged)
+                                             true olunca DataGrid'deki seçili satır rengiyle AYNI
+                                             vurgu (Brush.Accent.Selected/SelectedBorder) uygulanıyor. -->
+                                        <Button Content="{Binding Label}" Margin="0,0,4,4" Padding="8,3"
+                                                Command="{Binding DataContext.SelectByTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                CommandParameter="{Binding Tag}">
+                                            <Button.Style>
+                                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsActive}" Value="True">
+                                                            <Setter Property="Background" Value="{StaticResource Brush.Accent.Selected}" />
+                                                            <Setter Property="BorderBrush" Value="{StaticResource Brush.Accent.SelectedBorder}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Button.Style>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <WrapPanel Grid.Column="1" HorizontalAlignment="Right">
+                                <Button Content="{Binding ToggleSelectAllUnmatchedLabel}" Margin="2,0,4,4" Padding="8,3"
+                                        Command="{Binding ToggleSelectAllUnmatchedCommand}" />
+                                <!-- Kullanıcı isteği: "filtreleme butonu ekle bide seçili olanları sadece
+                                     göstermek için toggle olsun oda" — MainWindow'daki "Released"/"Junk"
+                                     filtre ToggleButton'larıyla AYNI desen (temanın kendi ToggleButton
+                                     stili, ObsidianDark.xaml). -->
+                                <ToggleButton Content="{Binding ShowOnlySelectedUnmatchedLabel}" IsChecked="{Binding ShowOnlySelectedUnmatched}"
+                                              Margin="0,0,10,4" Padding="8,3"
+                                              ToolTip="Sadece işaretli satırları göster" />
+                                <!-- Kullanıcı isteği: "Sil in yanına çöp kutusu işareti mi koyalım" —
+                                     metin yerine MainWindow/SettingsWindow'daki "Kaldır" butonlarıyla AYNI
+                                     çöp kutusu glifi (&#xE74D;, Segoe MDL2 Assets) + ToolTip, yer kazanmak için. -->
+                                <Button Width="30" Height="30" Padding="0" Margin="0,0,4,4" ToolTip="Seçilenleri Çöp Kutusuna Taşı"
+                                        Command="{Binding RequestDeleteSelectedUnmatchedCommand}">
+                                    <TextBlock Text="&#xE74D;" FontFamily="Segoe MDL2 Assets" FontSize="14"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Button>
+                                <Button Content="Dışa Aktar (CSV)" Margin="0,0,0,4" Padding="8,3"
+                                        Command="{Binding ExportUnmatchedCommand}" />
+                            </WrapPanel>
+                        </Grid>
+
+                        <!-- Kullanıcı isteği: "seçilenlerin altında sayıları yazarsa daha iyi olur" —
+                             Sil butonunun altında, canlı güncellenen toplam seçili sayısı. -->
+                        <TextBlock Grid.Row="1" HorizontalAlignment="Right"
+                                   Text="{Binding SelectedUnmatchedCount, StringFormat='{}{0} dosya seçili'}"
+                                   Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" />
+                    </Grid>
+                </Grid>
+            </TabItem>
+        </TabControl>
 
         <!-- Mod seçimi + içe aktarma -->
         <Border Grid.Row="2" Background="{StaticResource Brush.Background.Panel}"
@@ -80,10 +232,21 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Text="{Binding ProgressText}" VerticalAlignment="Center"
                                Foreground="{StaticResource Brush.Text.Secondary}" />
-                    <Button Grid.Column="1" Content="İçe Aktar" Width="110" Style="{StaticResource LaunchButton}"
+                    <!-- Kullanıcı isteği: "eşleşmeyenler sekmesine geçmeden seçim yapabilecek ...
+                         içe aktarın yanında, seçiliyse eşleşmeyenleri aktaracak değilse aktarmıcak" —
+                         Eşleşmeyenler'e hiç geçmeden, TEK bir İçe Aktar tıklamasıyla katalogla
+                         eşleşenlerle BİRLİKTE, gerçekten katalogda karşılığı olmayan (Beta/Unl/Proto
+                         gibi bilerek dışlananlar HARİÇ, bkz. UnmatchedRomFile.IsIntentionallyExcluded)
+                         dosyalar da kendi adlarıyla bağımsız birer oyun olarak eklenir (bkz.
+                         RomImportViewModel.ImportAsync — "+ Yeni Oyun" ile AYNI mekanizma). -->
+                    <CheckBox Grid.Column="1" Content="Eşleşmeyenleri de aktar" VerticalAlignment="Center" Margin="0,0,14,0"
+                              IsChecked="{Binding ImportUnmatchedAsNewGames}"
+                              ToolTip="Katalogda hiçbir karşılığı olmayan dosyaları, kendi adlarıyla bağımsız birer oyun olarak ekler (Beta/Unlicensed/Prototip gibi bilerek dışlananlar hariç)" />
+                    <Button Grid.Column="2" Content="İçe Aktar" Width="110" Style="{StaticResource LaunchButton}"
                             Command="{Binding ImportCommand}" IsEnabled="{Binding CanImport}" />
                 </Grid>
             </Grid>

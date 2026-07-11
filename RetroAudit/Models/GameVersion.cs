@@ -30,4 +30,17 @@ public class GameVersion
     // CatalogDatabaseService.GetVersions'ın döndürdüğü ham veriden bağımsız, MainViewModel tarafından
     // yükleme sırasında doldurulur.
     public bool IsOwned { get; set; }
+
+    // Kullanıcı isteği: "GameVersion seviyesinde de manuel bağlanabilsin ... hangi GameVersion'a
+    // bağlandığı görülebilsin" — IsOwned=true'nun SEBEBİNİN hash/dosya adı eşleşmesi mi yoksa
+    // kullanıcının elle onayı mı olduğunu ayırt eder (bkz. MainViewModel.LoadSelectedGameVersions) —
+    // CRC doğrulanmış bir sahiplik gibi SUNULMAMASI için ayrı bir rozet burada da gerekiyor.
+    public bool IsManuallyLinked { get; set; }
+
+    // Kullanıcı isteği: "yeni olsun bi tane ona tıklayınca dosya ismi neyse onunla açsın" — bu
+    // RetroAudit.db'den gelen GERÇEK bir GameVersion DEĞİL, ManualLinkViewModel'in kataloktaki hiçbir
+    // sürümü zorlamadan "dosyanın kendi adıyla" bağlanabilmesi için ürettiği SENTETİK bir seçenek
+    // (bkz. ManualLinkWindow.xaml — listede ayrı stille gösterilir). Sadece o pencerede kullanılır,
+    // gerçek Sürümler panelinde ASLA görünmez.
+    public bool IsCustomEntry { get; set; }
 }

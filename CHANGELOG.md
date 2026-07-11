@@ -2,6 +2,23 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.25] - 2026-07-11
+
+### Added
+- **Manuel Bağlama / Standalone Oyunlar**: Kataloğun hiçbir sürümüyle eşleşmeyen ROM'lar artık tek bir mekanizmadan geçiyor — ROM İçe Aktar'ın Eşleşmeyenler sekmesindeki "Bir Oyuna Bağla" penceresine "+ Yeni Oyun" seçeneği eklendi (varsayılan seçili), dosyanın kendi adından türetilen bağımsız bir oyun oluşturup katalogdaki hiçbir Game'e karşılık gelmeden kütüphaneye ekliyor. Ana "İçe Aktar" düğmesinin yanına eklenen "Eşleşmeyenleri de aktar" onay kutusu, bilerek dışlanan (Beta/Unlicensed/Prototip) dosyalar hariç, gerçekten katalogda karşılığı olmayanları tek tıkla aynı şekilde içe aktarıyor.
+- **Ana Tablodan Bağlama**: Kapsül (sağ tık) menüsüne "Bağla" eklendi — artık bilgisayardan dosya seçmek yerine tablodaki başka bir oyunu arayıp seçebiliyorsunuz; seçili satırın dosyası o oyuna yeni bir sürüm kartı olarak taşınıyor, kaynak satır custom bir kayıtsa ve başka dosyası kalmadıysa tablodan tamamen kayboluyor.
+- **Manuel Bağlantılarda CRC32**: Manuel/standalone bağlanan dosyaların CRC32'si (zip ise doğru girdiden) arka planda hesaplanıp Sürümler kartında gösteriliyor; bu özellikten önce bağlanmış eski kayıtlar da ilgili oyun bir kez açıldığında otomatik olarak tamamlanıyor.
+- **Kalıcı Silmede Dosya Temizliği**: "Kalıcı Sil" artık sadece kütüphaneden kaldırmıyor — hangi dosya türlerinin (ROM/Box/SS/Logo) de silineceğini seçebileceğiniz bir onay penceresi açılıyor, işaretli dosyalar Windows Çöp Kutusu'na taşınıyor (kalıcı silme değil). Çöp Kutusu'nda çoklu seçimle de Restore/Delete Perm. yapılabiliyor.
+
+### Changed
+- **Aynı İsimli Oyunların Birleştirilmesi**: Aynı başlık+platforma sahip birden fazla manuel/custom kayıt (ya da bir custom kayıt ile aynı isimdeki gerçek katalog oyunu) artık ayrı satırlarda değil, tek satırda ve tek Sürümler listesinde toplanıyor — bundan sonraki bağlamalar için otomatik önleniyor, önceden oluşmuş kopyalar bir sonraki açılışta otomatik birleştiriliyor.
+- **Çöp Kutusu Sağ Tık Menüsü**: Silinmiş bir oyun için artık sadece Restore (ayrı bir "geri al" ikonuyla) ve Delete Perm. gösteriliyor; Edit/Versions/Folder/Bağla/Re-match/Artwork/Playlist gibi o bağlamda anlamsız eylemler gizlendi.
+- **Manuel Bağlananlarda Oyuncu Sayısı**: Standalone/custom oyunlarda bilinmeyen "1 Oyuncu" varsayımı yerine boş gösteriliyor (Yayıncı/Yıl'daki gibi).
+
+### Fixed
+- **ROM İçe Aktar Kapatma Sonrası Minimize**: ROM İçe Aktar penceresi X ile kapatıldığında ana pencerenin arkaya düşmesi/simge durumuna küçülmesi hatası giderildi (Ayarlar penceresinde daha önce çözülen aynı sorun).
+- **"Görsel Getir" Butonu Canlı Güncellenmiyordu**: Tablodaki Görsel Getir düğmesi indirme tamamlandıktan sonra hâlâ "indirilmemiş" gibi görünüyordu — artık tüm görseller mevcutsa buton anında soluklaşıp devre dışı kalıyor.
+
 ## [0.24] - 2026-07-10
 
 ### Added

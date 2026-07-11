@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.24)
+## Mevcut durum (v0.25)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
@@ -31,6 +31,8 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 - Sağ detay panelinde seçili oyunun tüm sürümleri (bölge/kaynak/hash) ve tercih edilen sürümü değiştirme; Ayarlar > Emülatörler'de platform başına tanımlanan emülatörle BAŞLAT butonu üzerinden doğrudan oynatma.
 - **Emülatör indirme altyapısı**: tüm standalone emülatörler (PCSX2, RPCS3, Xemu, Cemu, melonDS, Vita3K, Xenia Canary, Dolphin, Ryujinx, Azahar) tek, veri tabanlı bir "İndir & Kur" sistemini paylaşıyor — Ayarlar > Komutlar'daki **Emülatör İndirme Kaynakları** listesinden her biri için Kaynak Türü (GitHub Releases API / Direct URL / RPCS3'e özel Yerleşik API) ve Kaynak adresi düzenlenebiliyor, değişiklik programı yeniden derlemeden Kaydet ile hemen etkin oluyor. Core Adı dropdown'ında seçim artık gerçekten kullanılan core/exe'yi belirliyor; silinmiş/eksik core'lar listede silik gösterilip yeniden indirilebiliyor.
 - **Eksik görsel bulucu (Media Provider)**: artık gerçek kütüphaneden hesaplanan eksik Box/Clear Logo/Ekran Görüntüsü listesiyle çalışıyor — "Otomatik İndir" gerçekten LaunchBox kaynağından indiriyor, "Ara" uygulama içi (embedded WebView2) bir arama penceresi açıyor. Oyun detay panelinde tek bir "eksik görsel" rozeti üzerinden hangi türlerin getirileceği seçilebiliyor.
+- **Manuel bağlama / standalone oyunlar**: Kataloğun hiçbir sürümüyle eşleşmeyen ROM'lar (Eşleşmeyenler sekmesinden "+ Yeni Oyun" ile, toplu "Eşleşmeyenleri de aktar" ile, ya da ana tablodaki kapsül menüsündeki "Bağla" ile tablodan başka bir oyuna taşınarak) katalogdan bağımsız birer oyun olarak kütüphaneye eklenebiliyor — CRC32'si hesaplanıp gösteriliyor, "manuel"/sarı rozetle işaretleniyor (CRC doğrulanmış gibi sunulmuyor), aynı isimli kayıtlar otomatik tek satırda toplanıyor.
+- **Kalıcı Sil, gerçek dosyaları da temizleyebiliyor**: hangi dosya türlerinin (ROM/Box/SS/Logo) de silineceğini seçebileceğiniz bir onay penceresiyle, işaretli dosyalar Windows Çöp Kutusu'na taşınıyor (kalıcı `File.Delete` değil) — Çöp Kutusu'nda çoklu seçimle de yapılabiliyor.
 
 ### Pencereler
 - **MainWindow** — Platform listesi, sanallaştırılmış oyun tablosu (DataGrid), playlist chip şeridi, seçili oyun detay paneli ve BAŞLAT butonu.
@@ -40,6 +42,8 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 - **MediaSearchWindow** — "Ara" ile açılan, uygulama içi (WebView2) görsel arama penceresi; indirilen dosya doğrudan ilgili oyunun ROM dosya adıyla eşleşen konuma kaydediliyor.
 - **CropEditorDialog** — Görsel kırpma oranı seçim arayüzü.
 - **EditMetadataWindow** — Bir oyunun Başlık/Tür/Açıklama/Notlar/Yayıncı/Geliştirici alanlarını elle düzenleme.
+- **ManualLinkWindow** — Bir ROM dosyasını kataloktaki bir oyuna (isterse belirli bir sürümüne), yeni bir standalone oyuna ("+ Yeni Oyun") ya da tablodaki başka bir oyuna manuel bağlama; arama kutulu, varsayılan olarak ilgili platforma sınırlı oyun listesi.
+- **PermanentDeleteConfirmationDialog** — Çöp Kutusu'ndan kalıcı silmeden önce hangi dosya türlerinin (ROM/Box/SS/Logo) de Windows Çöp Kutusu'na taşınacağını seçme.
 - **SettingsWindow** — Veri klasörü (salt-okunur, her zaman .exe'nin yanında), görsel indirme boyutu, LaunchBox metadata veritabanı yolu, platform başına emülatör yolu/parametreleri, bölge önceliği, arayüz tercihleri (komut menüsü görünümü, satır yüksekliği, platform listesi görünümü/kategorileri) — hepsi **Kaydet** düğmesiyle diske yazılıyor. Export/Import Config (JSON).
 
 ## Gereksinimler
