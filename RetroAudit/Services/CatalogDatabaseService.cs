@@ -1,5 +1,6 @@
 using System.IO;
 using Microsoft.Data.Sqlite;
+using RetroAudit.Catalog.Metadata;
 using RetroAudit.Models;
 
 namespace RetroAudit.Services;
@@ -104,7 +105,15 @@ public static class CatalogDatabaseService
                 """;
             using var reader = genreCmd.ExecuteReader();
             while (reader.Read())
-                genresByGame[reader.GetInt32(0)] = reader.GetString(1);
+            {
+                // Kullanıcı isteği: "Construction and Management Simulation gözüküyor hala" —
+                // RetroAudit.db ÖNCEDEN üretilmiş bir dosya olduğu için (bkz. GenreDisplayNameMap
+                // yorumu) katalog yeniden derlenene kadar eski (uzun) isim veritabanında kalır; bu
+                // yüzden AYNI haritayı burada da (okuma anında) uyguluyoruz — Builder'ı yeniden
+                // çalıştırınca zaten kaynağında kısa gelecek, bu satır o ana kadarki köprü.
+                var mapped = string.Join(", ", reader.GetString(1).Split(", ").Select(GenreDisplayNameMap.Resolve));
+                genresByGame[reader.GetInt32(0)] = mapped;
+            }
         }
 
         // Tercih edilen sürümün Region/Kaynak'ı + ilk dosya adı — SQLite'ın "bare column"

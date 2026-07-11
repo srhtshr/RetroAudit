@@ -1083,10 +1083,36 @@
         <!-- ===================== Stats bar ===================== -->
         <Border Grid.Row="2" Background="{StaticResource Brush.Background.Base}"
                 BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,0,0,1" Padding="10,4">
-            <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11">
-                <Run Text="Görünen:" /><Run Text=" " /><Run Text="{Binding VisibleCount, Mode=OneWay}" />
-                <Run Text="  |  Toplam:" /><Run Text=" " /><Run Text="{Binding TotalCount, Mode=OneWay}" />
-            </TextBlock>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" VerticalAlignment="Center">
+                    <Run Text="Görünen:" /><Run Text=" " /><Run Text="{Binding VisibleCount, Mode=OneWay}" />
+                    <Run Text="  |  Toplam:" /><Run Text=" " /><Run Text="{Binding TotalCount, Mode=OneWay}" />
+                </TextBlock>
+
+                <!-- Kullanıcı isteği: "filtrelenenler şu 2. resimdeki görünenler toplam falan
+                     diyorya o alanda gözüksün tıklanılabilir filtre kaldırılabilir şekilde
+                     tıklandığında filtre kalkıcak ... ayrı ayrı badge olacak ben horror'u
+                     kaldırmak istediğimde tıklayıp kaldırabilecem" — Türler rozetleriyle (bkz.
+                     GenreBadgeButton) AYNI görsel dil; her rozet TEK bir değeri temsil eder (bkz.
+                     MainViewModel.ActiveFilterChips/RefreshActiveFilterChips), tıklanınca SADECE o
+                     değer kaldırılır. -->
+                <ItemsControl ItemsSource="{Binding ActiveFilterChips}" Margin="14,0,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type models:ActiveFilterChip}">
+                            <Button Style="{StaticResource GenreBadgeButton}" Command="{Binding RemoveCommand}">
+                                <TextBlock>
+                                    <Run Text="{Binding Label, Mode=OneWay}" /><Run Text=" ✕" />
+                                </TextBlock>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
         </Border>
 
         <!-- ===================== Playlist chip şeridi ===================== -->
@@ -1447,10 +1473,25 @@
                                              HeaderTemplate="{StaticResource FilterableColumnHeader}" Width="34">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <TextBlock Text="{Binding StatusOk, Converter={StaticResource BoolToStatusGlyph}}"
-                                           FontFamily="Segoe MDL2 Assets"
-                                           Foreground="{Binding StatusOk, Converter={StaticResource BoolToStatusBrush}}"
-                                           HorizontalAlignment="Center" />
+                                <!-- Kullanıcı isteği: "Manuel eklenenleride durum kısmında ayrı
+                                     kategoriyle işaretle ünlem olabilir mesela" — manuel bağlı
+                                     satırlarda StatusOk'un (verified/eşleşmedi) ✓/✗ ikonu YERİNE,
+                                     ROM'un CRC doğrulanmış gibi SUNULMAMASI için ayrı bir üçüncü
+                                     durum: amber "!" (bkz. Game.IsManuallyLinked). -->
+                                <TextBlock FontFamily="Segoe MDL2 Assets" HorizontalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="{Binding StatusOk, Converter={StaticResource BoolToStatusGlyph}}" />
+                                            <Setter Property="Foreground" Value="{Binding StatusOk, Converter={StaticResource BoolToStatusBrush}}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsManuallyLinked}" Value="True">
+                                                    <Setter Property="Text" Value="&#xE7BA;" />
+                                                    <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
@@ -1562,18 +1603,28 @@
                                     <!-- Görsel Getir: Box/Background/Screenshot/Logo görsellerini arayıp
                                          indirir (bkz. MainViewModel.FetchArtworkCommand). Eşleşmiş bir
                                          metadata kaydı yoksa (HasArtworkSource=False) aranacak bir şey
-                                         olmadığı için devre dışı. Kullanıcı geri bildirimi: "indirme
-                                         yaptıktan sonra artwork butonu hala sanki resim indirmemişim
-                                         gibi gözüküyor" — buton hiçbir zaman "zaten indirildi" durumunu
-                                         yansıtmıyordu (detay panelindeki AYNI buton HasMissingArtwork
-                                         false olunca tamamen gizleniyor, bkz. aşağıdaki Visibility);
-                                         burada satır düzeni bozulmasın diye gizlemek yerine tüm
-                                         görseller zaten varsa devre dışı bırakılıp soluklaşıyor
-                                         (ActionsIconButton'ın IsEnabled=False'ta Opacity 0.35'i). -->
-                                    <Button Style="{StaticResource ActionsIconButton}"
-                                            Command="{Binding DataContext.FetchArtworkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                         olmadığı için devre dışı. Kullanıcı geri bildirimi: "bütün
+                                         resimler indirildiğinde deaktif gözükmesin ... o çerçeve
+                                         gözükmesin" — tüm görseller zaten varsa (HasMissingArtwork=
+                                         False) soluk/devre dışı göstermek yerine gizleniyor; SONRA
+                                         gelen geri bildirim: "artwork alanı boşalınca play iconu sola
+                                         kaymasın" — Collapsed (bkz. BoolToVisibility) layout alanını
+                                         TAMAMEN kaldırıp sonraki ikonun (Başlat) sola kaymasına yol
+                                         açıyordu; Hidden ile boyut/hizalama korunuyor, sadece boyanmıyor
+                                         (Collapsed'a göre hâlâ ölçülüyor ama satır hizası bozulmuyor). -->
+                                    <Button Command="{Binding DataContext.FetchArtworkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                             CommandParameter="{Binding}" Margin="0,0,10,0"
-                                            IsEnabled="{Binding CanFetchArtwork}" ToolTip="Görsel getir">
+                                            IsEnabled="{Binding CanFetchArtwork}"
+                                            ToolTip="Görsel getir">
+                                        <Button.Style>
+                                            <Style TargetType="Button" BasedOn="{StaticResource ActionsIconButton}">
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasMissingArtwork}" Value="False">
+                                                        <Setter Property="Visibility" Value="Hidden" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
                                         <TextBlock Text="&#xE91B;" FontFamily="Segoe MDL2 Assets" FontSize="13"
                                                    Foreground="{StaticResource Brush.Text.Secondary}" />
                                     </Button>
@@ -1685,8 +1736,33 @@
                          panelinde gösterilsin — bkz. aşağıda "Platform" satırı). -->
                     <DataGridTextColumn x:Name="PlatformColumn" Header="{Binding Data.PlatformFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding PlatformDisplayName}" SortMemberPath="PlatformDisplayName" Width="160" />
-                    <DataGridTextColumn x:Name="GenresColumn" Header="{Binding Data.GenresFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
-                                         Binding="{Binding Genres}" SortMemberPath="Genres" Width="150" />
+                    <!-- Kullanıcı isteği: "tablodaki türleri 1. resimdeki gibi tıklanıp
+                         filtrelenebilir badge yapabilirmisin ... emulator ayarlarındaki platform
+                         listesinin badgeleri" — düz metin yerine her tür token'ı için ayrı, tıklanınca
+                         GenresFilter'ı o türe göre uygulayan (bkz. MainViewModel.
+                         FilterByGenreTokenCommand) bir rozet (bkz. Themes/ObsidianDark.xaml
+                         GenreBadgeButton, PlatformNameBadge ile AYNI görsel dil). -->
+                    <DataGridTemplateColumn x:Name="GenresColumn" Header="{Binding Data.GenresFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
+                                             SortMemberPath="Genres" Width="220">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate DataType="{x:Type models:Game}">
+                                <ItemsControl ItemsSource="{Binding GenreTokens}" VerticalAlignment="Center" Focusable="False">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Style="{StaticResource GenreBadgeButton}"
+                                                    Command="{Binding DataContext.FilterByGenreTokenCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" Content="{Binding}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
 
                     <!-- Aşağıdaki sütunlar varsayılan gizli (bkz. ColumnOptions) — "Sütunlar" düğmesiyle
                          açılıp kapanır, kod-arkası (MainWindow.xaml.cs) x:Name üzerinden yönetir. -->
@@ -2026,6 +2102,18 @@
                                 </Style.Triggers>
                             </Style>
                         </StackPanel.Style>
+
+                        <!-- Kullanıcı isteği: "toplu seçimde sağ tıktan bağlaya bastığımda otomatik
+                             bağlamalı" — pencere açmadan, seçili oyunlardan "asıl" olanı otomatik
+                             seçip diğerlerinin dosyalarını ona sürüm olarak taşır (bkz.
+                             MainViewModel.BulkLinkAsync). -->
+                        <Button Style="{StaticResource ContextMenuIconButton}"
+                                Command="{Binding BulkLinkCommand}" ToolTip="Başka Bir Oyuna Bağla">
+                            <StackPanel>
+                                <TextBlock Text="&#xE71B;" Style="{StaticResource ContextMenuGlyphText}" />
+                                <TextBlock Text="Bağla" Style="{StaticResource ContextMenuLabelText}" />
+                            </StackPanel>
+                        </Button>
 
                         <Button Style="{StaticResource ContextMenuIconButton}"
                                 Command="{Binding BulkAddToFavoritesCommand}" ToolTip="Favorilere Ekle">

@@ -47,7 +47,54 @@ public partial class ColumnFilterViewModel : ObservableObject
 
     // İkon rengini değiştirmek için: en az bir değer işaretsizse filtre "aktif" sayılır.
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ActiveValuesSummary))]
     private bool isActive;
+
+    // Kullanıcı geri bildirimi: "shooter'a tıkladım sadece böyle yazdı [Shooter, Platform, Flight
+    // Simulator +22] sadece shooter yazması lazım" — Options'tan (checked seçeneklerin İÇİNDEKİ
+    // token'lardan, bkz. eski yorum) türetmek YANLIŞ: "Shooter" token'ına göre filtrelemek,
+    // "Shooter, Platform" gibi Shooter'ı İÇEREN her kombinasyonu da işaretli hale getiriyor (bkz.
+    // MainViewModel.FilterByGenreToken) — bu YANLIŞ değil (o oyunlar gerçekten "Shooter" içeriyor),
+    // ama kullanıcının GERÇEKTEN TIKLADIĞI şey sadece "Shooter". Bu yüzden rozet artık Options'tan
+    // türetilen bir tahmin DEĞİL, FilterByGenreToken'ın (ve benzerlerinin) SetActiveSummaryOverride
+    // ile doğrudan yazdığı gerçek değeri gösteriyor; override yoksa (ör. sütun başlığındaki
+    // checkbox popup'ından elle seçim) Options'tan türetilen genel özet devreye giriyor.
+    private string? _activeSummaryOverride;
+
+    public void SetActiveSummaryOverride(string? value)
+    {
+        _activeSummaryOverride = value;
+        OnPropertyChanged(nameof(ActiveValuesSummary));
+    }
+
+    // Stats bar'daki aktif filtre rozeti (bkz. MainWindow.xaml, MainViewModel.AllColumnFilters) —
+    // sadece sütun adını değil, GERÇEKTEN seçili olan değer(ler)i gösteriyor. IsSearchOnly (Title/
+    // File) sütunlarda arama metninin kendisi; diğerlerinde (override yoksa) işaretli seçeneklerin
+    // İÇİNDEKİ tekil token'ların (en fazla 3, fazlası "+N" ile) tekrarsız birleştirilmiş hali.
+    public string ActiveValuesSummary
+    {
+        get
+        {
+            if (_activeSummaryOverride is not null)
+                return _activeSummaryOverride;
+
+            if (IsSearchOnly)
+                return SearchText;
+
+            var checkedOptions = Options.Where(o => o.IsChecked).ToList();
+            if (checkedOptions.Count == 0 || checkedOptions.Count == Options.Count)
+                return string.Empty;
+
+            var distinctTokens = checkedOptions
+                .SelectMany(o => o.Value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            const int maxShown = 3;
+            var summary = string.Join(", ", distinctTokens.Take(maxShown));
+            return distinctTokens.Count > maxShown ? $"{summary} +{distinctTokens.Count - maxShown}" : summary;
+        }
+    }
 
     // Popup her açıldığında, "Cancel" ile geri dönülebilsin diye o anki işaretli durum saklanır.
     private HashSet<string> _snapshotChecked = new();
@@ -160,6 +207,12 @@ public partial class ColumnFilterViewModel : ObservableObject
     [RelayCommand]
     private void ApplyFilter()
     {
+        // FilterByGenreToken gibi bir çağıran, bu komutu çalıştırdıktan HEMEN sonra
+        // SetActiveSummaryOverride ile kendi özetini yazabilir (bkz. o yorum) — burada override'ı
+        // temizlemek, sütun başlığındaki checkbox popup'ından ELLE "Uygula"ya basıldığında eski/
+        // yanlış bir override'ın (ör. önceki bir rozet tıklamasından kalma) rozette görünmeye
+        // devam etmesini engelliyor.
+        _activeSummaryOverride = null;
         IsActive = Options.Any(o => !o.IsChecked);
         IsPopupOpen = false;
         FilterChanged?.Invoke();
@@ -171,5 +224,45 @@ public partial class ColumnFilterViewModel : ObservableObject
         foreach (var option in Options)
             option.IsChecked = _snapshotChecked.Contains(option.Value);
         IsPopupOpen = false;
+    }
+
+    // Kullanıcı isteği: "filtrelenenler ... o alanda gözüksün tıklanılabilir filtre kaldırılabilir
+    // şekilde tıklandığında filtre kalkıcak" — stats bar'daki aktif filtre rozetinin (bkz.
+    // MainViewModel.AllColumnFilters, MainWindow.xaml) tıklanınca çağırdığı komut: ToggleAll'daki
+    // "Hepsini Seç" ile AYNI sonuç (tüm değerler tekrar işaretlenir) ama popup açmadan, ARama
+    // kutulu sütunlarda (IsSearchOnly) SearchText'i temizler.
+    [RelayCommand]
+    private void ClearFilter()
+    {
+        _activeSummaryOverride = null;
+
+        if (IsSearchOnly)
+        {
+            SearchText = string.Empty;
+        }
+        else
+        {
+            foreach (var option in Options)
+                option.IsChecked = true;
+        }
+
+        IsActive = false;
+        FilterChanged?.Invoke();
+    }
+
+    // Kullanıcı isteği: "ayrı ayrı badge olacak ... horror'u kaldırmak istediğimde tıklayıp
+    // kaldırabilecem" — Genres DIŞINDAKİ filtreler için (bkz. MainViewModel.
+    // RefreshActiveFilterChips, GenresFilter kendi token bazlı mantığını kullanıyor) TEK bir
+    // seçili değeri işaretsiz bırakıp geri kalanına dokunmaz — ClearFilter'ın (hepsini sıfırlar)
+    // aksine SADECE bu değeri kaldırır.
+    [RelayCommand]
+    private void RemoveValue(string value)
+    {
+        var option = Options.FirstOrDefault(o => o.Value == value);
+        if (option is not null)
+            option.IsChecked = false;
+
+        IsActive = Options.Any(o => !o.IsChecked);
+        FilterChanged?.Invoke();
     }
 }

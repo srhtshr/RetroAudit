@@ -413,12 +413,26 @@
                             <TextBox Style="{StaticResource SearchTextBoxStyle}"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
                         </Border>
+                        <!-- Kullanıcı isteği: "uygun bir yere junkları filtreleme ekle junklar
+                             dahil yansıyor provider a ... yüzde hesaplamalarınıda junklar seçiliyse
+                             ona göre ver seçili değilse ona göre ver" — ana tablodaki Released/Junk
+                             ayrımıyla AYNI Game.Version alanı; varsayılan KAPALI (ana tablonun
+                             varsayılan görünümüyle AYNI), hem bu listeyi hem sol paneldeki platform
+                             kartlarının % sağlık hesaplamasını etkiler (bkz. MediaProviderViewModel.
+                             ShowJunk). -->
+                        <CheckBox Content="Junk oyunları dahil et" Margin="2,10,0,0" FontSize="11.5"
+                                  Foreground="{StaticResource Brush.Text.Secondary}"
+                                  IsChecked="{Binding ShowJunk}" />
                     </StackPanel>
 
                     <Grid Margin="18,8,10,10">
+                        <!-- Kullanıcı isteği: "toplu seçimlerede uygun olacak" — Ctrl/Shift ile
+                             birden fazla satır seçilebilsin diye SelectionMode="Extended" (bkz.
+                             MediaProviderWindow.xaml.cs AutoDownloadButton_Click). -->
                         <ListBox x:Name="MissingItemsList"
                                  Background="Transparent"
                                  BorderThickness="0"
+                                 SelectionMode="Extended"
                                  ItemsSource="{Binding MissingItems}"
                                  MouseDoubleClick="MissingItemsList_MouseDoubleClick"
                                  SelectedItem="{Binding SelectedMissingItem}"
@@ -476,6 +490,7 @@
                         <DataGrid x:Name="MissingItemsGrid"
                                   Background="Transparent"
                                   BorderThickness="0"
+                                  SelectionMode="Extended"
                                   ItemsSource="{Binding MissingItems}"
                                   SelectedItem="{Binding SelectedMissingItem}"
                                   MouseDoubleClick="MissingItemsList_MouseDoubleClick"
@@ -523,7 +538,15 @@
                 BorderThickness="1"
                 CornerRadius="6">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <Button Padding="14,7" Command="{Binding FetchSelectedAsyncCommand}" Content="Otomatik &#x0130;ndir" IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBoolean}}" />
+                <!-- Kullanıcı isteği: "otomatik indir butonuna basıyorum indirmiyor ... görsel
+                     getir butonu varya ona bağlıcan ... toplu seçimlerede uygun olacak" — artık
+                     Command binding YOK, code-behind (bkz. AutoDownloadButton_Click) seçili satır(lar)ı
+                     toplayıp MainViewModel.BulkFetchArtworkForGamesAsync'i çağırıyor (ana tablonun
+                     "Görsel Getir"iyle AYNI mekanizma). -->
+                <!-- Kullanıcı isteği: "videolar ile ilgili filtre tek başına filtrelendiğinde
+                     veya seçilen satırın eksiği video olduğunda o komut pasif gözükmeli" — bkz.
+                     MediaProviderViewModel.CanAutoDownload. -->
+                <Button Padding="14,7" Click="AutoDownloadButton_Click" Content="Otomatik &#x0130;ndir" IsEnabled="{Binding CanAutoDownload}" />
             </StackPanel>
         </Border>
     </Grid>

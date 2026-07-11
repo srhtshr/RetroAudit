@@ -189,8 +189,15 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type ProgressBar}">
+                    <!-- Kullanıcı geri bildirimi: "% yazıyor ama bar ilerlemiyor, bar sabit
+                         duruyor" — kök neden: WPF'in dahili ProgressBar mantığı, PART_Indicator'ın
+                         genişliğini yeniden hesaplarken PART_Track'in ActualWidth'ine bakıyor;
+                         PART_Track hiç YOKSA bu hesaplama SESSİZCE atlanıyor (metin binding'i
+                         bağımsız çalıştığı için % yazısı doğru güncelleniyordu, sadece bar'ın
+                         KENDİSİ hiç yeniden boyutlanmıyordu). Grid'i PART_Track olarak adlandırmak
+                         yeterli düzeltme — ayrıca bir kod değişikliği gerekmiyor. -->
                     <Border Background="{TemplateBinding Background}" CornerRadius="3" ClipToBounds="True">
-                        <Grid>
+                        <Grid x:Name="PART_Track">
                             <Decorator x:Name="PART_Indicator" HorizontalAlignment="Left">
                                 <Border Background="{TemplateBinding Foreground}" CornerRadius="3" />
                             </Decorator>
@@ -257,6 +264,45 @@
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">
                     <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="4">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="border" Property="Background" Value="{StaticResource Brush.Accent.LaunchHover}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Platform adı/Core Adı rozetleriyle AYNI görsel dil (bkz. SettingsWindow.xaml
+         PlatformNameBadge) — paylaşılan tema dosyasına taşındı ki MainWindow'daki Türler
+         rozetleri (kullanıcı isteği: "1. resimdekiler emulator ayarlarındaki platform listesinin
+         badgeleri ... tasarım olarak aynısını istiyom") de AYNI stili kullanabilsin. -->
+    <Style x:Key="PlatformNameBadge" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource Brush.Accent.Launch}" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="Padding" Value="10,3" />
+    </Style>
+
+    <!-- Kullanıcı isteği: "tablodaki türleri 1. resimdeki gibi tıklanıp filtrelenebilir badge
+         yapabilirmisin" — PlatformNameBadge ile AYNI görünüm (Brush.Accent.Launch, CornerRadius
+         10) ama gerçek bir Button (tıklanabilir + hover, LaunchButton'daki AYNI hover deseni) —
+         MainWindow'daki Türler sütunu hücrelerinde her tür token'ı için (bkz.
+         MainViewModel.FilterByGenreTokenCommand). -->
+    <Style x:Key="GenreBadgeButton" TargetType="{x:Type Button}" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Background" Value="{StaticResource Brush.Accent.Launch}" />
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="Margin" Value="0,1,4,1" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border x:Name="border" Background="{TemplateBinding Background}" CornerRadius="10">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}" />
                     </Border>
                     <ControlTemplate.Triggers>

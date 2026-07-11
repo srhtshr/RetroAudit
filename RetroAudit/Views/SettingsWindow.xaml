@@ -41,14 +41,9 @@
             <Setter Property="Foreground" Value="White" />
         </Style>
 
-        <!-- Platform adı, Core Adı sütunundaki Mod rozetiyle AYNI görsel dil (rozet), farklı bir
-             renkte (Brush.Accent.Launch — Mod rozetlerinin mor/gri'sinden ayrışsın diye) — kullanıcı
-             isteği: "platform adı yazan kısmıda Core adındaki gibi badge li yap farklı bi renk olsun". -->
-        <Style x:Key="PlatformNameBadge" TargetType="Border">
-            <Setter Property="Background" Value="{StaticResource Brush.Accent.Launch}" />
-            <Setter Property="CornerRadius" Value="10" />
-            <Setter Property="Padding" Value="10,3" />
-        </Style>
+        <!-- PlatformNameBadge artık Themes/ObsidianDark.xaml'de (kullanıcı isteği: MainWindow'daki
+             Türler rozetleri de AYNI stili paylaşsın) — App.xaml üzerinden global olarak birleştirildiği
+             için burada ayrıca tanımlamaya gerek yok. -->
 
         <!-- Kullanıcı isteği: "Önerilen ve Alternatiflerin rengi farklı olsun en üstte olsunlar ...
              açıklamalarıda mouse u üstüne getirince gözüksün ... olmayanları listeden silmede yanda

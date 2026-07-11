@@ -259,6 +259,7 @@ public class LaunchBoxMetadataReader : IDisposable
 
         var genresRaw = reader.IsDBNull(7) ? null : reader.GetString(7);
         var genres = genresRaw?.Split(';', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                         .Select(GenreDisplayNameMap.Resolve).ToArray()
                      ?? Array.Empty<string>();
 
         // LaunchBox ReleaseDate "yyyy-MM-dd HH:mm:ss" biçiminde düz metin — bazı kayıtlarda hiç yok

@@ -60,8 +60,13 @@ public partial class MediaProviderViewModel : ObservableObject
     private readonly IReadOnlyList<Game> _allGames;
 
     // Bir görsel indirilip/aranıp bulununca MainWindow'daki asıl MainViewModel'e "bu oyunu
-    // tazele" demek için (bkz. MainWindow.xaml.cs: vm.NotifyArtworkDownloaded + vm.ApplyFilter).
-    private readonly Action<Game> _onArtworkResolved;
+    // tazele" demek için (bkz. MainWindow.xaml.cs: vm.RegisterDownloadedMedia + NotifyArtworkDownloaded
+    // + ApplyFilter). Kullanıcı geri bildirimi: "media provider da otomatik indirme çalışmıyor
+    // heralde" — sadece Game göndermek yetmiyordu, MainViewModel'in KENDİ medya sözlüklerini
+    // (_boxByPlatform vb.) güncelleyebilmesi için tür/dosya adı/hedef yol da gerekiyor (bkz.
+    // MainViewModel.RegisterDownloadedMedia) — aksi halde dosya diske gerçekten inse bile
+    // NotifyArtworkDownloaded onu bulamıyor, restart'a kadar boş görünüyordu.
+    private readonly Action<Game, string, string, string> _onArtworkResolved;
     private readonly Func<IReadOnlyList<Platform>> _getOrderedPlatforms;
 
     public bool UseModernLayout { get; }
@@ -74,6 +79,18 @@ public partial class MediaProviderViewModel : ObservableObject
 
     [ObservableProperty]
     private PlatformAuditSummary? selectedPlatformSummary;
+
+    // Kullanıcı isteği: "uygun bir yere junkları filtreleme ekle junklar dahil yansıyor provider a
+    // ... yüzde hesaplamalarınıda junklar seçiliyse ona göre ver seçili değilse ona göre ver" —
+    // ana tablodaki Released/Junk chip'leriyle AYNI Game.Version alanı (bkz. MainViewModel.
+    // ShowReleased/ShowJunk) — Media Provider'da tek bir "dahil et" anahtarı yeterli (varsayılan
+    // KAPALI, ana tablonun varsayılanıyla AYNI: ShowJunk=false), hem eksik öğe listesini hem
+    // platform kartlarındaki % sağlık hesaplamasını (bkz. RebuildPlatformAuditSummaries — health
+    // percent zaten bu filtrelenmiş listeden hesaplanıyor) etkiler.
+    [ObservableProperty]
+    private bool showJunk;
+
+    partial void OnShowJunkChanged(bool value) => RefreshAll();
 
     [ObservableProperty]
     private bool showMissingLogo = true;
@@ -91,10 +108,30 @@ public partial class MediaProviderViewModel : ObservableObject
     private bool showMissingWiki = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAutoDownload))]
     private MissingMediaItem? selectedMissingItem;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanAutoDownload))]
     private bool isBusy;
+
+    // Kullanıcı isteği: "videolar ile ilgili filtre tek başına filtrelendiğinde veya seçilen
+    // satırın eksiği video olduğunda o komut pasif gözükmeli videoyla alakası yok çünkü" —
+    // BulkFetchArtworkForGamesAsync sadece Box/Logo/SS indirebiliyor (bkz. MainViewModel.
+    // DownloadArtworkAsync), Video/Wiki için hiçbir işe yaramıyor. Bir satır seçiliyse ONUN türüne
+    // bakılır; hiç seçim yoksa (ör. sadece "Video" filtresi açıkken tüm liste video'dan ibaretse)
+    // o an GÖRÜNEN listede en az bir Box/Logo/SS eksiği var mı diye bakılır.
+    public bool CanAutoDownload
+    {
+        get
+        {
+            if (IsBusy)
+                return false;
+            if (SelectedMissingItem is { } selected)
+                return selected.MissingType is not ("Video" or "Wiki");
+            return MissingItems.Any(i => i.MissingType is not ("Video" or "Wiki"));
+        }
+    }
 
     [ObservableProperty]
     private string searchText = string.Empty;
@@ -129,7 +166,7 @@ public partial class MediaProviderViewModel : ObservableObject
     // completedCallback ayrıca MissingItems'tan da çıkarma yapıyor.
     public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action CompletedCallback, Game Game)>? RequestSearchArtwork;
 
-    public MediaProviderViewModel(IReadOnlyList<Game> allGames, Action<Game> onArtworkResolved, Func<IReadOnlyList<Platform>> getOrderedPlatforms, bool useModernLayout = false)
+    public MediaProviderViewModel(IReadOnlyList<Game> allGames, Action<Game, string, string, string> onArtworkResolved, Func<IReadOnlyList<Platform>> getOrderedPlatforms, bool useModernLayout = false)
     {
         _allGames = allGames;
         _onArtworkResolved = onArtworkResolved;
@@ -164,15 +201,21 @@ public partial class MediaProviderViewModel : ObservableObject
     private void RebuildPlatformAuditSummaries()
     {
         var previousPlatformName = SelectedPlatformSummary?.Platform.Name;
-        var visibleGames = _allGames.Where(g => !g.IsHidden && !g.IsDeleted).ToList();
+        var visibleGames = _allGames.Where(g => !g.IsHidden && !g.IsDeleted && (ShowJunk || g.Version == "Released")).ToList();
         var orderedPlatforms = _getOrderedPlatforms();
+
+        // Kullanıcı geri bildirimi: "providerda junkları dahil et dediğimde geç hesaplıyor" —
+        // eskiden HER platform için visibleGames'in TAMAMI yeniden taranıyordu (O(oyun × platform),
+        // Junk dahilken ~67 bin oyun × ~40 platform = milyonlarca karşılaştırma). Tek seferlik
+        // ToLookup ile platform başına O(1) erişim + toplamda sadece O(oyun) materyalizasyon.
+        var gamesByPlatform = visibleGames.ToLookup(g => g.Platform);
 
         PlatformAuditSummaries.Clear();
         foreach (var platform in orderedPlatforms)
         {
             var games = platform.IsAllPlatforms
                 ? visibleGames
-                : visibleGames.Where(g => g.Platform == platform.Name).ToList();
+                : gamesByPlatform[platform.Name].ToList();
             var totalGames = games.Count;
             var matchedCount = games.Count(HasMatchedMetadata);
             var missingLogoCount = games.Count(g => !g.HasClearLogo);
@@ -214,7 +257,7 @@ public partial class MediaProviderViewModel : ObservableObject
     {
         MissingItems.Clear();
 
-        IEnumerable<Game> games = _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
+        IEnumerable<Game> games = _allGames.Where(g => !g.IsHidden && !g.IsDeleted && (ShowJunk || g.Version == "Released"));
         if (SelectedPlatform is { IsAllPlatforms: false })
             games = games.Where(g => g.Platform == SelectedPlatform.Name);
         if (!string.IsNullOrWhiteSpace(SearchText))
@@ -233,6 +276,8 @@ public partial class MediaProviderViewModel : ObservableObject
             if (!game.HasWikipediaUrl && ShowMissingWiki)
                 MissingItems.Add(new MissingMediaItem { Game = game, MissingType = "Wiki" });
         }
+
+        OnPropertyChanged(nameof(CanAutoDownload));
     }
 
     [RelayCommand]
@@ -282,66 +327,13 @@ public partial class MediaProviderViewModel : ObservableObject
         }));
     }
 
-    // "Otomatik İndir": FetchArtwork'ün MainViewModel'deki tek-tür karşılığıyla aynı mantık
-    // (LaunchBox kaynağından indir) — burada Media Provider kendi başına, MainViewModel'e
-    // bağımlı olmadan çalışabilsin diye ArtworkService/CatalogDatabaseService'i doğrudan çağırıyor.
-    [RelayCommand]
-    private async Task FetchSelectedAsync()
-    {
-        if (SelectedMissingItem is not { } item)
-            return;
-
-        if (item.MissingType is "Video" or "Wiki")
-        {
-            RequestShowMessage?.Invoke("Video ve Wiki eksikleri için otomatik indirme desteklenmiyor.");
-            return;
-        }
-
-        if (!item.Game.HasArtworkSource)
-        {
-            RequestShowMessage?.Invoke("Bu oyun için eşleşmiş bir metadata kaydı yok, görsel aranamadı.");
-            return;
-        }
-
-        IsBusy = true;
-        try
-        {
-            var asset = CatalogDatabaseService.GetArtworkAssets(item.Game.GameId)
-                .FirstOrDefault(kv => kv.Key == item.MissingType);
-            if (asset.Key is null)
-            {
-                RequestShowMessage?.Invoke("LaunchBox'ta bu görsel için kaynak bulunamadı — \"Ara\" ile deneyebilirsiniz.");
-                return;
-            }
-
-            var preserveTransparency = item.MissingType == "Logo";
-            var baseFileName = GetMediaBaseFileName(item.Game);
-            var destination = ArtworkService.BuildLocalPath(AppPaths.Images, item.Game.PlatformDisplayName, item.MissingType, baseFileName, preserveTransparency);
-            var maxDimension = ConfigService.LoadDefault().ArtworkMaxDimension switch
-            {
-                Models.ArtworkMaxDimension.Px800 => 800,
-                Models.ArtworkMaxDimension.Original => int.MaxValue,
-                _ => 600,
-            };
-
-            var success = await ArtworkService.DownloadAsync(asset.Value, destination, preserveTransparency, maxDimension);
-            if (success)
-            {
-                MissingItems.Remove(item);
-                _onArtworkResolved(item.Game);
-                RebuildPlatformAuditSummaries();
-                RequestShowMessage?.Invoke($"\"{item.Title}\" için {item.MissingTypeLabel} indirildi.");
-            }
-            else
-            {
-                RequestShowMessage?.Invoke("Görsel indirilemedi — \"Ara\" ile deneyebilirsiniz.");
-            }
-        }
-        finally
-        {
-            IsBusy = false;
-        }
-    }
+    // Kullanıcı isteği: "otomatik indir butonuna basıyorum indirmiyor ... normal otomatik indirme
+    // komutuna bağlasana bunuda çalışmıyor şuanda ... görsel getir butonu varya ona bağlıcan ...
+    // toplu seçimlerede uygun olacak" — bu ViewModel'in kendi (ayrı, hatalı) tek-satır indirme
+    // mantığı TAMAMEN kaldırıldı. "Otomatik İndir" düğmesi artık doğrudan MainViewModel.
+    // BulkFetchArtworkForGamesAsync'i (ana tablonun "Görsel Getir"iyle AYNI mekanizma) çağırıyor —
+    // bkz. MediaProviderWindow.xaml.cs AutoDownloadButton_Click (seçili satır(lar)ı toplar, XAML'de
+    // artık Command binding YOK).
 
     // "Ara": otomatik indirme kaynak bulamazsa/başarısız olursa kullanıcının kendi bulup
     // indirebilmesi için embedded arama penceresi (bkz. MediaSearchWindow, MainViewModel'deki
@@ -376,7 +368,8 @@ public partial class MediaProviderViewModel : ObservableObject
         RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, item.Game.Title, mediaTypeLabel, () =>
         {
             MissingItems.Remove(item);
-            _onArtworkResolved(item.Game);
+            var destination = Path.Combine(targetFolder, baseFileName + (item.MissingType == "Logo" ? ".png" : ".jpg"));
+            _onArtworkResolved(item.Game, item.MissingType, baseFileName, destination);
             RebuildPlatformAuditSummaries();
         }, item.Game));
     }

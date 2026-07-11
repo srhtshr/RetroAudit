@@ -2,6 +2,29 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.26] - 2026-07-11
+
+### Added
+- **Tıklanabilir Tür Rozetleri**: Tablodaki Türler sütunu artık düz metin değil — Ayarlar > Komutlar'daki platform rozetleriyle aynı tasarımda, tıklanınca o türe göre filtreleyen rozetler. Birden fazla türe art arda tıklamak biriktiriyor (VEYA mantığı), aynı rozete tekrar tıklamak sadece onu kaldırıyor.
+- **Aktif Filtre Rozetleri**: "Görünen / Toplam" satırının yanına, o an uygulanan her filtre değeri için ayrı, tıklanınca sadece o değeri kaldıran rozetler eklendi.
+- **Toplu "Bağla"**: Tabloda birden fazla satır seçip kapsül menüden "Bağla"ya basınca, gerçek katalog verisi taşıyan satır otomatik "asıl" seçilip diğerlerinin dosyaları ona sürüm olarak ekleniyor.
+- **Kalıcı Sil'de Çoklu Seçim**: Çöp Kutusu'nda birden fazla satır seçiliyken artık "Restore" ve "Delete Perm." ayrı ayrı gösteriliyor (önceden sadece tekil Delete görünüyordu).
+- **Media Provider'da Junk Filtresi**: "Junk oyunları dahil et" onay kutusu eklendi (varsayılan kapalı, ana tablonun varsayılan görünümüyle aynı) — hem eksik öğe listesini hem platform kartlarının % sağlık hesaplamasını etkiliyor.
+- **Durum Sütununda Manuel Bağlantı Rozeti**: Manuel bağlı satırlarda ✓/✗ yerine ayrı bir amber "!" ikonu gösteriliyor.
+
+### Changed
+- **"Needs Search" → "Missing Game"**: Çöp kutusundaki/gizli oyunlar artık bu ve "Ready to Play" chip'lerinde görünmüyor (sadece kendi chip'lerinde görünürler).
+- **Manuel Kayıtlarda Eşleşme Yöntemi**: Tabloda boş göstermek yerine "Manuel" yazıyor.
+- **Uzun Tür Adı Kısaltıldı**: "Construction and Management Simulation" → "Const." (hem katalog derlemesinde hem mevcut veritabanı okumasında).
+- **Media Provider Performansı**: Platform kartlarının hesaplanması, her platform için tüm oyun listesini yeniden taramak yerine tek seferlik gruplama kullanıyor — Junk filtresini açıp kapatmak artık gözle görülür şekilde daha hızlı.
+
+### Fixed
+- **Media Provider "Otomatik İndir" Çalışmıyordu**: Kendi ayrı ve hatalı indirme mantığı kaldırıldı, artık ana tablonun "Görsel Getir"iyle aynı mekanizmayı kullanıyor; çoklu seçimi destekliyor; Video/Wiki eksiği için (indirilemeyeceğinden) devre dışı kalıyor.
+- **Media Provider'da İndirilen Görsel Görünmüyordu**: İndirme başarılı olsa da arayüz restart'a kadar "eksik" göstermeye devam ediyordu — kütüphanenin dahili görsel dizini güncellenmiyordu.
+- **Manuel/Standalone Oyunlarda Görsel Arama**: ROM dosya adı olmayan (custom) oyunlarda arama ile indirilen görseller anlık güncellenmiyor, "Klasöre Git" doğru klasörü açamıyordu — kayıt ve okuma tarafı artık aynı dosya adı kuralını kullanıyor.
+- **İlerleme Çubuğu Hareket Etmiyordu**: Görsel indirirken yüzde metni güncellenirken çubuğun kendisi sabit duruyordu (özel temada eksik olan bir iç bileşen adı düzeltildi).
+- **Görsel Getir Butonu Satır Kaymasına Yol Açıyordu**: Tüm görseller mevcut olduğunda buton tamamen kaybolunca yanındaki oynat ikonu sola kayıyordu.
+
 ## [0.25] - 2026-07-11
 
 ### Added

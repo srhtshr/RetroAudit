@@ -19,8 +19,13 @@ public partial class MediaProviderWindow : Window
         DarkTitleBarHelper.Apply(this);
         _mainVm = mainVm;
 
-        var vm = new MediaProviderViewModel(mainVm.AllGames, game =>
+        var vm = new MediaProviderViewModel(mainVm.AllGames, (game, type, baseFileName, destination) =>
         {
+            // Kullanıcı geri bildirimi: "media provider da otomatik indirme çalışmıyor heralde" —
+            // MainViewModel'in kendi medya sözlüklerini (bkz. RegisterDownloadedMedia) ÖNCE
+            // güncellemeden NotifyArtworkDownloaded çağırmak, dosya diske gerçekten inmiş olsa bile
+            // onu bulamıyordu (restart'a kadar boş görünüyordu).
+            mainVm.RegisterDownloadedMedia(type, game.PlatformDisplayName, baseFileName, destination);
             mainVm.NotifyArtworkDownloaded(game);
             mainVm.ApplyFilter();
         }, () => mainVm.GetVisiblePlatformOrder(), mainVm.ProviderDesignMode == ProviderDesignMode.Modern);
@@ -75,6 +80,59 @@ public partial class MediaProviderWindow : Window
     {
         if (DataContext is MediaProviderViewModel vm && vm.EditSelectedCommand.CanExecute(null))
             vm.EditSelectedCommand.Execute(null);
+    }
+
+    // Kullanıcı isteği: "otomatik indir butonuna basıyorum indirmiyor ... görsel getir butonu
+    // varya ona bağlıcan ... toplu seçimlerede uygun olacak" — MediaProviderViewModel'in kendi
+    // (ayrı, hatalı) indirme mantığı kaldırıldı; burada seçili satır(lar) (Liste/Tablo görünümü,
+    // hangisi görünürse) toplanıp GERÇEKTEN ÇALIŞAN mekanizmaya (MainViewModel.
+    // BulkFetchArtworkForGamesAsync — ana tablonun kapsül menüsündeki "Görsel Getir"le AYNI)
+    // veriliyor. Aynı oyunun birden fazla satırı (ör. hem Kapak hem Logo eksik) seçilse bile
+    // Distinct ile oyun başına TEK indirme yapılıyor (o oyunun eksik TÜM türleri zaten tek seferde
+    // sorulup indiriliyor).
+    private async void AutoDownloadButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MediaProviderViewModel vm)
+            return;
+
+        var selectedItems = MissingItemsList.SelectedItems.Cast<MissingMediaItem>()
+            .Concat(MissingItemsGrid.SelectedItems.Cast<MissingMediaItem>())
+            .Distinct()
+            .ToList();
+
+        if (selectedItems.Count == 0)
+        {
+            MessageBox.Show(this, "İndirmek için önce en az bir satır seçin.", "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // Kullanıcı isteği: "videolar ile ilgili filtre ... o komut pasif gözükmeli videoyla
+        // alakası yok çünkü" — CanAutoDownload zaten butonu devre dışı bırakıyor, ama çoklu
+        // seçimde (WPF'in SelectedItem'ı tek bir "çapa" öğeyi yansıttığı için CanAutoDownload'ın
+        // göremediği) Video/Wiki satırları karışmışsa burada da GÜVENLİK olarak eleniyor.
+        var games = selectedItems
+            .Where(i => i.MissingType is not ("Video" or "Wiki"))
+            .Select(i => i.Game)
+            .Distinct()
+            .ToList();
+
+        if (games.Count == 0)
+        {
+            MessageBox.Show(this, "Seçili satırlar Video/Wiki eksiği — otomatik indirme sadece Box/Logo/SS için çalışır.", "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        vm.IsBusy = true;
+        try
+        {
+            await _mainVm.BulkFetchArtworkForGamesAsync(games);
+        }
+        finally
+        {
+            vm.IsBusy = false;
+        }
+
+        vm.RefreshAll();
     }
 
     private void FilterBadge_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)

@@ -31,6 +31,12 @@ public partial class MainViewModel : ObservableObject
     // Filtrelenmemiş tam oyun listesi; Games koleksiyonu bunun bir alt kümesidir (bkz. ApplyFilter).
     private readonly List<Game> _allGames;
 
+    // FilterByGenreToken'ın biriktirdiği, kullanıcının rozetlere tıklayarak seçtiği tür token'ları
+    // (bkz. o metodun yorumu) — kullanıcı isteği: "shooter ve horror'u tıkladım ikisi de ayrı ayrı
+    // gözükmeli", yani birden fazla tür rozetine art arda tıklamak ÖNCEKİni SİLMEK yerine BİRİKTİRİR
+    // (OR: Shooter VEYA Horror).
+    private readonly HashSet<string> _activeGenreTokens = new(StringComparer.OrdinalIgnoreCase);
+
     // Tam platform listesi (mock veri, kategorilere ayrılmış). Sol panelde doğrudan bu değil,
     // kategori başlıklarıyla iç içe geçmiş PlatformListItems gösterilir.
     public ObservableCollection<Platform> Platforms { get; }
@@ -249,6 +255,48 @@ public partial class MainViewModel : ObservableObject
     public ColumnFilterViewModel BoxFilter { get; }
     public ColumnFilterViewModel ScreenshotFilter { get; }
 
+    // Kullanıcı isteği: "filtrelenenler ... o alanda gözüksün tıklanılabilir filtre kaldırılabilir
+    // şekilde" — RefreshActiveFilterChips'in dolaştığı tam filtre listesi.
+    public ColumnFilterViewModel[] AllColumnFilters { get; private set; } = Array.Empty<ColumnFilterViewModel>();
+
+    // Kullanıcı isteği: "ayrı ayrı badge olacak ben horror'u kaldırmak istediğimde tıklayıp
+    // kaldırabilecem" — stats bar'daki (bkz. MainWindow.xaml) rozetlerin GERÇEK ItemsSource'u:
+    // AllColumnFilters'ın aksine burada bir filtre değil, TEK bir DEĞER = bir rozet. Genres için
+    // her _activeGenreTokens girdisi ayrı bir rozet (kaldırma = FilterByGenreToken'ı AYNI token'la
+    // tekrar çağırmak, zaten toggle-off yapıyor); diğer filtreler için her işaretli Option ayrı bir
+    // rozet (kaldırma = ColumnFilterViewModel.RemoveValueCommand).
+    public ObservableCollection<ActiveFilterChip> ActiveFilterChips { get; } = new();
+
+    private void RefreshActiveFilterChips()
+    {
+        ActiveFilterChips.Clear();
+
+        foreach (var token in _activeGenreTokens)
+        {
+            var capturedToken = token;
+            ActiveFilterChips.Add(new ActiveFilterChip(capturedToken, new RelayCommand(() => FilterByGenreToken(capturedToken))));
+        }
+
+        foreach (var filter in AllColumnFilters)
+        {
+            if (filter == GenresFilter || !filter.IsActive)
+                continue;
+
+            if (filter.IsSearchOnly)
+            {
+                ActiveFilterChips.Add(new ActiveFilterChip(filter.SearchText, filter.ClearFilterCommand));
+                continue;
+            }
+
+            foreach (var option in filter.Options.Where(o => o.IsChecked))
+            {
+                var capturedFilter = filter;
+                var capturedValue = option.Value;
+                ActiveFilterChips.Add(new ActiveFilterChip(capturedValue, new RelayCommand(() => capturedFilter.RemoveValueCommand.Execute(capturedValue))));
+            }
+        }
+    }
+
     // "Sütunlar" düğmesiyle açılan seçici — hangi DataGrid sütununun görünür olacağını belirler.
     // MainWindow.xaml.cs, IsVisible değiştiğinde ilgili DataGridColumn'ı Key'e göre bulup
     // Visibility'sini günceller (DataGridColumn görsel ağacın parçası olmadığı için doğrudan
@@ -326,15 +374,31 @@ public partial class MainViewModel : ObservableObject
         BoxFilter = BuildColumnFilter("Box", _allGames.Select(g => g.HasBox ? "Evet" : "Hayır"));
         ScreenshotFilter = BuildColumnFilter("SS", _allGames.Select(g => g.HasScreenshot ? "Evet" : "Hayır"));
 
-        var allColumnFilters = new[]
+        AllColumnFilters = new[]
         {
             PlatformFilter, GenresFilter, PublisherFilter, CommunityRatingFilter,
             RegionFilter, SourceFilter, MatchMethodFilter, MaxPlayersFilter,
             TitleFilter, FileFilter, MatchedFilter, FavoriteFilter, HasLocalFileFilter,
             BoxFilter, ScreenshotFilter,
         };
-        foreach (var filter in allColumnFilters)
+        foreach (var filter in AllColumnFilters)
             filter.FilterChanged += ApplyFilter;
+
+        // Kullanıcı isteği: "shooter ve horror'u tıkladım ... ikisi de ayrı ayrı gözükmeli" —
+        // FilterByGenreToken'ın biriktirdiği token kümesi (bkz. _activeGenreTokens) filtre
+        // kapsül menüden/rozetten TAMAMEN temizlenince (IsActive false'a düşünce) de senkron
+        // kalsın diye.
+        GenresFilter.FilterChanged += () =>
+        {
+            if (!GenresFilter.IsActive)
+                _activeGenreTokens.Clear();
+        };
+
+        // AYRI bir döngüde (yukarıdaki _activeGenreTokens temizleme handler'ından SONRA) — multicast
+        // delegate'ler kayıt sırasıyla çalışır, RefreshActiveFilterChips her zaman GÜNCEL
+        // _activeGenreTokens'ı okumalı (bkz. RefreshActiveFilterChips yorumu).
+        foreach (var filter in AllColumnFilters)
+            filter.FilterChanged += RefreshActiveFilterChips;
 
         // Popup açılmadan hemen önce Options'ı güncel kapsama göre tazeler (bkz.
         // RefreshColumnFilterOptions) — Title/File IsSearchOnly olduğu için Options hiç kurmuyor,
@@ -600,7 +664,10 @@ public partial class MainViewModel : ObservableObject
         PlaylistChips.Add(new PlaylistChip { Name = "Hidden", Color = "#8A8D93", IsBuiltIn = true, Kind = PlaylistChipKind.Hidden });
         PlaylistChips.Add(new PlaylistChip { Name = "Recycle Bin", Color = "#8A8D93", IsBuiltIn = true, Kind = PlaylistChipKind.RecycleBin });
         PlaylistChips.Add(new PlaylistChip { Name = "Ready to Play", Color = "#3FB950", IsBuiltIn = true, Kind = PlaylistChipKind.ReadyToPlay });
-        PlaylistChips.Add(new PlaylistChip { Name = "Needs Search", Color = "#E5484D", IsBuiltIn = true, Kind = PlaylistChipKind.NeedsSearch });
+        // Kullanıcı isteği: "onun adını Missing Game mi yapsak" — "Needs Search"ten değiştirildi,
+        // PlaylistChipKind.NeedsSearch (persistence/switch-case'lerde kullanılan asıl kimlik) AYNI
+        // kaldı, sadece görünen isim.
+        PlaylistChips.Add(new PlaylistChip { Name = "Missing Game", Color = "#E5484D", IsBuiltIn = true, Kind = PlaylistChipKind.NeedsSearch });
         PlaylistChips.Add(new PlaylistChip { Name = "Top 250", Color = "#D9932B", IsBuiltIn = true, Kind = PlaylistChipKind.Top250 });
         PlaylistChips.Add(new PlaylistChip { Name = "Top 100", Color = "#D9932B", IsBuiltIn = true, Kind = PlaylistChipKind.Top100 });
         PlaylistChips.Add(new PlaylistChip { Name = "Top 25", Color = "#D9932B", IsBuiltIn = true, Kind = PlaylistChipKind.Top25 });
@@ -792,12 +859,18 @@ public partial class MainViewModel : ObservableObject
         return result;
     }
 
+    // Kullanıcı geri bildirimi: "manuel resim indirmede sorun var ... boş gösterdi ... programı
+    // kapatıp açınca gözüktü" — kayıt tarafı (bkz. GetMediaBaseFileName/SearchArtwork) game.File
+    // boşsa (custom/standalone oyunlar — bkz. RegisterNewCustomGame, BuildCustomGame hiç File set
+    // etmiyor) başlıktan türetilmiş bir dosya adıyla KAYDEDİYORDU, ama bu okuma tarafı SADECE
+    // game.File'a bakıyordu — boşsa direkt null dönüp dosya diskte gerçekten var olsa bile hiç
+    // bulunamıyordu (restart'ta BuildMediaTypeIndex ile sözlük yeniden kurulsa da GetBoxPath vb.
+    // yine buradan geçtiği için AYNI şekilde bulamıyordu — kullanıcının "restart'ta düzeldi"
+    // izlenimi başka bir oyun/senaryo olmalı, ama bu boş game.File durumu HER ZAMAN başarısız
+    // oluyordu). Artık ikisi de AYNI GetMediaBaseFileName mantığını kullanıyor.
     private static string? TryGetMediaPath(Dictionary<string, Dictionary<string, string>> byPlatform, Game game)
     {
-        if (string.IsNullOrWhiteSpace(game.File))
-            return null;
-
-        var baseName = Path.GetFileNameWithoutExtension(game.File);
+        var baseName = GetMediaBaseFileName(game);
         return byPlatform.TryGetValue(game.PlatformDisplayName, out var files) && files.TryGetValue(baseName, out var path)
             ? path
             : null;
@@ -812,7 +885,12 @@ public partial class MainViewModel : ObservableObject
     // NotifyArtworkDownloaded hemen ardından çağrılsa bile GetXPath boş dönüyordu (kullanıcı geri
     // bildirimi: "resim gelmiyor, kapatıp açınca geliyor"). DownloadArtworkAsync artık her başarılı
     // indirmeden sonra ilgili sözlüğü bu metotla güncelliyor, restart beklemeden anında görünüyor.
-    private void RegisterDownloadedMedia(string type, string platformDisplayName, string baseFileName, string destination)
+    // public: MediaProviderViewModel kendi indirmesini (ArtworkService.DownloadAsync'i doğrudan
+    // çağırıyor, DownloadArtworkAsync'i KULLANMIYOR) MainViewModel'e bildirebilsin diye (bkz.
+    // MediaProviderWindow.xaml.cs) — kullanıcı geri bildirimi: "media provider da otomatik indirme
+    // çalışmıyor heralde" — dosya gerçekten iniyordu ama bu sözlükler hiç güncellenmediği için
+    // NotifyArtworkDownloaded onu bulamıyordu (restart'a kadar boş görünüyordu, AYNI kök neden).
+    public void RegisterDownloadedMedia(string type, string platformDisplayName, string baseFileName, string destination)
     {
         // Yeni indirilen görselin arayüzde (tabloda ve detay panelinde) güncellenmesi için cache'i geçersiz kıl
         RetroAudit.Converters.ThumbnailImageConverter.Invalidate(destination);
@@ -882,6 +960,13 @@ public partial class MainViewModel : ObservableObject
         {
             game.IsManuallyLinked = true;
             game.ManualLinkTargetVersionLabel = primary.TargetVersionRawName ?? string.Empty;
+
+            // Kullanıcı isteği: "tabloda manuel eklenenlerin eşleşme yöntemi manuel gözükmeli
+            // şuan boş gözüküyor" — Game.MatchMethod normalde LaunchBox METADATA eşleşme türünü
+            // taşır (custom oyunlarda hiç dolmaz, gerçek bir katalog oyununda ROM manuel
+            // bağlandığında ise artık alakasız kalır) — Eşleşme Yöntemi sütununda/filtresinde
+            // kullanıcıya asıl anlamlı olan "bu satırın ROM'u nasıl bağlandığı" bilgisi.
+            game.MatchMethod = "Manuel";
         }
         else
         {
@@ -1481,6 +1566,52 @@ public partial class MainViewModel : ObservableObject
 
     // --- Toplu eylemler (bkz. IsBulkContextMenu) ---
 
+    // Kullanıcı isteği: "toplu seçimde sağ tıktan bağlaya bastığımda otomatik bağlamalı datası
+    // olan asıl kayıt diğeri sürümlerin içine, ikisinde de ayrı kayıt varsa bitanesini tutup
+    // diğerini sürümlere atmalı" — tekli "Bağla"nın (bkz. RequestLinkToGame/ManualLinkWindow)
+    // aksine burada seçim zaten "hangi oyunlar" sorusunu cevaplıyor, bir pencere açmaya gerek
+    // yok: hangisinin "asıl" (gerçek katalog verisi taşıyan) olduğu otomatik seçilir — custom
+    // OLMAYAN (gerçek katalog eşleşmesi) > metadata kaynağı olan > en düşük GameId — geri
+    // kalanların dosyaları LinkGameFileToGameAsync ile AYNI mekanizmayla ona taşınır.
+    [RelayCommand]
+    private async Task BulkLinkAsync()
+    {
+        var selected = ContextMenuSelection.ToList();
+        IsContextMenuOpen = false;
+
+        if (selected.Count < 2)
+        {
+            RequestShowMessage?.Invoke("Bağlamak için en az 2 oyun seçin.");
+            return;
+        }
+
+        var primary = selected
+            .OrderBy(g => g.GameKey.StartsWith("custom:", StringComparison.Ordinal))
+            .ThenByDescending(g => g.HasArtworkSource)
+            .ThenBy(g => g.GameId == 0 ? int.MaxValue : g.GameId)
+            .First();
+
+        var linked = 0;
+        foreach (var other in selected.Where(g => g != primary))
+        {
+            if (!HasLocalFile(other))
+                continue;
+
+            var filePath = GetLocalFilePath(other);
+            var syntheticVersion = new GameVersion
+            {
+                RawDatName = Path.GetFileNameWithoutExtension(filePath),
+                IsCustomEntry = true,
+            };
+            await LinkGameFileToGameAsync(other, primary, syntheticVersion);
+            linked++;
+        }
+
+        RequestShowMessage?.Invoke(linked == 0
+            ? "Seçili diğer oyunların hiçbirinde bağlanacak bir dosya yok."
+            : $"{linked} oyunun dosyası \"{primary.Title}\" oyununa bağlandı.");
+    }
+
     [RelayCommand]
     private void BulkHide()
     {
@@ -1868,8 +1999,17 @@ public partial class MainViewModel : ObservableObject
     private async Task BulkFetchArtwork()
     {
         IsContextMenuOpen = false;
+        await BulkFetchArtworkForGamesAsync(ContextMenuSelection.ToList());
+    }
 
-        var targets = ContextMenuSelection.Where(g => g.HasArtworkSource).ToList();
+    // Kullanıcı isteği: "otomatik indir butonuna basıyorum indirmiyor ... normal otomatik indirme
+    // komutuna bağlasana ... toplu seçimlerede uygun olacak" — Media Provider'ın kendi (ayrı,
+    // hatalı) tek-satır indirme mantığı yerine ana tablonun kapsül menüsündeki "Görsel Getir"nin
+    // KULLANDIĞI AYNI toplu indirme akışı (bkz. MediaProviderWindow.xaml.cs) — ContextMenuSelection'a
+    // bağımlı olmayan genel hali, tek bir oyun için de (Count=1) sorunsuz çalışır.
+    public async Task BulkFetchArtworkForGamesAsync(IReadOnlyList<Game> games)
+    {
+        var targets = games.Where(g => g.HasArtworkSource).ToList();
         if (targets.Count == 0)
         {
             RequestShowMessage?.Invoke("Seçilen oyunların hiçbirinde eşleşmiş bir metadata kaydı yok.");
@@ -2402,8 +2542,14 @@ public partial class MainViewModel : ObservableObject
             {
                 PlaylistChipKind.Hidden => _allGames.Where(g => g.IsHidden),
                 PlaylistChipKind.RecycleBin => _allGames.Where(g => g.IsDeleted),
-                PlaylistChipKind.ReadyToPlay => _allGames.Where(g => g.HasLocalFile),
-                PlaylistChipKind.NeedsSearch => _allGames.Where(g => !g.HasLocalFile),
+                // Kullanıcı geri bildirimi: "geri dönüşüm kutusunda bekleyenlerde gözüküyor orda
+                // gözükmemeli" — Hidden/RecycleBin'in AKSİNE bu ikisi "genel" görünümler, "hiç
+                // chip seçili değilken" (aşağıdaki else dalı, "!g.IsHidden && !g.IsDeleted") ile
+                // AYNI kuralı uygulamalı: çöp kutusundaki/gizli bir oyun ROM'u eksik diye "Needs
+                // Search"te, ROM'u varken de "Ready to Play"de görünmemeli — o oyunlar zaten
+                // kendi chip'lerinde (Hidden/Recycle Bin) görünüyor.
+                PlaylistChipKind.ReadyToPlay => _allGames.Where(g => g.HasLocalFile && !g.IsHidden && !g.IsDeleted),
+                PlaylistChipKind.NeedsSearch => _allGames.Where(g => !g.HasLocalFile && !g.IsHidden && !g.IsDeleted),
                 // Sıralama/kesme burada DEĞİL, ApplyFilter'da sütun filtrelerinden SONRA
                 // uygulanıyor (bkz. orada).
                 PlaylistChipKind.Top250 or PlaylistChipKind.Top100 or PlaylistChipKind.Top25 => GetTopRatedPopulation(),
@@ -2844,25 +2990,33 @@ public partial class MainViewModel : ObservableObject
     // Detay panelindeki Tür rozetine (tek tür) veya açılır menüsündeki bir seçeneğe (birden fazla
     // tür) tıklanınca çalışır — YENİ bir filtre sistemi DEĞİL, sütun başlığındaki filtre popup'ıyla
     // BİREBİR AYNI GenresFilter'ı kullanır (bkz. Models/ColumnFilter.cs). GenresFilter.Options her
-    // oyunun TAM (virgülle ayrılmış) Genres string'ini tek bir seçenek olarak tutuyor; burada tek
-    // bir token'a (ör. sadece "Shooter") göre birden fazla seçeneği aynı anda işaretleyebiliyoruz
-    // çünkü o token'ı İÇEREN her kombinasyon aranıyor. "ALL" tüm seçenekleri işaretleyip filtreyi
-    // sıfırlar (dropdown'daki "All Genres"). AÇMA/KAPAMA (toggle): aynı rozete İKİNCİ kez tıklanırsa
-    // (filtre zaten TAM OLARAK bu token'a göre uygulanmışsa) filtre kaldırılır — kullanıcı geri
-    // bildirimi: "tekrar tıklayınca gitmiyor" (önceki sürüm sadece uyguluyordu, hiç kaldırmıyordu).
+    // oyunun TAM (virgülle ayrılmış) Genres string'ini tek bir seçenek olarak tutuyor; bir option,
+    // seçili token'lardan (bkz. _activeGenreTokens) HERHANGİ birini İÇERİYORSA işaretlenir (OR).
+    // Kullanıcı geri bildirimi: "shooter ve horror'u tıkladım ikisi de ayrı ayrı gözükmeli" —
+    // birden fazla rozete art arda tıklamak ÖNCEKİni SİLMEK yerine BİRİKTİRİR; AYNI rozete İKİNCİ
+    // kez tıklamak sadece O token'ı kümeden çıkarır (toggle off). "ALL" tüm kümeyi temizler
+    // (dropdown'daki "All Genres").
     [RelayCommand]
     private void FilterByGenreToken(string token)
     {
-        bool Matches(FilterOption option) =>
-            token == "ALL" || option.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Contains(token, StringComparer.OrdinalIgnoreCase);
-
-        var alreadyApplied = token != "ALL" && GenresFilter.Options.All(o => o.IsChecked == Matches(o));
+        if (token == "ALL")
+            _activeGenreTokens.Clear();
+        else if (!_activeGenreTokens.Add(token))
+            _activeGenreTokens.Remove(token);
 
         foreach (var option in GenresFilter.Options)
-            option.IsChecked = alreadyApplied || Matches(option);
+            option.IsChecked = _activeGenreTokens.Count == 0
+                || option.Value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(_activeGenreTokens.Contains);
 
         GenresFilter.ApplyFilterCommand.Execute(null);
+
+        // Rozette (bkz. ColumnFilterViewModel.SetActiveSummaryOverride) Options'tan türetilen genel
+        // özet YERİNE kullanıcının GERÇEKTEN tıkladığı token'ların kendisi gösterilir — ör.
+        // "Shooter, Horror" (co-occur eden "Platform"/"Flight Simulator" gibi başka türler karışmaz).
+        // ApplyFilterCommand.Execute HEMEN yukarıda override'ı temizlediği için burada, ondan SONRA
+        // set ediliyor.
+        GenresFilter.SetActiveSummaryOverride(_activeGenreTokens.Count == 0 ? null : string.Join(", ", _activeGenreTokens));
     }
 
     // Detay panelindeki "Released"/"Junk" rozetine tıklanınca çalışır — YENİ bir filtre değil,
