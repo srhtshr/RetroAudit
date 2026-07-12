@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.26)
+## Mevcut durum (v0.27)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
@@ -34,6 +34,9 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 - **Tıklanabilir Tür rozetleri + aktif filtre rozetleri**: Tablodaki Türler sütunu rozet olarak gösteriliyor, tıklanınca o türe göre filtreliyor (birden fazlası birikiyor); üstteki "Görünen/Toplam" satırında o an uygulanan her filtre değeri ayrı bir rozet olarak görünüp tek tıkla kaldırılabiliyor.
 - **Manuel bağlama / standalone oyunlar**: Kataloğun hiçbir sürümüyle eşleşmeyen ROM'lar (Eşleşmeyenler sekmesinden "+ Yeni Oyun" ile, toplu "Eşleşmeyenleri de aktar" ile, ya da ana tablodaki kapsül menüsündeki "Bağla" ile tablodan başka bir oyuna taşınarak) katalogdan bağımsız birer oyun olarak kütüphaneye eklenebiliyor — CRC32'si hesaplanıp gösteriliyor, "manuel"/sarı rozetle işaretleniyor (CRC doğrulanmış gibi sunulmuyor), aynı isimli kayıtlar otomatik tek satırda toplanıyor.
 - **Kalıcı Sil, gerçek dosyaları da temizleyebiliyor**: hangi dosya türlerinin (ROM/Box/SS/Logo) de silineceğini seçebileceğiniz bir onay penceresiyle, işaretli dosyalar Windows Çöp Kutusu'na taşınıyor (kalıcı `File.Delete` değil) — Çöp Kutusu'nda çoklu seçimle de yapılabiliyor.
+- **Gameplay videosundan anlık görüntü**: Embedded YouTube oynatıcısında bir kamera butonu, o an oynayan kareyi Screenshot (SS) olarak kaydediyor; video gerçekten oynamıyorsa kare yakalanmıyor.
+- **"Bağla" artık ROM'suz da çalışıyor**: dosyası olmayan bir oyun da hedefe sahipsiz (kırmızı çarpı) bir sürüm kartı olarak eklenip kaynak satır tablodan gizlenebiliyor; sürüm kartındaki "Ayır" butonuyla geri alınabiliyor.
+- Üst arama kutusu alternatif isimlerde de arıyor ve aktif arama metni kaldırılabilir bir filtre rozeti olarak görünüyor; Durum filtresinde manuel bağlı oyunlar için ayrı bir kategori var.
 
 ### Pencereler
 - **MainWindow** — Platform listesi, sanallaştırılmış oyun tablosu (DataGrid), playlist chip şeridi, seçili oyun detay paneli ve BAŞLAT butonu.

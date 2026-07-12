@@ -43,4 +43,11 @@ public class GameVersion
     // (bkz. ManualLinkWindow.xaml — listede ayrı stille gösterilir). Sadece o pencerede kullanılır,
     // gerçek Sürümler panelinde ASLA görünmez.
     public bool IsCustomEntry { get; set; }
+
+    // Kullanıcı isteği: "merge'i kaldırınca tabloya geri gelmiyor" — dosyasız birleştirmede (bkz.
+    // MainViewModel.LinkGameFileToGameAsync) kaynak oyun gizlenir; bu bağlantının HANGİ oyundan
+    // geldiğini burada tutuyoruz ki "Ayır" (bkz. RemoveVersionLink) o oyunu tekrar görünür yapabilsin.
+    // Ayrıca fileless kartın beklenen dosya adlarını (Hashes) da kaynağın kendi katalog verisinden
+    // göstermek için kullanılıyor (bkz. LoadSelectedGameVersions).
+    public string? SourceGameKey { get; set; }
 }

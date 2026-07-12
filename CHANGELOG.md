@@ -2,6 +2,24 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.27] - 2026-07-12
+
+### Added
+- **Gameplay videosundan anlık görüntü**: Embedded YouTube oynatıcısının sağ üst köşesine (Clear Logo alanına) bir kamera butonu eklendi — o an oynayan kareyi yakalayıp Screenshot (SS) olarak kaydediyor. Video gerçekten oynamıyorsa (kapak ekranında/arabelleğe almada kaldıysa) kare yakalanmıyor, kullanıcı uyarılıyor.
+- **"Bağla" artık ROM'suz da çalışıyor**: Dosyası olmayan bir oyun (ör. kataloğun DAT'ında ayrı duran ama hiç ROM'u bulunmayan bir varyant) da başka bir oyuna bağlanabiliyor — hedefin Sürümler listesine sahipsiz (kırmızı çarpı) bir kart olarak ekleniyor, kaynak satır tablodan gizleniyor.
+- **Sürüm kartında "Ayır" butonu**: Manuel bağlı bir sürüm kartının üstünde, bağlantıyı kaldıran bir buton — kaldırınca (dosyasız birleştirmede) gizlenen kaynak oyun tabloya geri dönüyor.
+- **Üst arama kutusu artık alternatif isimlerde de arıyor**, ve yazılan metin türler gibi kaldırılabilir bir filtre rozeti olarak görünüyor.
+- **Durum filtresine "Manuel" kategorisi**: Manuel bağlı (turuncu ünlemli) oyunlar artık "Eşleşmedi" filtresine düşmüyor, kendi ayrı kategorisinde.
+
+### Changed
+- **Sürüm kartı önceliği**: Preferred işaretli sürümün ROM'u yoksa, ROM'u olan bir sürüm arasından bölge önceliğine göre (USA > Europe > Japan > Manuel) biri otomatik seçiliyor.
+- **Arama sorguları sadeleştirildi**: Kapak/Logo/Gameplay/Video arama sorguları artık "oyun adı platform cover/clear logo/gameplay/gameplay video" şeklinde; Clear Logo aramasında platform adı hiç geçmiyor (marka logosu genelde platformdan bağımsız).
+
+### Fixed
+- **Görsel indirme sonrası anlık güncellenmiyordu**: Bir oyunun bir görsel türü (Box/SS/Logo) ikinci kez indirilince/üzerine yazılınca (aynı dosya yolu değişmediği için) arayüz restart'a kadar eski görseli göstermeye devam ediyordu — düzeltme artık tüm indirme yollarında (tekli/toplu/arama/video snapshot) tek bir merkezi noktadan uygulanıyor.
+- **Pano (clipboard) kilitliyken çöküyordu**: Başlık/alternatif isim kopyalama, panoyu o an başka bir uygulama (ör. pano geçmişi) kullanıyorsa kritik hatayla çöküyordu — artık kısa aralıklarla birkaç kez tekrar deniyor, gecikmeyi azaltmak için gereksiz "panoda kalıcı olsun" adımı da kaldırıldı.
+- **Gameplay video anlık görüntüsü yanlış kareyi yakalıyordu**: Video donanım "overlay" katmanına çizildiği için yakalanan kare hep ilk kare/kapak ekranı oluyordu, oynatma ilerlemesinin hiç etkisi olmuyordu — donanım overlay'i devre dışı bırakılarak gerçek anlık kare yakalanıyor.
+
 ## [0.26] - 2026-07-11
 
 ### Added

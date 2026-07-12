@@ -51,7 +51,13 @@
   var el = document.getElementById('player');
   el.setAttribute('data-plyr-embed-id', id);
 
-  new Plyr('#player', {
+  // window'a atanıyor ki dışarıdan (bkz. MainWindow.xaml.cs CaptureVideoSnapshot_Click,
+  // ExecuteScriptAsync) "video şu an gerçekten oynuyor mu" diye sorulabilsin — kullanıcı geri
+  // bildirimi: "snapshot alırken youtube'un şu yazıları falan da çıkıyor" — Chromium'un autoplay
+  // kısıtlaması yüzünden bazen otomatik oynatma engellenip Plyr'ın kendi başlık/kapak ekranında
+  // (poster + play butonu) kalınabiliyor; bu durumda yakalanan kare oynanış DEĞİL bu kapak ekranı
+  // oluyordu.
+  window.player = new Plyr('#player', {
     autoplay: true,
     clickToPlay: true,
     // start: 60 -> video 1. dakikadan başlar (kullanıcı isteği: genelde ilk saniyeler

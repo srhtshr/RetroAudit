@@ -47,7 +47,14 @@ public record PlaylistRecord(int PlaylistId, string Name, string Color, bool IsB
 // kartında gerçek CRC32'yi gösterebilsin diye. ZipEntryName doluysa FilePath bir .zip'tir ve CRC32
 // arşivin TAMAMINDAN değil bu girdiden hesaplanmıştır (bkz. RomImportService.ComputeCrc32) — Crc32
 // null olabilir (hesaplama henüz yapılmadı ya da başarısız oldu), bu durumda kart boş gösterir.
-public record FilePathOverrideInfo(string FilePath, string? MatchMethod, string? TargetVersionRawName, string? ZipEntryName = null, string? Crc32 = null);
+// FilePath de null olabilir — kullanıcı isteği: "rom unun olup olmaması fark etmemeli" — bir
+// oyunu dosyası olmadan da başka bir oyuna "sürüm" olarak bağlayabilmek için (bkz.
+// MainViewModel.LinkGameFileToGameAsync "dosyasız birleştirme" dalı) — bu durumda kart kırmızı
+// çarpılı (sahipsiz) gösterilir. SourceGameKey — kullanıcı isteği: "merge'i kaldırınca tabloya
+// geri gelmiyor" — Bağla ile hangi oyundan taşındığını (varsa gizlenen kaynağı "Ayır" ile geri
+// açabilmek, bkz. MainViewModel.RemoveVersionLink) VE fileless kartın beklenen dosya adlarını
+// kaynağın kendi katalog verisinden gösterebilmek için (bkz. LoadSelectedGameVersions) tutulur.
+public record FilePathOverrideInfo(string? FilePath, string? MatchMethod, string? TargetVersionRawName, string? ZipEntryName = null, string? Crc32 = null, string? SourceGameKey = null);
 
 // Kullanıcı isteği: "manuel bağlanan kayıtlar ... CRC doğrulanmış gibi davranılmasın" — bu sabit,
 // FilePathOverrideInfo.MatchMethod'da kullanılan tek "manuel" değeri tek bir yerde tutar (bkz.

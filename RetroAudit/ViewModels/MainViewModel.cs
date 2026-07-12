@@ -271,6 +271,13 @@ public partial class MainViewModel : ObservableObject
     {
         ActiveFilterChips.Clear();
 
+        // Kullanıcı isteği: "o arama alanında yapılan aramalar içinde badgeler oluşsun türlerdeki
+        // gibi aynı yerde" — üstteki genel arama kutusu (SearchText) AllColumnFilters'ın parçası
+        // DEĞİL (Başlık sütun filtresinden ayrı, bkz. GetFilterScopePopulation), bu yüzden ayrıca
+        // ekleniyor.
+        if (!string.IsNullOrWhiteSpace(SearchText))
+            ActiveFilterChips.Add(new ActiveFilterChip(SearchText, new RelayCommand(() => SearchText = string.Empty)));
+
         foreach (var token in _activeGenreTokens)
         {
             var capturedToken = token;
@@ -367,7 +374,7 @@ public partial class MainViewModel : ObservableObject
         // listesinde gezinmez) hem de popup'ı açarken donmaya yol açıyordu. Sadece arama kutusu.
         TitleFilter = BuildSearchOnlyColumnFilter("Başlık");
         FileFilter = BuildSearchOnlyColumnFilter("File");
-        MatchedFilter = BuildColumnFilter("Durum", _allGames.Select(g => g.StatusOk ? "Eşleşti" : "Eşleşmedi"));
+        MatchedFilter = BuildColumnFilter("Durum", _allGames.Select(GetMatchedStatusLabel));
         FavoriteFilter = BuildColumnFilter("Favori", _allGames.Select(g => g.IsFavorite ? "Evet" : "Hayır"));
         HasLocalFileFilter = BuildColumnFilter("Durum", _allGames.Select(g => g.HasLocalFile ? "Oynanabilir" : "Eksik"));
         ActionsFilter = new ActionsColumnFilterViewModel(FavoriteFilter, HasLocalFileFilter);
@@ -411,7 +418,7 @@ public partial class MainViewModel : ObservableObject
         SourceFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(SourceFilter, g => g.SourceDat);
         MatchMethodFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(MatchMethodFilter, g => g.MatchMethod);
         MaxPlayersFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(MaxPlayersFilter, g => g.MaxPlayers == 0 ? string.Empty : g.MaxPlayers.ToString());
-        MatchedFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(MatchedFilter, g => g.StatusOk ? "Eşleşti" : "Eşleşmedi");
+        MatchedFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(MatchedFilter, GetMatchedStatusLabel);
         FavoriteFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(FavoriteFilter, g => g.IsFavorite ? "Evet" : "Hayır");
         HasLocalFileFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(HasLocalFileFilter, g => g.HasLocalFile ? "Oynanabilir" : "Eksik");
         BoxFilter.RequestRefreshOptions += () => RefreshColumnFilterOptions(BoxFilter, g => g.HasBox ? "Evet" : "Hayır");
@@ -823,6 +830,14 @@ public partial class MainViewModel : ObservableObject
     private Dictionary<string, Dictionary<string, string>> _screenshotByPlatform = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<string, Dictionary<string, string>> _clearLogoByPlatform = new(StringComparer.OrdinalIgnoreCase);
 
+    // Üstteki arama kutusunun alternatif isimlerde de eşleşmesi için (kullanıcı isteği: "üstteki
+    // ara alanı varya alternative namelerdede arama yapsın") — GameId -> alternatif isimler.
+    // SelectedGameAlternateNames (detay paneli) tek oyun için anlık DB sorgusu yapıyor, ama arama
+    // her tuş vuruşunda TÜM listeyi süzdüğü için ~67 bin oyun için sorgu tekrarı yerine tek seferlik
+    // bir toplu yükleme (bkz. CatalogDatabaseService.GetAllAlternateNames, RomImportService'te
+    // AYNI desenle zaten kullanılıyor).
+    private readonly Dictionary<int, List<string>> _alternateNamesByGameId = CatalogDatabaseService.GetAllAlternateNames();
+
     private void BuildLocalFileIndex()
     {
         _filePathOverrides = UserDataService.GetAllFilePathOverrides();
@@ -922,6 +937,15 @@ public partial class MainViewModel : ObservableObject
         game.BoxPath = GetBoxPath(game);
         game.ScreenshotPath = GetScreenshotPath(game);
         game.ClearLogoPath = GetClearLogoPath(game);
+        // Kullanıcı geri bildirimi: "resim indirdim anında render olmadı ... kapatıp açınca render
+        // oldu" — bu oyunun bu türü (Box/SS/Logo) AYNI deterministik yola DAHA ÖNCE de yazılmışsa
+        // (ör. tekrar indirme/arama), yukarıdaki *Path set edilirken YENİ değer ESKİSİYLE AYNI
+        // string oluyor — [ObservableProperty]'nin ürettiği setter eşit değerde PropertyChanged hiç
+        // tetiklemiyor, görsel restart'a kadar güncellenmeden kalıyordu (bkz.
+        // Game.RefreshImageDisplayPaths yorumu). NotifyArtworkDownloaded'ın TEK ve HER çağrıldığı
+        // yerde (17 farklı çağrı noktası) merkezi olarak burada çözülüyor, her yere ayrı ayrı
+        // eklemek yerine.
+        game.RefreshImageDisplayPaths();
     }
 
     // Grid'deki "eksik ROM'u ara" sütunu ve context menüsündeki "Open File Location"ın paylaştığı
@@ -943,8 +967,8 @@ public partial class MainViewModel : ObservableObject
     }
 
     private string GetLocalFilePath(Game game) =>
-        GetPrimaryOverride(game) is { } primary
-            ? primary.FilePath
+        GetPrimaryOverride(game) is { FilePath: { } primaryPath }
+            ? primaryPath
             : Path.Combine(AppPaths.Games, game.PlatformDisplayName, game.File);
 
     // Kullanıcı isteği: "manuel bağlanan kayıtlar detay panelinde ve ana tabloda açıkça 'Manual
@@ -1080,12 +1104,12 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void RequestLinkToGame(Game game)
     {
-        if (!HasLocalFile(game))
-        {
-            RequestShowMessage?.Invoke("Bu oyunun bağlanacak bir dosyası yok.");
-            return;
-        }
-        RequestLinkToGameSelection?.Invoke(game, GetLocalFilePath(game));
+        // Kullanıcı isteği: "rom unun olup olmaması fark etmemeli" — dosyası olmayan bir oyun da
+        // artık Bağla ile başka bir oyuna sahipsiz bir sürüm kartı olarak eklenebilir (bkz.
+        // LinkGameFileToGameAsync). İkinci parametre sadece ManualLinkWindow'un başlığında
+        // gösterilen bir etiket (bkz. MainWindow.xaml.cs) — dosya yoksa oyunun kendi adı kullanılır.
+        var displayLabel = HasLocalFile(game) ? GetLocalFilePath(game) : game.Title;
+        RequestLinkToGameSelection?.Invoke(game, displayLabel);
     }
 
     // MainWindow.xaml.cs, ManualLinkWindow'dan "Bağla" ile dönünce çağırır. sourceGame'in dosyası
@@ -1098,6 +1122,26 @@ public partial class MainViewModel : ObservableObject
     // "sahiplenilmiş" görünür, sourceGame'e dokunulmaz.
     public async Task LinkGameFileToGameAsync(Game sourceGame, Game targetGame, GameVersion? targetVersion)
     {
+        // Kullanıcı isteği: "rom unun olup olmaması fark etmemeli" — sourceGame'in hiç dosyası
+        // yoksa (ör. kataloğun DAT'ında ayrı bir Game olarak duran ama hiç ROM'u bulunmayan bir
+        // varyant) yine de targetGame'in Sürümler listesine sahipsiz (kırmızı çarpı) bir kart
+        // olarak eklenir; sourceGame'in KENDİSİ tablodan gizlenir (satır kaybolur, "Ayır" ile
+        // (bkz. RemoveVersionLink) veya Gizlenenler'den geri alınabilir).
+        if (!HasLocalFile(sourceGame))
+        {
+            var rawName = targetVersion?.RawDatName;
+            if (string.IsNullOrEmpty(rawName))
+                rawName = GetSourceVersionRawName(sourceGame);
+
+            UserDataService.SaveFilePathOverride(targetGame.GameKey, null, MatchMethods.ManualLink, rawName, sourceGameKey: sourceGame.GameKey);
+            UserDataService.SetHidden(sourceGame.GameKey, true);
+            sourceGame.IsHidden = true;
+
+            RefreshLibrary();
+            RequestShowMessage?.Invoke($"\"{sourceGame.Title}\" -> \"{targetGame.Title}\" oyununa (ROM'suz) bağlandı.");
+            return;
+        }
+
         var filePath = GetLocalFilePath(sourceGame);
 
         var sourceOverride = _filePathOverrides.TryGetValue(sourceGame.GameKey, out var sourceOverrides)
@@ -1115,7 +1159,7 @@ public partial class MainViewModel : ObservableObject
             crc32 = null;
         }
 
-        UserDataService.SaveFilePathOverride(targetGame.GameKey, filePath, MatchMethods.ManualLink, targetVersion?.RawDatName, zipEntryName, crc32);
+        UserDataService.SaveFilePathOverride(targetGame.GameKey, filePath, MatchMethods.ManualLink, targetVersion?.RawDatName, zipEntryName, crc32, sourceGameKey: sourceGame.GameKey);
 
         if (sourceOverride is not null)
         {
@@ -1130,6 +1174,69 @@ public partial class MainViewModel : ObservableObject
 
         RefreshLibrary();
         RequestShowMessage?.Invoke($"\"{Path.GetFileName(filePath)}\" -> \"{targetGame.Title}\" oyununa bağlandı.");
+    }
+
+    // Kullanıcı geri bildirimi: "kartlardayken crc32 kodları falan gözükmüyor" — dosyasız bir
+    // birleştirmede gerçek bir crc32 zaten olamaz (dosya yok), ama kaynağın KENDİ kataloğundaki
+    // (SourceGameKey, bkz. LinkGameFileToGameAsync) o sürüme ait BEKLENEN dosya adlarını en azından
+    // bilgi amaçlı gösterebiliriz — tıpkı gerçek ama sahipsiz bir DAT sürümünün (kırmızı çarpı)
+    // kendi Hashes'ini göstermesi gibi.
+    private List<GameHash> GetExpectedHashesForFilelessLink(FilePathOverrideInfo custom)
+    {
+        if (custom.SourceGameKey is null)
+            return new List<GameHash>();
+
+        var source = _allGames.FirstOrDefault(g => g.GameKey == custom.SourceGameKey);
+        if (source is null || source.GameId == 0)
+            return new List<GameHash>();
+
+        var match = CatalogDatabaseService.GetVersions(source.GameId, source.GameKey)
+            .FirstOrDefault(v => string.Equals(v.RawDatName, custom.TargetVersionRawName, StringComparison.OrdinalIgnoreCase));
+        return match?.Hashes ?? new List<GameHash>();
+    }
+
+    // LinkGameFileToGameAsync'in dosyasız dalı için — targetVersion verilmemişse (ör. BulkLinkAsync,
+    // dosya olmadığı için kendi sentetik ismini üretemez) kaynağın KENDİ kataloğundaki Preferred
+    // (yoksa ilk) sürümünün ham DAT adını kullanır, custom oyunlarda (GameId=0, hiç sürümü yok)
+    // başlığa düşülür.
+    private static string GetSourceVersionRawName(Game source)
+    {
+        if (source.GameId != 0)
+        {
+            var versions = CatalogDatabaseService.GetVersions(source.GameId, source.GameKey);
+            var preferred = versions.FirstOrDefault(v => v.IsPreferred) ?? versions.FirstOrDefault();
+            if (preferred is not null)
+                return preferred.RawDatName;
+        }
+        return source.Title;
+    }
+
+    // Kullanıcı isteği: "kart içine ayırma butonu ekle ... kendi kartının üstünde olsun bağlı
+    // olanın" — Sürümler panelindeki manuel bağlı (IsManuallyLinked) bir kartın üstündeki "Ayır"
+    // butonu. TargetVersionRawName'e göre siliniyor (bkz. UserDataService.
+    // RemoveFilePathOverrideByTargetVersion yorumu) — hem gerçek bir DAT sürümüne sonradan manuel
+    // bağlanmış kartlar HEM DE tamamen sentetik (custom/dosyasız birleştirme) kartlar için AYNI
+    // şekilde çalışır. Kullanıcı geri bildirimi: "merge'i kaldırınca tabloya geri gelmiyor" —
+    // dosyasız birleştirmede kaynak oyun gizlenmişti (bkz. LinkGameFileToGameAsync); SourceGameKey
+    // hâlâ _allGames'te VE gizliyse burada tekrar görünür yapılır (custom bir oyun MERGE sırasında
+    // TAMAMEN SİLİNMİŞSE, bkz. aynı metodun dosyalı dalı, geri getirilecek bir şey kalmaz — bu
+    // durumda FirstOrDefault null döner, sessizce atlanır).
+    [RelayCommand]
+    private void RemoveVersionLink(GameVersion version)
+    {
+        if (SelectedGame is not { } game || string.IsNullOrEmpty(version.RawDatName))
+            return;
+
+        UserDataService.RemoveFilePathOverrideByTargetVersion(game.GameKey, version.RawDatName);
+
+        if (version.SourceGameKey is not null
+            && _allGames.FirstOrDefault(g => g.GameKey == version.SourceGameKey) is { IsHidden: true } source)
+        {
+            UserDataService.SetHidden(source.GameKey, false);
+            source.IsHidden = false;
+        }
+
+        RefreshLibrary();
     }
 
     // View katmanı (MainWindow.xaml.cs) bunu dinleyip embedded WebView2 penceresini açıyor —
@@ -1481,7 +1588,10 @@ public partial class MainViewModel : ObservableObject
             if (_filePathOverrides.TryGetValue(game.GameKey, out var overrides))
             {
                 foreach (var o in overrides)
-                    paths.Add(o.FilePath);
+                {
+                    if (o.FilePath is not null)
+                        paths.Add(o.FilePath);
+                }
             }
         }
 
@@ -1591,25 +1701,19 @@ public partial class MainViewModel : ObservableObject
             .ThenBy(g => g.GameId == 0 ? int.MaxValue : g.GameId)
             .First();
 
-        var linked = 0;
-        foreach (var other in selected.Where(g => g != primary))
+        // Kullanıcı isteği: "rom unun olup olmaması fark etmemeli" — ROM'u olmayan bir oyun da
+        // artık atlanmıyor, LinkGameFileToGameAsync'in kendi dosyasız dalı devreye giriyor (satırı
+        // gizleyip hedefe sahipsiz bir sürüm kartı ekliyor, bkz. o metodun yorumu).
+        var others = selected.Where(g => g != primary).ToList();
+        foreach (var other in others)
         {
-            if (!HasLocalFile(other))
-                continue;
-
-            var filePath = GetLocalFilePath(other);
-            var syntheticVersion = new GameVersion
-            {
-                RawDatName = Path.GetFileNameWithoutExtension(filePath),
-                IsCustomEntry = true,
-            };
+            var syntheticVersion = HasLocalFile(other)
+                ? new GameVersion { RawDatName = Path.GetFileNameWithoutExtension(GetLocalFilePath(other)), IsCustomEntry = true }
+                : null;
             await LinkGameFileToGameAsync(other, primary, syntheticVersion);
-            linked++;
         }
 
-        RequestShowMessage?.Invoke(linked == 0
-            ? "Seçili diğer oyunların hiçbirinde bağlanacak bir dosya yok."
-            : $"{linked} oyunun dosyası \"{primary.Title}\" oyununa bağlandı.");
+        RequestShowMessage?.Invoke($"{others.Count} oyun \"{primary.Title}\" oyununa bağlandı.");
     }
 
     [RelayCommand]
@@ -1905,13 +2009,13 @@ public partial class MainViewModel : ObservableObject
     public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action CompletedCallback, Game Game)>? RequestSearchArtwork;
 
     [RelayCommand]
-    private void SearchBoxArt(Game game) => SearchArtwork(game, "Box", "kapak resmi (box art)");
+    private void SearchBoxArt(Game game) => SearchArtwork(game, "Box", "cover");
 
     [RelayCommand]
-    private void SearchClearLogoArt(Game game) => SearchArtwork(game, "Logo", "clear logo (şeffaf png)");
+    private void SearchClearLogoArt(Game game) => SearchArtwork(game, "Logo", "clear logo");
 
     [RelayCommand]
-    private void SearchScreenshotArt(Game game) => SearchArtwork(game, "SS", "oynanış ekran görüntüsü");
+    private void SearchScreenshotArt(Game game) => SearchArtwork(game, "SS", "gameplay");
 
     [RelayCommand]
     private void SearchVideo(Game game)
@@ -1919,7 +2023,7 @@ public partial class MainViewModel : ObservableObject
         // Video arama: YouTube'da oyun adını ara — kullanıcı istediği videoyu sağ tıkla kaydeder.
         // Artwork aramadan farklı olarak hedef klasör/dosya yok — MediaSearchWindow video URL modunda
         // çalışır (completedCallback null, targetFolder/FileName boş).
-        var query = $"{game.Title} {game.PlatformDisplayName} gameplay";
+        var query = $"{game.Title} {game.PlatformDisplayName} gameplay video";
         var url = "https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query);
         RequestSearchArtwork?.Invoke((url, string.Empty, string.Empty, game.Title, "video", () =>
         {
@@ -1930,7 +2034,12 @@ public partial class MainViewModel : ObservableObject
 
     private void SearchArtwork(Game game, string type, string mediaTypeLabel)
     {
-        var query = $"{game.Title} {game.PlatformDisplayName} {mediaTypeLabel}";
+        // Clear Logo genelde platformdan bağımsız tek bir marka/logosu (kullanıcı isteği:
+        // "clearlogoda platformu yazmana gerek yok") — platform ekleyince arama sonuçları
+        // gereksiz yere daralıyordu.
+        var query = type == "Logo"
+            ? $"{game.Title} {mediaTypeLabel}"
+            : $"{game.Title} {game.PlatformDisplayName} {mediaTypeLabel}";
         var url = "https://www.google.com/search?q=" + Uri.EscapeDataString(query) + "&tbm=isch";
         var targetFolder = Path.Combine(AppPaths.Images, game.PlatformDisplayName, type);
         var baseFileName = GetMediaBaseFileName(game);
@@ -2117,6 +2226,13 @@ public partial class MainViewModel : ObservableObject
         _ => 600,
     };
 
+    // Durum sütunu/filtresi için — kullanıcı geri bildirimi: "ünlemlerde eşleşmedide gözüküyor
+    // onları manuel olarak değiştir" — manuel bağlanan oyunlar StatusOk=false olsa bile (satırda
+    // turuncu ünlem gösteriliyor, kırmızı çarpı değil) "Eşleşmedi" filtresine düşüyordu; artık
+    // kendi "Manuel" değeriyle ayrı bir filtre seçeneği oluyor.
+    private static string GetMatchedStatusLabel(Game game) =>
+        game.IsManuallyLinked ? "Manuel" : (game.StatusOk ? "Eşleşti" : "Eşleşmedi");
+
     // Normalde ROM dosya adı (uzantısız) kullanılır; ROM henüz yoksa başlıktan, geçersiz
     // dosya adı karakterleri temizlenerek türetilir.
     private static string GetMediaBaseFileName(Game game)
@@ -2126,6 +2242,27 @@ public partial class MainViewModel : ObservableObject
 
         var invalid = Path.GetInvalidFileNameChars();
         return new string(game.Title.Select(c => invalid.Contains(c) ? '_' : c).ToArray());
+    }
+
+    // Kullanıcı isteği: "detaylardaki videodan gameplay resmi alma yapabilirmiyiz ... o butonla
+    // videodan gameplay resmi snapshot alıp kaydedebilirmiyiz" — WebView2'nin o anki render
+    // edilmiş görüntüsünü YAKALAMAK (CoreWebView2.CapturePreviewAsync) View katmanının işi (bkz.
+    // MainWindow.xaml.cs CaptureVideoSnapshot_Click), bu metot sadece SONUCU (ham JPEG byte'ları)
+    // SS olarak kaydedip diğer TÜM görsel indirme yollarıyla (RegisterDownloadedMedia +
+    // NotifyArtworkDownloaded, bkz. o metotların yorumları) AYNI şekilde kütüphaneyi canlı
+    // günceller — restart beklemeden hemen görünür, mevcut SS varsa üzerine yazar.
+    public async Task<bool> SaveVideoSnapshotAsync(Game game, byte[] imageBytes)
+    {
+        var baseFileName = GetMediaBaseFileName(game);
+        var destination = ArtworkService.BuildLocalPath(AppPaths.Images, game.PlatformDisplayName, "SS", baseFileName, preserveTransparency: false);
+        var success = await ArtworkService.ProcessAndSaveAsync(imageBytes, destination, preserveTransparency: false, GetArtworkMaxDimensionPixels());
+        if (success)
+        {
+            RegisterDownloadedMedia("SS", game.PlatformDisplayName, baseFileName, destination);
+            NotifyArtworkDownloaded(game);
+            ApplyFilter();
+        }
+        return success;
     }
 
     // Bir oyuna tıklanınca detay paneli otomatik açılır (kullanıcı isteği) — platform listesinde
@@ -2157,9 +2294,12 @@ public partial class MainViewModel : ObservableObject
             foreach (var version in CatalogDatabaseService.GetVersions(SelectedGame.GameId, SelectedGame.GameKey))
             {
                 version.IsOwned = IsVersionOwned(SelectedGame, version);
-                version.IsManuallyLinked = _filePathOverrides.TryGetValue(SelectedGame.GameKey, out var overrides)
-                    && overrides.Any(o => string.Equals(o.MatchMethod, MatchMethods.ManualLink, StringComparison.Ordinal)
-                        && string.Equals(o.TargetVersionRawName, version.RawDatName, StringComparison.OrdinalIgnoreCase));
+                var matchingOverride = _filePathOverrides.TryGetValue(SelectedGame.GameKey, out var overrides)
+                    ? overrides.FirstOrDefault(o => string.Equals(o.MatchMethod, MatchMethods.ManualLink, StringComparison.Ordinal)
+                        && string.Equals(o.TargetVersionRawName, version.RawDatName, StringComparison.OrdinalIgnoreCase))
+                    : null;
+                version.IsManuallyLinked = matchingOverride is not null;
+                version.SourceGameKey = matchingOverride?.SourceGameKey;
                 versions.Add(version);
             }
 
@@ -2189,11 +2329,19 @@ public partial class MainViewModel : ObservableObject
                         IsOwned = File.Exists(custom.FilePath),
                         IsManuallyLinked = true,
                         IsCustomEntry = true,
+                        SourceGameKey = custom.SourceGameKey,
                         // Kullanıcı isteği: "bu eşleşmeyenlerin crc32'sini zip içinden veya dosyadan
                         // alıp yazamıyormu buraya" — bkz. FilePathOverrideInfo.Crc32 (MainViewModel.
                         // LinkFile / RomImportViewModel.CompleteManualLinkAsync/
                         // ImportUnmatchedFileAsNewGameAsync tarafından önceden hesaplanıp kaydedilir).
-                        Hashes = new List<GameHash> { new() { FileName = Path.GetFileName(custom.FilePath), Crc32 = custom.Crc32 ?? string.Empty } },
+                        // FilePath null olabilir (kullanıcı isteği: "rom unun olup olmaması fark
+                        // etmemeli" — dosyasız birleştirme, bkz. LinkGameFileToGameAsync) — bu
+                        // durumda GERÇEK crc32 yok, ama kullanıcı geri bildirimi: "kartlardayken
+                        // crc32 kodları falan gözükmüyor" — en azından kaynağın kendi katalog
+                        // verisindeki BEKLENEN dosya adları (crc32'siz, bilgi amaçlı) gösterilir.
+                        Hashes = custom.FilePath is not null
+                            ? new List<GameHash> { new() { FileName = Path.GetFileName(custom.FilePath), Crc32 = custom.Crc32 ?? string.Empty } }
+                            : GetExpectedHashesForFilelessLink(custom),
                     });
 
                     // Kullanıcı geri bildirimi: "gözükmüyor crc32 leri tekrar taradım dosyayı" — bu
@@ -2215,12 +2363,34 @@ public partial class MainViewModel : ObservableObject
         }
 
         // Sürümler (Region) artık tek kart gösteriyor (kullanıcı isteği: "sürümlerde tek kart
-        // gözükecek şekilde yapalım") — varsayılan olarak Preferred işaretli sürüm (yoksa ilki).
-        SelectedVersionCard = SelectedGameVersions.FirstOrDefault(v => v.IsPreferred) ?? SelectedGameVersions.FirstOrDefault();
+        // gözükecek şekilde yapalım") — varsayılan olarak Preferred işaretli sürüm GÖSTERİLİR AMA
+        // SADECE ROM'u varsa (kullanıcı isteği: "eşleşenlerde rom varsa preferredde rom yoksa
+        // mavi olan seçili gelsin sürüm olarak öncelik usa eu japan sonra manuel rom varsa ama") —
+        // Preferred'ın ROM'u yoksa (kırmızı çarpı), ROM'u OLAN sürümlerden bölge önceliğine göre
+        // (USA > Europe > Japan > Manuel) biri seçilir; hiçbirinde ROM yoksa eskisi gibi Preferred
+        // (yoksa ilk kart) gösterilir.
+        var preferredVersion = SelectedGameVersions.FirstOrDefault(v => v.IsPreferred);
+        SelectedVersionCard = preferredVersion is { IsOwned: true }
+            ? preferredVersion
+            : SelectedGameVersions.Where(v => v.IsOwned).OrderBy(GetVersionRegionPriority).FirstOrDefault()
+                ?? preferredVersion
+                ?? SelectedGameVersions.FirstOrDefault();
         OnPropertyChanged(nameof(HasMultipleVersionCards));
         OnPropertyChanged(nameof(OtherVersionCards));
         OnPropertyChanged(nameof(SingleVersionCard));
         IsVersionCardMenuOpen = false;
+    }
+
+    // LoadSelectedGameVersions'daki ROM'u olan sürümler arasından seçim önceliği (kullanıcı
+    // isteği: "öncelik usa eu japan sonra manuel rom varsa"). Region alanı bazen birden fazla
+    // bölge içerebilir (ör. "USA, Europe"), bu yüzden Contains kullanılıyor.
+    private static int GetVersionRegionPriority(GameVersion version)
+    {
+        if (version.Region.Contains("USA", StringComparison.OrdinalIgnoreCase)) return 0;
+        if (version.Region.Contains("Europe", StringComparison.OrdinalIgnoreCase)) return 1;
+        if (version.Region.Contains("Japan", StringComparison.OrdinalIgnoreCase)) return 2;
+        if (version.IsManuallyLinked || string.Equals(version.Region, "Manuel", StringComparison.OrdinalIgnoreCase)) return 3;
+        return 4;
     }
 
     // Bkz. LoadSelectedGameVersions'daki çağrı yorumu. Eski kayıtlarda ZipEntryName de hiç
@@ -2229,11 +2399,17 @@ public partial class MainViewModel : ObservableObject
     // dosyalarda UI donmasın diye.
     private async Task BackfillMissingCrc32Async(string gameKey, FilePathOverrideInfo overrideInfo)
     {
-        var zipEntryName = overrideInfo.ZipEntryName ?? RomImportService.GetSoleZipEntryName(overrideInfo.FilePath);
+        // Çağıran zaten File.Exists(overrideInfo.FilePath) ile korunuyor (bkz. LoadSelectedGameVersions),
+        // ama dosyasız (ROM'suz) bağlantılarda (bkz. LinkGameFileToGameAsync) FilePath null olabildiği
+        // için burada da ayrıca güvenceye alınıyor.
+        if (overrideInfo.FilePath is not { } filePath)
+            return;
+
+        var zipEntryName = overrideInfo.ZipEntryName ?? RomImportService.GetSoleZipEntryName(filePath);
         string crc32;
         try
         {
-            crc32 = await Task.Run(() => RomImportService.ComputeCrc32(overrideInfo.FilePath, zipEntryName));
+            crc32 = await Task.Run(() => RomImportService.ComputeCrc32(filePath, zipEntryName));
         }
         catch (Exception)
         {
@@ -2320,12 +2496,33 @@ public partial class MainViewModel : ObservableObject
     public bool HasOverflowAlternateNames => SelectedGameAlternateNames.Count > 2;
 
     // Başlık/alternatif isim menüsündeki "kopyala" tıklamaları — kullanıcı isteği: "isim
-    // kopyalanabilir olsun".
+    // kopyalanabilir olsun". Windows panosu tek seferde tek işleme açık — başka bir uygulama
+    // (pano geçmişi/antivirüs/vs.) o an panoyu kilitli tutuyorsa çakışma olabiliyor.
+    // Clipboard.SetText, veriyi uygulama kapansa bile panoda kalıcı olsun diye ayrıca
+    // OleFlushClipboard da çağırıyor (Clipboard.SetDataObject(data, copy:true)) — bu EK adım
+    // panoyu ikinci kez açıp/kapatıyor, çakışma ihtimalini ikiye katlıyor VE her tekrar denemede
+    // (bkz. aşağıdaki retry) yavaş/gözle görülür bir bekleme yaratıyordu (kullanıcı geri bildirimi:
+    // "kopyalamaya basınca bi süre neden bekliyor"). copy:false ile Flush adımını atlıyoruz —
+    // veri sadece uygulama açıkken panoda kalır (bir oyun ismini kopyalayıp yapıştırmak için
+    // yeterli, kritik bir kayıp değil), ama işlem hem hızlanıyor hem çakışma yüzeyi küçülüyor.
     [RelayCommand]
     private void CopyText(string? text)
     {
-        if (!string.IsNullOrEmpty(text))
-            System.Windows.Clipboard.SetText(text);
+        if (string.IsNullOrEmpty(text))
+            return;
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                System.Windows.Clipboard.SetDataObject(text, copy: false);
+                return;
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                System.Threading.Thread.Sleep(30);
+            }
+        }
     }
 
     // Bir sürümün Hashes listesindeki dosya adlarından herhangi biri diskte (ya da "Şu anki yoldan
@@ -2353,16 +2550,20 @@ public partial class MainViewModel : ObservableObject
                 return versionSpecific.FilePath;
 
             var general = overrides.FirstOrDefault(o => string.IsNullOrEmpty(o.TargetVersionRawName));
-            if (general is not null)
+            // Genel (TargetVersionRawName boş) override'lar sadece dosya tabanlı akışlarca üretilir
+            // (bkz. dosyasız birleştirme, LinkGameFileToGameAsync — o HER ZAMAN spesifik bir
+            // TargetVersionRawName kullanır, hiç genel override üretmez) — FilePath burada teorik
+            // olarak null olamaz, yine de derleyiciye ve gelecekteki değişikliklere karşı güvenceye alınıyor.
+            if (general is { FilePath: { } generalFilePath })
             {
-                if (string.Equals(Path.GetExtension(general.FilePath), ".zip", StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(Path.GetExtension(generalFilePath), ".zip", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (ZipContainsAnyHashFile(general.FilePath, version.Hashes))
-                        return general.FilePath;
+                    if (ZipContainsAnyHashFile(generalFilePath, version.Hashes))
+                        return generalFilePath;
                 }
-                else if (version.Hashes.Any(h => string.Equals(h.FileName, Path.GetFileName(general.FilePath), StringComparison.OrdinalIgnoreCase)))
+                else if (version.Hashes.Any(h => string.Equals(h.FileName, Path.GetFileName(generalFilePath), StringComparison.OrdinalIgnoreCase)))
                 {
-                    return general.FilePath;
+                    return generalFilePath;
                 }
             }
         }
@@ -2423,11 +2624,30 @@ public partial class MainViewModel : ObservableObject
     // yeniden kurmak gerekir.
     partial void OnIsOthersExpandedChanged(bool value) => RebuildPlatformListItems();
 
-    partial void OnSearchTextChanged(string value) => ApplyFilter();
+    partial void OnSearchTextChanged(string value)
+    {
+        ApplyFilter();
+        RefreshActiveFilterChips();
+    }
 
-    partial void OnShowReleasedChanged(bool value) => ApplyFilter();
+    partial void OnShowReleasedChanged(bool value)
+    {
+        // Kullanıcı geri bildirimi: "sayılar değişmiyor" — Platform.GameCount observable bir
+        // property DEĞİL (bkz. Models/Platform.cs), bu yüzden SyncPlatformGameCounts sadece
+        // mutasyon yapmak yeterli değil; sol paneldeki satırlar RebuildPlatformListItems ile
+        // (Clear+yeniden Add, bkz. constructor'daki AYNI eşleştirme) fiziksel olarak yeniden
+        // kurulmadıkça WPF eski değeri göstermeye devam ediyordu.
+        SyncPlatformGameCounts();
+        RebuildPlatformListItems();
+        ApplyFilter();
+    }
 
-    partial void OnShowJunkChanged(bool value) => ApplyFilter();
+    partial void OnShowJunkChanged(bool value)
+    {
+        SyncPlatformGameCounts();
+        RebuildPlatformListItems();
+        ApplyFilter();
+    }
 
     // Bayrak filtreleri hem görünürlüğü (bkz. GetFilterScopePopulation) HEM DE tablodaki
     // Region/SourceDat/File bilgisinin hangi sürümden geleceğini etkiliyor — ikincisi ApplyFilter'ın
@@ -2570,16 +2790,23 @@ public partial class MainViewModel : ObservableObject
         }
 
         if (!string.IsNullOrWhiteSpace(SearchText))
-            query = query.Where(g => g.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+            query = query.Where(g => g.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                || (_alternateNamesByGameId.TryGetValue(g.GameId, out var altNames)
+                    && altNames.Any(n => n.Contains(SearchText, StringComparison.OrdinalIgnoreCase))));
 
         query = query.Where(MatchesRegionFlags);
 
         return query;
     }
 
+    // Kullanıcı isteği: "başlıktaki yüzdeyide ayarla aynı şekilde" — sol paneldeki platform
+    // rozetleriyle (bkz. SyncPlatformGameCounts) AYNI kök nedendi: Released/Junk anahtarları
+    // hiç dikkate alınmıyordu, bu yüzden Başlık sütunu başlığındaki % sağlık göstergesi Junk
+    // açılıp kapatıldığında değişmiyordu.
     private IEnumerable<Game> GetCurrentPlatformPopulation()
     {
-        var query = _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
+        var query = _allGames.Where(g => !g.IsHidden && !g.IsDeleted
+            && ((ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk")));
         if (SelectedPlatform is { IsAllPlatforms: false })
             query = query.Where(g => g.Platform == SelectedPlatform.Name);
 
@@ -2621,7 +2848,7 @@ public partial class MainViewModel : ObservableObject
         query = ApplyColumnFilter(query, MaxPlayersFilter, g => g.MaxPlayers == 0 ? string.Empty : g.MaxPlayers.ToString());
         query = ApplyColumnFilter(query, TitleFilter, g => g.Title);
         query = ApplyColumnFilter(query, FileFilter, g => g.File);
-        query = ApplyColumnFilter(query, MatchedFilter, g => g.StatusOk ? "Eşleşti" : "Eşleşmedi");
+        query = ApplyColumnFilter(query, MatchedFilter, GetMatchedStatusLabel);
         query = ApplyColumnFilter(query, FavoriteFilter, g => g.IsFavorite ? "Evet" : "Hayır");
         query = ApplyColumnFilter(query, HasLocalFileFilter, g => g.HasLocalFile ? "Oynanabilir" : "Eksik");
         query = ApplyColumnFilter(query, BoxFilter, g => g.HasBox ? "Evet" : "Hayır");
@@ -2814,18 +3041,19 @@ public partial class MainViewModel : ObservableObject
     // Her platformun rozetindeki sayıyı _allGames içinde o platforma ait kaç kayıt olduğuna göre
     // hesaplar ("All Platforms" toplam sayıyı gösterir). GetPlatforms()'taki sabit GameCount
     // değerleri sadece ilk yapım aşamasının kalıntısıydı; artık tek doğru kaynak gerçek oyun listesi.
-    // BİLİNÇLİ TASARIM: bu sayı toolbar'daki USA/EU/Japan bayrak filtresinden VE Released/Junk
-    // butonlarından etkilenmez — sol menü her zaman "bu platformda toplam kaç oyun var" sorusuna
-    // cevap veren sabit bir referanstır. "Görünen" sayacı ise o an aktif olan TÜM filtrelerin
-    // (region bayrağı + Released/Junk + arama + sütun filtreleri + playlist) sonucudur; ikisinin
-    // bilerek ayrışması normaldir (rozet asla filtrelenmiş bir alt kümeyi göstermez).
+    // Kullanıcı geri bildirimi: "release ve junk'a bastığımda değişmiyor ... platform listesindeki
+    // sayılar değişmiyor" — önceki tasarım bilerek Released/Junk'tan bağımsız tutuyordu, ama
+    // kullanıcı artık bu ikisini YANSITMASINI istiyor (region bayrağı/arama/sütun filtreleri gibi
+    // DAHA DAR kapsamlı filtrelerden hâlâ bağımsız — rozet "Görünen" sayacı değil, sadece Released/
+    // Junk açık/kapalı durumuna göre "bu platformda toplam kaç oyun var" sorusuna cevap verir).
     private void SyncPlatformGameCounts()
     {
         foreach (var platform in Platforms)
         {
-            platform.GameCount = platform.IsAllPlatforms
-                ? _allGames.Count
-                : _allGames.Count(g => g.Platform == platform.Name);
+            var population = platform.IsAllPlatforms
+                ? _allGames.AsEnumerable()
+                : _allGames.Where(g => g.Platform == platform.Name);
+            platform.GameCount = population.Count(g => (ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk"));
         }
     }
 

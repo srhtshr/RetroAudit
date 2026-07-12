@@ -249,6 +249,17 @@
                                     </Style>
                                 </TextBlock.Style>
                             </TextBlock>
+                            <!-- Ayır (kullanıcı isteği: "kart içine ayırma butonu ekle bide kendi
+                                 kartının üstünde olsun bağlı olanın") — SADECE bu sürüm manuel
+                                 bağlandıysa görünür (bkz. MainViewModel.RemoveVersionLink), gerçek
+                                 katalog eşleşmesi olan sıradan kartlarda hiç gösterilmez. -->
+                            <Button Style="{StaticResource ActionsIconButton}" Width="20" Height="20" Margin="4,0,0,0"
+                                    ToolTip="Ayır (bu bağlantıyı kaldır)"
+                                    Visibility="{Binding IsManuallyLinked, Converter={StaticResource BoolToVisibility}}"
+                                    Command="{Binding Data.RemoveVersionLinkCommand, Source={StaticResource ViewModelProxy}}"
+                                    CommandParameter="{Binding}">
+                                <TextBlock Text="&#xE738;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{StaticResource Brush.Accent.Amber}" />
+                            </Button>
                             <!-- ROM ara (bu SÜRÜME özgü) — kullanıcı isteği: "xyz sürümünü aradım,
                                  indirirken otomatik o isimle kayıt etsin" — bkz. MainViewModel.
                                  SearchRomForVersion, RomSearchWindow'un forcedFileName parametresi.
@@ -2846,8 +2857,62 @@
                                 </MenuItem>
                             </ContextMenu>
                         </Border.ContextMenu>
-                        <Image Source="{Binding SelectedGame.ClearLogoDisplayPath, Converter={StaticResource ThumbnailImage}, ConverterParameter=300}" Stretch="Uniform" Height="66"
-                               RenderOptions.BitmapScalingMode="HighQuality" />
+                        <Grid>
+                            <Image Source="{Binding SelectedGame.ClearLogoDisplayPath, Converter={StaticResource ThumbnailImage}, ConverterParameter=300}" Stretch="Uniform" Height="66"
+                                   RenderOptions.BitmapScalingMode="HighQuality" />
+
+                            <!-- Kullanıcı geri bildirimi: "buton gözükmüyor altta kalıyor olabilir"
+                                 — WebView2 (gameplay alanındaki YouTubePlayer) kendi native penceresi
+                                 olan bir kontrol ("airspace" sorunu): WPF Z-sırasından BAĞIMSIZ olarak
+                                 HER ZAMAN diğer tüm WPF içeriğinin ÜSTÜNDE render edilir, bu yüzden
+                                 gameplay çerçevesinin üstüne bindirilen butonlar görünmüyordu.
+                                 Kullanıcı isteği: "clear logonun olduğu yere sağ köşeye ... clear
+                                 logonun yeri kaymasın" — WebView2'yle hiç ÇAKIŞMAYAN bu alana (Grid
+                                 overlay, Image'ın kendi layout'unu ETKİLEMEZ) taşındı; Kapat/geri +
+                                 Snapshot butonları sadece video oynarken görünür. Video arkaplanına
+                                 karşı okunaklı kalmaları için ActionsIconButton yerine kendi (beyaz
+                                 üstünde yarı saydam siyah) şablonları var. -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top"
+                                        Visibility="{Binding IsPlayingVideo, Converter={StaticResource BoolToVisibility}}">
+                                <!-- Kullanıcı isteği: "videodan gameplay resmi snapshot alıp
+                                     kaydedebilirmiyiz" — WebView2'nin o anki render edilmiş
+                                     görüntüsünü (bkz. MainWindow.xaml.cs
+                                     CaptureVideoSnapshot_Click, CoreWebView2.CapturePreviewAsync)
+                                     yakalayıp oyunun SS (Ekran Görüntüsü) olarak kaydeder. -->
+                                <Button Width="26" Height="26" Margin="6,6,0,6" Cursor="Hand" ToolTip="Bu Kareyi Ekran Görüntüsü Olarak Kaydet"
+                                        Click="CaptureVideoSnapshot_Click">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Bg" CornerRadius="13" Background="#99000000">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bg" Property="Background" Value="#CC000000" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <TextBlock Text="&#xE722;" FontFamily="Segoe MDL2 Assets" FontSize="13" Foreground="White" />
+                                </Button>
+                                <Button Width="26" Height="26" Margin="6" Cursor="Hand" ToolTip="Kapat"
+                                        Command="{Binding CloseVideoCommand}">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="Bg" CornerRadius="13" Background="#99000000">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="Bg" Property="Background" Value="#CC000000" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+                                    <TextBlock Text="✕" FontSize="13" Foreground="White" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
                     </Border>
 
                     <!-- Gameplay Screenshot (bkz. "Görsel Getir") varsa alanı doldurur; yoksa
@@ -2899,29 +2964,6 @@
                                     </ControlTemplate>
                                 </Button.Template>
                                 <Path Data="{StaticResource Icon.YouTube}" Fill="White" Width="30" Height="30" Stretch="Uniform" />
-                            </Button>
-
-                            <!-- Kapat/geri butonu: sadece video oynarken görünür, kapanınca
-                                 (MainViewModel.CloseVideoCommand) screenshot'a geri döner. Video
-                                 arkaplanına karşı okunaklı kalması için ActionsIconButton yerine
-                                 kendi (beyaz üstünde yarı saydam siyah) şablonu var. -->
-                            <Button Width="26" Height="26" Margin="6" Cursor="Hand"
-                                    HorizontalAlignment="Right" VerticalAlignment="Top" ToolTip="Kapat"
-                                    Command="{Binding CloseVideoCommand}"
-                                    Visibility="{Binding IsPlayingVideo, Converter={StaticResource BoolToVisibility}}">
-                                <Button.Template>
-                                    <ControlTemplate TargetType="Button">
-                                        <Border x:Name="Bg" CornerRadius="13" Background="#99000000">
-                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsMouseOver" Value="True">
-                                                <Setter TargetName="Bg" Property="Background" Value="#CC000000" />
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Button.Template>
-                                <TextBlock Text="✕" FontSize="13" Foreground="White" />
                             </Button>
 
                             <!-- Embed navigasyonu başarısız olursa (bkz. VideoEmbedFailed) SADECE bu

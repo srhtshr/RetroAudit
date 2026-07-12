@@ -446,7 +446,14 @@ public partial class MainWindow : Window
         var userDataFolder = Path.Combine(Path.GetTempPath(), "RetroAudit", "YouTubePlayerWebView2");
         var options = new CoreWebView2EnvironmentOptions
         {
-            AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required",
+            // --disable-features=DirectCompositionVideoOverlays: kullanıcı geri bildirimi — "ilk
+            // sahneyi aldı ... hangi saniyedeysem onu alacak şekilde ayarlayamıyor muyuz" — video
+            // Chromium'da performans için donanım "overlay" katmanına (DirectComposition) çiziliyor,
+            // bu katman TARAYICININ KENDİ compositor'ının (CapturePreviewAsync'in okuduğu yer) TAMAMEN
+            // DIŞINDA — bu yüzden yakalanan kare oynatma ilerlese de hep overlay'e geçilmeden ÖNCEKİ
+            // (genelde videonun ilk karesi) donmuş görüntü oluyordu. Bu bayrak video'yu normal
+            // compositor'a çizdiriyor, CapturePreviewAsync artık GERÇEK anlık kareyi görebiliyor.
+            AdditionalBrowserArguments = "--autoplay-policy=no-user-gesture-required --disable-features=DirectCompositionVideoOverlays",
         };
         _youTubeWebViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
         return _youTubeWebViewEnvironment;
@@ -504,6 +511,63 @@ public partial class MainWindow : Window
     {
         if (YouTubePlayer.CoreWebView2 is not null)
             YouTubePlayer.CoreWebView2.Navigate("about:blank");
+    }
+
+    // Kullanıcı isteği: "detaylardaki videodan gameplay resmi alma yapabilirmiyiz ... o butonla
+    // videodan gameplay resmi snapshot alıp kaydedebilirmiyiz" — CapturePreviewAsync, WebView2'nin
+    // o an EKRANA ÇİZİLMİŞ görüntüsünü yakalar (piksel tabanlı, gerçek bir ekran görüntüsü gibi) —
+    // içerik YouTube'un kendi iframe'i olsa da cross-origin/CORS kısıtlaması SÖZ KONUSU DEĞİL,
+    // çünkü DOM/JS seviyesinde değil render edilmiş çıktı seviyesinde çalışıyor.
+    private async void CaptureVideoSnapshot_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm || vm.SelectedGame is not { } game)
+            return;
+        if (YouTubePlayer.CoreWebView2 is null)
+            return;
+
+        // Kullanıcı geri bildirimi: "bazılarında youtubedaki yazıları falan alıyor bazılarında
+        // almıyor süreye göremi screenshot alıyor acaba" — evet, tam olarak bu: start:60 saniyeye
+        // atlarken YouTube kısa bir süre arabelleğe alıyor (buffering) ve bu sırada kendi
+        // başlık/kapak ekranını gösteriyor, ama Plyr'ın window.player.playing bayrağı bu buffering
+        // anında bile TRUE dönebiliyor (Plyr, YT'nin BUFFERING durumunu da "oynuyor" sayıyor) — bu
+        // yüzden önceki bayrak kontrolü bazen bu ekranı yakalamayı engelleyemedi. Bunun yerine
+        // YouTube IFrame API'nin KENDİ ham durumuna (window.player.embed.getPlayerState — Plyr
+        // YouTube provider'da ham YT.Player'ı "embed" olarak dışarı veriyor) bakıyoruz: sadece
+        // state === 1 (PLAYING) gerçekten karenin oynanış olduğunu garanti eder, 3 (BUFFERING) DEĞİL.
+        // Buffering geçici olduğu için hemen pes etmek yerine birkaç kez kısa aralıklarla tekrar
+        // deniyoruz (~1.8sn) — çoğu buffering bu sürede biter, kullanıcı tekrar tıklamak zorunda kalmaz.
+        var isPlaying = false;
+        for (var attempt = 0; attempt < 6; attempt++)
+        {
+            var stateRaw = await YouTubePlayer.CoreWebView2.ExecuteScriptAsync(
+                "window.player && window.player.embed && typeof window.player.embed.getPlayerState === 'function' ? window.player.embed.getPlayerState() : -99");
+            if (int.TryParse(stateRaw, out var state) && state == 1)
+            {
+                isPlaying = true;
+                break;
+            }
+            await Task.Delay(300);
+        }
+        if (!isPlaying)
+        {
+            MessageBox.Show(this, "Video şu an oynatılmıyor (YouTube'un kapak ekranında/arabelleğe almada kalmış olabilir) — kare yakalamadan önce videoyu gerçekten başlatın.", "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        using var stream = new MemoryStream();
+        try
+        {
+            await YouTubePlayer.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Jpeg, stream);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Kare yakalanamadı:\n{ex.Message}", "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        var success = await vm.SaveVideoSnapshotAsync(game, stream.ToArray());
+        if (!success)
+            MessageBox.Show(this, "Görsel kaydedilemedi.", "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     // Kullanıcı geri bildirimi: "genel olarak kartın üstündeyken çalışmıyor ... scrollbar'a getirince

@@ -119,6 +119,16 @@ public static class UserDataService
         // MainViewModel.ResolveVersionFilePath, her GameVersion kendi bağlantısını bulur).
         EnsureFilePathOverridesAllowMultipleRows(connection);
 
+        // Kullanıcı isteği: "rom unun olup olmaması fark etmemeli" — ROM'u olmayan bir oyun da
+        // Bağla ile hedefin Sürümler listesine sahipsiz (kırmızı çarpı) bir kart olarak eklenebilsin
+        // diye FilePath artık zorunlu değil (bkz. MainViewModel.LinkGameFileToGameAsync "dosyasız
+        // birleştirme" dalı).
+        EnsureFilePathOverridesAllowNullFilePath(connection);
+
+        // Kullanıcı isteği: "merge'i kaldırınca tabloya geri gelmiyor" — dosyasız birleştirmede
+        // (bkz. LinkGameFileToGameAsync) hangi oyunun gizlendiğini "Ayır" geri açabilsin diye.
+        EnsureColumnExists(connection, "FilePathOverrides", "SourceGameKey", "TEXT");
+
         using (var checkCmd = connection.CreateCommand())
         {
             checkCmd.CommandText = "SELECT COUNT(*) FROM Playlists WHERE IsBuiltIn = 1 AND Name = 'Favorites'";
@@ -186,7 +196,7 @@ public static class UserDataService
         var result = new Dictionary<string, List<FilePathOverrideInfo>>();
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT GameKey, FilePath, MatchMethod, TargetVersionRawName, ZipEntryName, Crc32 FROM FilePathOverrides";
+        cmd.CommandText = "SELECT GameKey, FilePath, MatchMethod, TargetVersionRawName, ZipEntryName, Crc32, SourceGameKey FROM FilePathOverrides";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -197,11 +207,12 @@ public static class UserDataService
                 result[gameKey] = list;
             }
             list.Add(new FilePathOverrideInfo(
-                reader.GetString(1),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
                 reader.IsDBNull(2) ? null : reader.GetString(2),
                 reader.IsDBNull(3) ? null : reader.GetString(3),
                 reader.IsDBNull(4) ? null : reader.GetString(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5)));
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6)));
         }
         return result;
     }
@@ -213,7 +224,7 @@ public static class UserDataService
     // sürüme ait) bağlantı ARTIK silinmiyor — sadece AYNI (GameKey, TargetVersionRawName) çiftine
     // sahip önceki kayıt (varsa) değiştiriliyor, böylece "genel" bağlantıdan biri, her sürümden de
     // birer tane olabiliyor.
-    public static void SaveFilePathOverride(string gameKey, string filePath, string? matchMethod = null, string? targetVersionRawName = null, string? zipEntryName = null, string? crc32 = null)
+    public static void SaveFilePathOverride(string gameKey, string? filePath, string? matchMethod = null, string? targetVersionRawName = null, string? zipEntryName = null, string? crc32 = null, string? sourceGameKey = null)
     {
         using var connection = OpenConnection();
         using var transaction = connection.BeginTransaction();
@@ -234,15 +245,16 @@ public static class UserDataService
         {
             insertCmd.Transaction = transaction;
             insertCmd.CommandText = """
-                INSERT INTO FilePathOverrides (GameKey, FilePath, MatchMethod, TargetVersionRawName, ZipEntryName, Crc32)
-                VALUES ($gameKey, $filePath, $matchMethod, $targetVersionRawName, $zipEntryName, $crc32)
+                INSERT INTO FilePathOverrides (GameKey, FilePath, MatchMethod, TargetVersionRawName, ZipEntryName, Crc32, SourceGameKey)
+                VALUES ($gameKey, $filePath, $matchMethod, $targetVersionRawName, $zipEntryName, $crc32, $sourceGameKey)
                 """;
             insertCmd.Parameters.AddWithValue("$gameKey", gameKey);
-            insertCmd.Parameters.AddWithValue("$filePath", filePath);
+            insertCmd.Parameters.AddWithValue("$filePath", (object?)filePath ?? DBNull.Value);
             insertCmd.Parameters.AddWithValue("$matchMethod", (object?)matchMethod ?? DBNull.Value);
             insertCmd.Parameters.AddWithValue("$targetVersionRawName", (object?)targetVersionRawName ?? DBNull.Value);
             insertCmd.Parameters.AddWithValue("$zipEntryName", (object?)zipEntryName ?? DBNull.Value);
             insertCmd.Parameters.AddWithValue("$crc32", (object?)crc32 ?? DBNull.Value);
+            insertCmd.Parameters.AddWithValue("$sourceGameKey", (object?)sourceGameKey ?? DBNull.Value);
             insertCmd.ExecuteNonQuery();
         }
 
@@ -353,6 +365,21 @@ public static class UserDataService
         cmd.CommandText = "DELETE FROM FilePathOverrides WHERE GameKey = $gameKey AND FilePath = $filePath";
         cmd.Parameters.AddWithValue("$gameKey", gameKey);
         cmd.Parameters.AddWithValue("$filePath", filePath);
+        cmd.ExecuteNonQuery();
+    }
+
+    // "Ayır" butonu (bkz. MainViewModel.RemoveVersionLink, MainWindow.xaml Sürümler kartı) — bir
+    // sürüm kartının ARKASINDAKİ bağlantıyı kaldırır. FilePath'e göre değil TargetVersionRawName'e
+    // göre siliniyor çünkü dosyasız (ROM'suz) birleştirmelerde (bkz. LinkGameFileToGameAsync)
+    // FilePath NULL olabilir — TargetVersionRawName her sentetik/manuel-işaretli kartta MUTLAKA
+    // dolu (kartın kimliği zaten bu).
+    public static void RemoveFilePathOverrideByTargetVersion(string gameKey, string targetVersionRawName)
+    {
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "DELETE FROM FilePathOverrides WHERE GameKey = $gameKey AND TargetVersionRawName = $targetVersionRawName";
+        cmd.Parameters.AddWithValue("$gameKey", gameKey);
+        cmd.Parameters.AddWithValue("$targetVersionRawName", targetVersionRawName);
         cmd.ExecuteNonQuery();
     }
 
@@ -709,6 +736,47 @@ public static class UserDataService
                 SELECT GameKey, FilePath, MatchMethod, TargetVersionRawName FROM FilePathOverrides;
                 DROP TABLE FilePathOverrides;
                 ALTER TABLE FilePathOverrides_New RENAME TO FilePathOverrides;
+                """;
+            cmd.ExecuteNonQuery();
+        }
+        transaction.Commit();
+    }
+
+    // EnsureFilePathOverridesAllowMultipleRows ile AYNI desen (SQLite'ta bir NOT NULL kısıtlamasını
+    // ALTER TABLE ile kaldırmak mümkün değil) — tablo FilePath nullable olacak şekilde yeniden
+    // oluşturulup TÜM satırlar (OverrideId dahil, sırası korunsun diye) kopyalanıyor. PRAGMA
+    // table_info'nun notnull sütunu (index 3) zaten 0 ise (göç edilmiş) hiçbir şey yapılmaz.
+    private static void EnsureFilePathOverridesAllowNullFilePath(SqliteConnection connection)
+    {
+        using (var checkCmd = connection.CreateCommand())
+        {
+            checkCmd.CommandText = "PRAGMA table_info(FilePathOverrides)";
+            using var reader = checkCmd.ExecuteReader();
+            while (reader.Read())
+            {
+                if (string.Equals(reader.GetString(1), "FilePath", StringComparison.OrdinalIgnoreCase) && reader.GetInt32(3) == 0)
+                    return;
+            }
+        }
+
+        using var transaction = connection.BeginTransaction();
+        using (var cmd = connection.CreateCommand())
+        {
+            cmd.Transaction = transaction;
+            cmd.CommandText = """
+                CREATE TABLE FilePathOverrides_New2 (
+                    OverrideId INTEGER PRIMARY KEY AUTOINCREMENT,
+                    GameKey TEXT NOT NULL,
+                    FilePath TEXT,
+                    MatchMethod TEXT,
+                    TargetVersionRawName TEXT,
+                    ZipEntryName TEXT,
+                    Crc32 TEXT
+                );
+                INSERT INTO FilePathOverrides_New2 (OverrideId, GameKey, FilePath, MatchMethod, TargetVersionRawName, ZipEntryName, Crc32)
+                SELECT OverrideId, GameKey, FilePath, MatchMethod, TargetVersionRawName, ZipEntryName, Crc32 FROM FilePathOverrides;
+                DROP TABLE FilePathOverrides;
+                ALTER TABLE FilePathOverrides_New2 RENAME TO FilePathOverrides;
                 """;
             cmd.ExecuteNonQuery();
         }

@@ -346,9 +346,9 @@ public partial class MediaProviderViewModel : ObservableObject
 
         var mediaTypeLabel = item.MissingType switch
         {
-            "Box" => "kapak resmi (box art)",
-            "Logo" => "clear logo (şeffaf png)",
-            "SS" => "oynanış ekran görüntüsü",
+            "Box" => "cover",
+            "Logo" => "clear logo",
+            "SS" => "gameplay",
             "Video" => "video bağlantısı",
             "Wiki" => "Wikipedia bağlantısı",
             _ => item.MissingType,
@@ -360,7 +360,11 @@ public partial class MediaProviderViewModel : ObservableObject
             return;
         }
 
-        var query = $"{item.Game.Title} {item.Game.PlatformDisplayName} {mediaTypeLabel}";
+        // Clear Logo genelde platformdan bağımsız (kullanıcı isteği: "clearlogoda platformu
+        // yazmana gerek yok") — bkz. MainViewModel.SearchArtwork, aynı gerekçe.
+        var query = item.MissingType == "Logo"
+            ? $"{item.Game.Title} {mediaTypeLabel}"
+            : $"{item.Game.Title} {item.Game.PlatformDisplayName} {mediaTypeLabel}";
         var url = "https://www.google.com/search?q=" + Uri.EscapeDataString(query) + "&tbm=isch";
         var targetFolder = Path.Combine(AppPaths.Images, item.Game.PlatformDisplayName, item.MissingType);
         var baseFileName = GetMediaBaseFileName(item.Game);

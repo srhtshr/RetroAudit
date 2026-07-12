@@ -122,6 +122,7 @@ public partial class Game : ObservableObject
     public void RefreshImageDisplayPaths()
     {
         OnPropertyChanged(nameof(BoxDisplayPath));
+        OnPropertyChanged(nameof(ScreenshotDisplayPath));
         OnPropertyChanged(nameof(ClearLogoDisplayPath));
         OnPropertyChanged(nameof(ClearLogoThumbnailPath));
     }
