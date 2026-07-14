@@ -313,7 +313,7 @@ public partial class MainViewModel : ObservableObject
     // uygulanıyor ki daha önce kapatılmış bir sütun açılışta tekrar açık gelmesin).
     public ObservableCollection<ColumnVisibilityOption> ColumnOptions { get; } = new();
 
-    // Ayarlar > Arayüz sekmesinde değiştirilen ContextMenuDisplayMode/LaunchBoxDbPath gibi
+    // Ayarlar > Arayüz sekmesinde değiştirilen ContextMenuDisplayMode/MasterMetadataDbPath gibi
     // tercihlerin kalıcı olması için (bkz. ConfigService.LoadDefault/SaveDefault). Bu alanlar
     // RetroAudit.db'ye değil, kullanıcının makinesindeki ayrı bir JSON dosyasına gider.
     private AppSettings _appSettings;
@@ -339,7 +339,27 @@ public partial class MainViewModel : ObservableObject
         // RegisterNewCustomGame'deki tekilleştirme kontrolünden ÖNCE yanlışlıkla oluşmuş kayıtları
         // bir kez birleştirir (bkz. UserDataService.MergeDuplicateCustomGames yorumu).
         UserDataService.MergeDuplicateCustomGames();
-        _allGames.AddRange(UserDataService.GetAllCustomGames().Select(BuildCustomGame));
+        var customGamesLoaded = UserDataService.GetAllCustomGames().Select(BuildCustomGame).ToList();
+        // Kullanıcı bulgusu: "geri dönüşüm kutusuna atmıştım programı kapatıp açınca geri geldiler"
+        // — CatalogDatabaseService.GetGames() (bkz. ApplyUserData) gizli/silindi/favori durumunu
+        // SADECE katalog oyunlarına bindiriyordu; custom oyunlar (BuildCustomGame) bu bindirmeden
+        // hiç geçmediği için IsHidden/IsDeleted her zaman varsayılan false'ta kalıyordu — çöp
+        // kutusuna atılan bir custom oyun veritabanında (GameState.IsDeleted=1) doğru işaretli
+        // kalsa bile, bir sonraki açılışta normal kütüphanede "geri geliyordu". ApplyUserData ile
+        // AYNI üç adım (overlay, favori, kalıcı silinenleri listeden çıkar) burada da uygulanıyor.
+        var customGameStates = UserDataService.GetAllGameStates();
+        var favoriteKeys = UserDataService.GetFavoriteGameKeys();
+        customGamesLoaded.RemoveAll(g => customGameStates.TryGetValue(g.GameKey, out var state) && state.IsPermanentlyDeleted);
+        foreach (var custom in customGamesLoaded)
+        {
+            if (customGameStates.TryGetValue(custom.GameKey, out var state))
+            {
+                custom.IsHidden = state.IsHidden;
+                custom.IsDeleted = state.IsDeleted;
+            }
+            custom.IsFavorite = favoriteKeys.Contains(custom.GameKey);
+        }
+        _allGames.AddRange(customGamesLoaded);
         // Ekran görüntüsü: gerçek katalog "Pinball" ile manuel "Pinball" ayrı satırlarda — "bu 2
         // pinball'ı birleştirirsem kartlar tek bir yerde toplanacak dimi". Yukarıdaki birleştirme
         // sadece custom-custom arasındaydı; bu, custom bir oyunu aynı başlık+platforma sahip
@@ -1075,12 +1095,115 @@ public partial class MainViewModel : ObservableObject
             return;
 
         var catalogGames = _allGames.Where(g => !g.GameKey.StartsWith("custom:", StringComparison.Ordinal)).ToList();
+
+        // Kullanıcı bulgusu: "Karaoke Studio Senyou Cassette Vol. 1" (custom) ile katalogdaki
+        // "Karaoke Studio Senyou Cassette - Top Hit 20 Vol. 1" AYNI dosya (CRC32: 466061D7) ama
+        // başlıklar hem birebir hem alternatif isim listesinde de örtüşmüyor — bu yüzden CRC32
+        // (dosya İÇERİĞİ, başlıktan bağımsız en güvenilir sinyal) burada AYRICA bir katman: custom
+        // oyunun kendi override'larındaki CRC32, katalogdaki GERÇEK bir sürümün CRC32'siyle TEK bir
+        // oyunda kesişiyorsa (RomImportService Tier 2 ile AYNI mantık) o oyuna katlanır.
+        var catalogGamesById = catalogGames
+            .Where(g => g.GameId != 0)
+            .GroupBy(g => g.GameId)
+            .ToDictionary(gr => gr.Key, gr => gr.First());
+        var catalogCrc32Index = new Dictionary<string, List<Game>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (gameId, records) in CatalogDatabaseService.GetAllVersionRecordsByGame())
+        {
+            if (!catalogGamesById.TryGetValue(gameId, out var game))
+                continue;
+            foreach (var (_, crc32) in records)
+            {
+                if (string.IsNullOrWhiteSpace(crc32))
+                    continue;
+                if (!catalogCrc32Index.TryGetValue(crc32, out var list))
+                {
+                    list = new List<Game>();
+                    catalogCrc32Index[crc32] = list;
+                }
+                if (!list.Contains(game))
+                    list.Add(game);
+            }
+        }
+        var allOverrides = UserDataService.GetAllFilePathOverrides();
+        var catalogGamesByKey = catalogGames.ToDictionary(g => g.GameKey);
+
+        // Kullanıcı bulgusu: "Karaoke Studio Senyou Cassette Vol. 1" custom'unun override'ı ile
+        // GERÇEK katalog oyunu "Top Hit 20 Vol. 1"in KENDİ override'ı AYNI dosya yoluna işaret
+        // ediyor (kullanıcı iki kez, biri katalog oyununa biri de farkında olmadan yeni bir custom
+        // oyuna, elle bağlamış) — DAT'taki resmi CRC32 farklı olduğu için yukarıdaki CRC32 katmanı
+        // bunu YAKALAMAZ. En kesin sinyal: aynı FilePath'e sahip başka bir (custom OLMAYAN)
+        // override var mı — varsa dosya zaten gerçek oyuna bağlı demektir, custom satır fazlalık.
+        Game? FindDuplicateFilePathTarget(Game custom)
+        {
+            if (!allOverrides.TryGetValue(custom.GameKey, out var customOverrides))
+                return null;
+            var customFilePaths = customOverrides
+                .Select(o => o.FilePath)
+                .Where(p => !string.IsNullOrEmpty(p))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (customFilePaths.Count == 0)
+                return null;
+
+            var duplicateTargetKeys = allOverrides
+                .Where(kv => !kv.Key.StartsWith("custom:", StringComparison.Ordinal)
+                    && kv.Value.Any(o => o.FilePath is not null && customFilePaths.Contains(o.FilePath)))
+                .Select(kv => kv.Key)
+                .Distinct()
+                .ToList();
+
+            return duplicateTargetKeys.Count == 1 && catalogGamesByKey.TryGetValue(duplicateTargetKeys[0], out var target)
+                ? target
+                : null;
+        }
+
+        // Kullanıcı bulgusu: "Phantom Air Mission" (custom, elle bağlanmış) "Flight of the
+        // Intruder"ın LaunchBox alternatif adı — başlıklar FARKLI olduğu için yukarıdaki tam
+        // başlık eşleşmesi bunu hiç yakalamıyor, satır Manuel'de tek başına kalıyor. RomImportService
+        // Tier 6 (ResolveCandidate) ile AYNI iki aşamalı (tam, sonra normalize) alternatif isim
+        // eşleşmesi burada da uygulanıyor — TEK aday varsa (birden fazla katalog oyunu aynı
+        // alternatif adı paylaşıyorsa katlanmıyor, RomImportService ile AYNI güvenlik kuralı).
+        var alternateNamesByGameId = CatalogDatabaseService.GetAllAlternateNames();
         var anyFolded = false;
         foreach (var custom in customGames)
         {
-            var match = catalogGames.FirstOrDefault(g =>
+            var match = FindDuplicateFilePathTarget(custom);
+
+            if (match is null && allOverrides.TryGetValue(custom.GameKey, out var customOverrides))
+            {
+                var crc32Candidates = customOverrides
+                    .Select(o => o.Crc32)
+                    .Where(c => !string.IsNullOrWhiteSpace(c))
+                    .SelectMany(c => catalogCrc32Index.TryGetValue(c!, out var list) ? list : Enumerable.Empty<Game>())
+                    .Distinct()
+                    .ToList();
+                if (crc32Candidates.Count == 1)
+                    match = crc32Candidates[0];
+            }
+
+            match ??= catalogGames.FirstOrDefault(g =>
                 string.Equals(g.Title, custom.Title, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(g.PlatformDisplayName, custom.PlatformDisplayName, StringComparison.OrdinalIgnoreCase));
+
+            if (match is null)
+            {
+                var platformScoped = catalogGames.Where(g =>
+                    string.Equals(g.PlatformDisplayName, custom.PlatformDisplayName, StringComparison.OrdinalIgnoreCase)
+                    && alternateNamesByGameId.TryGetValue(g.GameId, out var names)
+                    && names.Any(n => string.Equals(n, custom.Title, StringComparison.OrdinalIgnoreCase))).ToList();
+
+                if (platformScoped.Count == 0)
+                {
+                    var normalizedCustomTitle = RomImportService.NormalizeTitleAggressive(custom.Title);
+                    platformScoped = catalogGames.Where(g =>
+                        string.Equals(g.PlatformDisplayName, custom.PlatformDisplayName, StringComparison.OrdinalIgnoreCase)
+                        && alternateNamesByGameId.TryGetValue(g.GameId, out var names)
+                        && names.Any(n => RomImportService.NormalizeTitleAggressive(n) == normalizedCustomTitle)).ToList();
+                }
+
+                if (platformScoped.Count == 1)
+                    match = platformScoped[0];
+            }
+
             if (match is null)
                 continue;
 
@@ -1161,6 +1284,7 @@ public partial class MainViewModel : ObservableObject
 
         UserDataService.SaveFilePathOverride(targetGame.GameKey, filePath, MatchMethods.ManualLink, targetVersion?.RawDatName, zipEntryName, crc32, sourceGameKey: sourceGame.GameKey);
 
+        var sourceRemoved = false;
         if (sourceOverride is not null)
         {
             UserDataService.RemoveFilePathOverride(sourceGame.GameKey, filePath);
@@ -1169,7 +1293,21 @@ public partial class MainViewModel : ObservableObject
             {
                 UserDataService.DeleteCustomGame(sourceGame.GameKey);
                 _allGames.Remove(sourceGame);
+                sourceRemoved = true;
             }
+        }
+
+        // Kullanıcı geri bildirimi: "ilk bağlamada oyuna bağlıyor sonra bidaha bağlaya basınca
+        // listeden gidiyor" — sourceOverride YOKSA (standart, katalog kuralıyla diskte bulunan bir
+        // dosya) satır BİLEREK dokunulmadan bırakılıyordu (fiziksel dosya "koparılamıyor" diye),
+        // bu yüzden ancak İKİNCİ bir Bağla (başka bir mekanizmayla) satırı gizliyordu — kullanıcı
+        // her Bağla'nın TEK seferde satırı kaldırmasını bekliyor. Dosyanın kendisi taşınmasa/
+        // kopyalanmasa bile satırı TABLODAN gizlemek (silmek değil) tamamen güvenli — "Ayır" ile
+        // (bkz. RemoveVersionLink) her zaman geri getirilebiliyor.
+        if (!sourceRemoved)
+        {
+            UserDataService.SetHidden(sourceGame.GameKey, true);
+            sourceGame.IsHidden = true;
         }
 
         RefreshLibrary();
@@ -1843,13 +1981,13 @@ public partial class MainViewModel : ObservableObject
     {
         IsContextMenuOpen = false;
 
-        if (string.IsNullOrWhiteSpace(_appSettings.LaunchBoxDbPath) || !File.Exists(_appSettings.LaunchBoxDbPath))
+        if (string.IsNullOrWhiteSpace(_appSettings.MasterMetadataDbPath) || !File.Exists(_appSettings.MasterMetadataDbPath))
         {
-            RequestShowMessage?.Invoke("LaunchBox.Metadata.db yolu Ayarlar > Genel'de tanımlı değil ya da bulunamadı.");
+            RequestShowMessage?.Invoke("MasterMetadata.db yolu Ayarlar > Genel'de tanımlı değil ya da bulunamadı.");
             return;
         }
 
-        using var reader = new LaunchBoxMetadataReader(_appSettings.LaunchBoxDbPath);
+        using var reader = new MasterMetadataReader(_appSettings.MasterMetadataDbPath);
         if (!reader.IsPlatformKnown(game.Platform))
             return;
 
@@ -1877,7 +2015,7 @@ public partial class MainViewModel : ObservableObject
         if (match.Genres.Length > 0)
             game.Genres = string.Join(", ", match.Genres);
         game.MatchMethod = match.MatchMethod;
-        game.NeedsReview = match.Confidence < LaunchBoxMetadataReader.FuzzyAcceptThreshold;
+        game.NeedsReview = match.Confidence < MasterMetadataReader.FuzzyAcceptThreshold;
         game.ReleaseDate = match.ReleaseDate ?? game.ReleaseDate;
         game.CommunityRating = match.CommunityRating ?? game.CommunityRating;
         game.VideoUrl = match.VideoUrl ?? game.VideoUrl;
@@ -1894,7 +2032,7 @@ public partial class MainViewModel : ObservableObject
     }
 
     // Toplu seçimdeki her oyun için ReMatchMetadata'nın aynısını çalıştırır — TEK bir reader
-    // açılıp tüm döngü boyunca yeniden kullanılıyor (LaunchBoxMetadataReader kendi içinde fuzzy
+    // açılıp tüm döngü boyunca yeniden kullanılıyor (MasterMetadataReader kendi içinde fuzzy
     // eşleştirme kovalarını önbelleğe alıyor, bkz. _platformGameNameBuckets — bulk'ta reader'ı N
     // kere açıp kapatmak yerine bu, aynı platformdaki oyunlar için gerçek bir performans kazancı).
     [RelayCommand]
@@ -1902,13 +2040,13 @@ public partial class MainViewModel : ObservableObject
     {
         IsContextMenuOpen = false;
 
-        if (string.IsNullOrWhiteSpace(_appSettings.LaunchBoxDbPath) || !File.Exists(_appSettings.LaunchBoxDbPath))
+        if (string.IsNullOrWhiteSpace(_appSettings.MasterMetadataDbPath) || !File.Exists(_appSettings.MasterMetadataDbPath))
         {
             RequestShowMessage?.Invoke("Metadata veritabanı yolu Ayarlar > Genel'de tanımlı değil ya da bulunamadı.");
             return;
         }
 
-        using var reader = new LaunchBoxMetadataReader(_appSettings.LaunchBoxDbPath);
+        using var reader = new MasterMetadataReader(_appSettings.MasterMetadataDbPath);
         foreach (var game in ContextMenuSelection)
         {
             if (!reader.IsPlatformKnown(game.Platform))
@@ -1963,12 +2101,9 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task FetchMissingArtwork(Game game)
     {
-        if (!game.HasArtworkSource)
-        {
-            RequestShowMessage?.Invoke("Bu oyun için eşleşmiş bir metadata kaydı yok, görsel aranamadı.");
-            return;
-        }
-
+        // Kullanıcı geri bildirimi: "super star force için 'eşleşmiş bir metadata kaydı yok' diyor"
+        // — bkz. BulkFetchArtworkForGamesAsync'teki AYNI gerekçe, HasArtworkSource artık zorunlu
+        // değil (2. kaynak LaunchBox eşleşmesine ihtiyaç duymuyor).
         var missingTypes = new HashSet<string>();
         if (!game.HasBox) missingTypes.Add("Box");
         if (!game.HasClearLogo) missingTypes.Add("Logo");
@@ -1986,8 +2121,10 @@ public partial class MainViewModel : ObservableObject
             if (result.Total == 0)
             {
                 var url = "https://www.google.com/search?q=" + Uri.EscapeDataString($"{game.Title} {game.PlatformDisplayName} görsel") + "&tbm=isch";
-                RequestSearchArtwork?.Invoke((url, Path.Combine(AppPaths.Images, game.PlatformDisplayName, "Box"), GetMediaBaseFileName(game), game.Title, "görsel", () =>
+                var fallbackBaseFileName = GetMediaBaseFileName(game);
+                RequestSearchArtwork?.Invoke((url, Path.Combine(AppPaths.Images, game.PlatformDisplayName, "Box"), fallbackBaseFileName, game.Title, "görsel", actualPath =>
                 {
+                    RegisterDownloadedMedia("Box", game.PlatformDisplayName, fallbackBaseFileName, actualPath);
                     NotifyArtworkDownloaded(game);
                     ApplyFilter();
                 }, game));
@@ -2006,7 +2143,7 @@ public partial class MainViewModel : ObservableObject
     // isteği: "indiremezse bulunamazsa search ile bizim webview'den çekebilelim"). RomSearchWindow
     // ile aynı gömülü WebView2 deseni (bkz. MediaSearchWindow) — sadece dosya adı ROM'la eşleşecek
     // şekilde zorlanıyor (bkz. MediaSearchWindow.xaml.cs).
-    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action CompletedCallback, Game Game)>? RequestSearchArtwork;
+    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action<string> CompletedCallback, Game Game)>? RequestSearchArtwork;
 
     [RelayCommand]
     private void SearchBoxArt(Game game) => SearchArtwork(game, "Box", "cover");
@@ -2025,7 +2162,7 @@ public partial class MainViewModel : ObservableObject
         // çalışır (completedCallback null, targetFolder/FileName boş).
         var query = $"{game.Title} {game.PlatformDisplayName} gameplay video";
         var url = "https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(query);
-        RequestSearchArtwork?.Invoke((url, string.Empty, string.Empty, game.Title, "video", () =>
+        RequestSearchArtwork?.Invoke((url, string.Empty, string.Empty, game.Title, "video", _ =>
         {
             // Video URL kaydedildi — herhangi bir görsel sözlüğü güncellemesi gerekmez
             OnPropertyChanged(nameof(SelectedGame));
@@ -2044,12 +2181,15 @@ public partial class MainViewModel : ObservableObject
         var targetFolder = Path.Combine(AppPaths.Images, game.PlatformDisplayName, type);
         var baseFileName = GetMediaBaseFileName(game);
 
-        RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, game.Title, mediaTypeLabel, () =>
+        RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, game.Title, mediaTypeLabel, actualPath =>
         {
-            // Yeni indirilen dosyayı media sözlüğüne hemen kaydet — yoksa NotifyArtworkDownloaded
-            // sözlükte göremez ve detay paneli restart olmadan güncellenemez (bkz. RegisterDownloadedMedia).
-            var destination = Path.Combine(targetFolder, baseFileName + (type == "Logo" ? ".png" : ".jpg"));
-            RegisterDownloadedMedia(type, game.PlatformDisplayName, baseFileName, destination);
+            // Kullanıcı bulgusu: "Could not find file '...(Not For Resale).jpg'" — burada eskiden
+            // hedef dosya adı TAHMİN ediliyordu (Box/SS için hep ".jpg" varsayılıyordu), ama
+            // MediaSearchWindow'un gerçekte kaydettiği dosya kaynak görselin/tarayıcının önerdiği
+            // uzantıyı (ör. ".webp") kullanıyordu — ikisi uyuşmayınca BoxPath var olmayan bir
+            // dosyaya işaret ediyor, Crop Editor'da tıklanınca çöküyordu. actualPath artık
+            // MediaSearchWindow'dan GERÇEKTEN yazılan tam yol olarak geliyor, tahmin yok.
+            RegisterDownloadedMedia(type, game.PlatformDisplayName, baseFileName, actualPath);
             NotifyArtworkDownloaded(game);
             ApplyFilter();
         }, game));
@@ -2060,12 +2200,9 @@ public partial class MainViewModel : ObservableObject
     {
         IsContextMenuOpen = false;
 
-        if (!game.HasArtworkSource)
-        {
-            RequestShowMessage?.Invoke("Bu oyun için eşleşmiş bir metadata kaydı yok, görsel aranamadı.");
-            return;
-        }
-
+        // Kullanıcı geri bildirimi: "super star force için 'eşleşmiş bir metadata kaydı yok' diyor"
+        // — bkz. BulkFetchArtworkForGamesAsync'teki AYNI gerekçe, HasArtworkSource artık zorunlu
+        // değil (2. kaynak LaunchBox eşleşmesine ihtiyaç duymuyor).
         var selectedTypes = RequestArtworkTypeSelection?.Invoke((game.HasBox, game.HasClearLogo, game.HasScreenshot));
         if (selectedTypes is null || selectedTypes.Count == 0)
             return;
@@ -2118,12 +2255,15 @@ public partial class MainViewModel : ObservableObject
     // bağımlı olmayan genel hali, tek bir oyun için de (Count=1) sorunsuz çalışır.
     public async Task BulkFetchArtworkForGamesAsync(IReadOnlyList<Game> games)
     {
-        var targets = games.Where(g => g.HasArtworkSource).ToList();
+        // Kullanıcı geri bildirimi: "super star force için 'eşleşmiş bir metadata kaydı yok' diyor"
+        // — HasArtworkSource (LaunchBox eşleşmesi) artık ZORUNLU değil; 2. kaynak (bkz.
+        // ArtworkService.DownloadFromLibretroThumbnailsAsync) kataloğun kendi DAT adıyla çalışıyor,
+        // LaunchBox eşleşmesine hiç ihtiyaç duymuyor. Bu yüzden LaunchBox'ta hiç kaydı olmayan
+        // oyunlar artık baştan ELENMİYOR — DownloadArtworkAsync her tür için ikisini de dener,
+        // hiçbiri bulamazsa aşağıdaki "indirilebilecek görsel bulunamadı" mesajı zaten devreye girer.
+        var targets = games.ToList();
         if (targets.Count == 0)
-        {
-            RequestShowMessage?.Invoke("Seçilen oyunların hiçbirinde eşleşmiş bir metadata kaydı yok.");
             return;
-        }
 
         // Toplu indirimde "zaten var" SEÇİLİ oyunların HEPSİNDE zaten var olması demek — bir
         // tek oyunda bile eksikse, o tür yine varsayılan işaretli gelir (kullanıcı isteği:
@@ -2190,30 +2330,43 @@ public partial class MainViewModel : ObservableObject
     // OperationCanceledException fırlatır, çağıran taraf bunu yakalayıp döngüyü temiz kapatır.
     private async Task<(int Succeeded, int Total)> DownloadArtworkAsync(Game game, HashSet<string> selectedTypes, CancellationToken cancellationToken, Action<int, int>? onProgress = null)
     {
-        var assets = CatalogDatabaseService.GetArtworkAssets(game.GameId)
-            .Where(kv => selectedTypes.Contains(kv.Key))
-            .ToList();
-        if (assets.Count == 0)
+        if (selectedTypes.Count == 0)
             return (0, 0);
 
+        // Kullanıcı isteği: "ilk kaynakta yoksa 2. kaynaktan çekip aynı 1. kaynaktaki akıştaki
+        // şeyleri yapacak" — 1. kaynak (LaunchBox, bkz. assetsByType) bu türde HİÇ kayıt taşımıyor
+        // olabilir (ör. Commodore 64/Atari 2600'de sık — ArtworkAssets'te satırı bile yok, eskiden
+        // bu durumda tür hiç denenmiyordu) YA DA kaydı var ama indirme başarısız olabilir (404 vb.)
+        // — ikisinde de 2. kaynağa (libretro-thumbnails) düşülüyor.
+        var assetsByType = CatalogDatabaseService.GetArtworkAssets(game.GameId);
+        var preferredRawDatName = GetSourceVersionRawName(game);
         var baseFileName = GetMediaBaseFileName(game);
+        var maxDimension = GetArtworkMaxDimensionPixels();
+        var types = selectedTypes.ToList();
         var succeeded = 0;
         var completed = 0;
-        foreach (var (type, fileName) in assets)
+        foreach (var type in types)
         {
             // Sadece Logo şeffaflık gerektirir (PNG) — Box/BG/SS küçük/kayıplı JPEG'e çevriliyor
             // (bkz. ArtworkService, kullanıcı kararı: dosya boyutunu azalt).
             var preserveTransparency = type == "Logo";
             var destination = ArtworkService.BuildLocalPath(AppPaths.Images, game.PlatformDisplayName, type, baseFileName, preserveTransparency);
-            if (await ArtworkService.DownloadAsync(fileName, destination, preserveTransparency, GetArtworkMaxDimensionPixels(), cancellationToken))
+
+            var downloaded = assetsByType.TryGetValue(type, out var fileName)
+                && await ArtworkService.DownloadAsync(fileName, destination, preserveTransparency, maxDimension, cancellationToken);
+
+            if (!downloaded)
+                downloaded = await ArtworkService.DownloadFromLibretroThumbnailsAsync(game.Platform, type, preferredRawDatName, destination, preserveTransparency, maxDimension, cancellationToken);
+
+            if (downloaded)
             {
                 RegisterDownloadedMedia(type, game.PlatformDisplayName, baseFileName, destination);
                 succeeded++;
             }
             completed++;
-            onProgress?.Invoke(completed, assets.Count);
+            onProgress?.Invoke(completed, types.Count);
         }
-        return (succeeded, assets.Count);
+        return (succeeded, types.Count);
     }
 
     // Ayarlar > Genel'de seçilen boyutu (bkz. AppSettings.ArtworkMaxDimension) ArtworkService'in
@@ -2229,9 +2382,19 @@ public partial class MainViewModel : ObservableObject
     // Durum sütunu/filtresi için — kullanıcı geri bildirimi: "ünlemlerde eşleşmedide gözüküyor
     // onları manuel olarak değiştir" — manuel bağlanan oyunlar StatusOk=false olsa bile (satırda
     // turuncu ünlem gösteriliyor, kırmızı çarpı değil) "Eşleşmedi" filtresine düşüyordu; artık
-    // kendi "Manuel" değeriyle ayrı bir filtre seçeneği oluyor.
+    // kendi "Manuel" değeriyle ayrı bir filtre seçeneği oluyor. IsEffectivelyMatched (bkz. Game.cs)
+    // — kullanıcı isteği: "2'sinden biriyle eşleşirse eşleşmedi çıkmasın" — StatusOk (LaunchBox
+    // metadata) yoksa bile herhangi bir kaynaktan görsel bulunmuşsa artık "Eşleşti" sayılıyor.
+    //
+    // Kullanıcı bulgusu: "manuel i de düzelt 18 gözüküyor hala ne alakaysa" — birden fazla custom
+    // oyunu gerçek katalog karşılığına birleştirdikten SONRA bile Manuel sayısı hiç düşmüyordu.
+    // Sebep: Durum İKONU (bkz. MainWindow.xaml, IsManuallyLinked && !IsEffectivelyMatched → "!")
+    // daha önce düzeltilmişti ama bu ETİKET/FİLTRE fonksiyonu unutulmuştu — bir oyun gerçek katalog
+    // verisiyle (tür/yayıncı/görsel) eşleşmiş olsa bile, dosyası elle bağlandığı için hep "Manuel"
+    // sayılmaya devam ediyordu, ikonla (✓) tutarsız. Artık İKİSİ AYNI kuralı kullanıyor: "Manuel"
+    // sadece HİÇBİR kaynaktan (LaunchBox/libretro) görsel/metadata bulunamamış custom satırlar için.
     private static string GetMatchedStatusLabel(Game game) =>
-        game.IsManuallyLinked ? "Manuel" : (game.StatusOk ? "Eşleşti" : "Eşleşmedi");
+        game.IsManuallyLinked && !game.IsEffectivelyMatched ? "Manuel" : (game.IsEffectivelyMatched ? "Eşleşti" : "Eşleşmedi");
 
     // Normalde ROM dosya adı (uzantısız) kullanılır; ROM henüz yoksa başlıktan, geçersiz
     // dosya adı karakterleri temizlenerek türetilir.

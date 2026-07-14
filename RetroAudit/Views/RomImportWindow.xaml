@@ -75,6 +75,22 @@
                              gibi gösterme" — hangi katmanla eşleştiği (Dosya Adı/CRC32/Başlık+Bölge/
                              Normalize Edilmiş Başlık) her satırda açıkça görünür. -->
                         <DataGridTextColumn Header="Eşleşme Türü" Binding="{Binding MatchMethod}" Width="1.6*" IsReadOnly="True" />
+                        <!-- Kullanıcı isteği: "tarama esnasında klasörde ne varsa gösterse daha
+                             anlaşılır olmazmı ... daha önceden eşleştirilen varsa eşleştirilenlerde
+                             gösterebilir" — satır gizlenmiyor, bu dosya zaten bir oyuna bağlıysa
+                             (bkz. RomMatch.IsAlreadyLinked) burada rozetleniyor; işaretkutusu da
+                             varsayılan olarak boş geliyor (tekrar aynı işlemi istemeden tekrarlamasın diye). -->
+                        <DataGridTemplateColumn Header="Durum" Width="110">
+                            <DataGridTemplateColumn.CellTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource Brush.Accent.Amber}" CornerRadius="3" Padding="6,2"
+                                            HorizontalAlignment="Left" Opacity="0.85"
+                                            Visibility="{Binding IsAlreadyLinked, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock Text="Zaten Bağlı" FontSize="10" FontWeight="SemiBold" Foreground="Black" />
+                                    </Border>
+                                </DataTemplate>
+                            </DataGridTemplateColumn.CellTemplate>
+                        </DataGridTemplateColumn>
                         <DataGridTextColumn Header="Kaynak Yol" Binding="{Binding SourcePath}" Width="2.4*" IsReadOnly="True" />
                     </DataGrid.Columns>
                 </DataGrid>

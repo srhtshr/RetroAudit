@@ -36,6 +36,13 @@ public partial class RomMatch : ObservableObject
     // doğrulama hiç çalıştırılmadı, true/false = çalıştı ve sonucu.
     [ObservableProperty]
     private bool? hashVerified;
+
+    // Kullanıcı isteği: "tarama esnasında klasörde ne varsa gösterse daha anlaşılır olmazmı ...
+    // daha önceden eşleştirilen varsa eşleştirilenlerde gösterebilir" — bu dosyanın yolu ZATEN bir
+    // oyuna bağlı (bkz. RomImportService.ScanFolder alreadyLinkedPaths) — satır GİZLENMİYOR, sadece
+    // işaretlenip (bkz. RomImportWindow "Zaten Bağlı" rozeti) varsayılan olarak işaretsiz geliyor,
+    // tekrar aynı işlemi yanlışlıkla tekrarlamasın diye.
+    public bool IsAlreadyLinked { get; init; }
 }
 
 // Kullanıcının bir içe aktarma turunda seçtiği toplu (satır bazlı değil) dosya işlemi modu.

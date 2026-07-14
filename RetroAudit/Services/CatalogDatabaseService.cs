@@ -290,7 +290,7 @@ public static class CatalogDatabaseService
     }
 
     // "Görsel Getir" komutu için: bir oyunun Builder'da önceden çözülmüş görsel varlık dosya
-    // adları (bkz. ArtworkAssets, LaunchBoxMetadataReader.GetArtwork). Type -> FileName;
+    // adları (bkz. ArtworkAssets, MasterMetadataReader.GetArtwork). Type -> FileName;
     // MainViewModel bu FileName'i bir indirme URL'sine çevirip diske kaydeder.
     // GameId -> o oyunun TÜM sürüm/dump varyantlarının (FileName, Crc32) çiftleri (sadece tercih
     // edilen sürümün değil — bkz. RomImportService.ScanFolder). Kullanıcı geri bildirimi 1: "İçe
@@ -418,6 +418,25 @@ public static class CatalogDatabaseService
         while (reader.Read())
             result[reader.GetString(0)] = reader.GetString(1);
         return result;
+    }
+
+    // Edit Metadata'daki Region seçimi için (kullanıcı isteği: "manuel girilenlerde mevcut kayıtlı
+    // regionlardan olsun, bi nevi hazır listeden") — kataloktaki TÜM bölgelerin tam listesi (bu
+    // oyunun kendi sürümleriyle sınırlı değil, ör. "Brazil", "Korea", "Taiwan" gibi daha az yaygın
+    // olanlar da dahil).
+    public static List<string> GetAllRegionNames()
+    {
+        var names = new List<string>();
+        if (!DatabaseExists)
+            return names;
+
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        cmd.CommandText = "SELECT Name FROM Regions ORDER BY Name";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            names.Add(reader.GetString(0));
+        return names;
     }
 
     // Sağ paneldeki Versions listesi için: bir oyunun tüm GameVersions + her sürümün tüm

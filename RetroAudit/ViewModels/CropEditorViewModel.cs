@@ -38,6 +38,16 @@ public partial class CropEditorViewModel : ObservableObject
     [ObservableProperty]
     private int sourcePixelHeight;
 
+    // Kullanıcı bulgusu: "Save'e basınca 'The process cannot access the file ... being used by
+    // another process'" — CropEditorDialog.xaml'daki önizleme <Image>'ı eskiden doğrudan
+    // ImagePath (string) yolunu bağlıyordu; WPF'in string->ImageSource dönüştürücüsü varsayılan
+    // olarak CacheOption.OnLoad KULLANMIYOR, bu yüzden görsel dosyası pencere açık kaldığı sürece
+    // (Save'e basılana kadar) kilitli kalıyordu — SaveCropped'ın File.Copy ile ÜZERİNE yazması bu
+    // yüzden çöküyordu. Artık önizleme bu ÖNCEDEN (OnLoad ile) tam belleğe alınmış, dosyayı hemen
+    // serbest bırakan bitmap'e bağlanıyor (bkz. Initialize).
+    [ObservableProperty]
+    private ImageSource? previewImage;
+
     // Görselin Canvas üzerinde Stretch=Uniform ile çizildiği gerçek alan (letterbox sonrası) —
     // CropEditorDialog.xaml.cs, Image kontrolünün gerçek render boyutunu ölçüp SetDisplayBounds
     // ile buraya yazıyor.
@@ -103,9 +113,14 @@ public partial class CropEditorViewModel : ObservableObject
         probe.CacheOption = BitmapCacheOption.OnLoad;
         probe.UriSource = new Uri(imagePath, UriKind.Absolute);
         probe.EndInit();
+        probe.Freeze();
 
         SourcePixelWidth = probe.PixelWidth;
         SourcePixelHeight = probe.PixelHeight;
+        // OnLoad ile tam belleğe alınmış aynı bitmap önizleme <Image>'ına da bağlanıyor — dosya
+        // handle'ı burada kapanıyor, Save sırasında File.Copy'nin aynı yolun üzerine yazmasını
+        // artık hiçbir şey engellemiyor (bkz. yukarıdaki PreviewImage yorumu).
+        PreviewImage = probe;
     }
 
     // View, Image kontrolünün Stretch=Uniform sonrası gerçek çizim alanını ölçüp bunu çağırır —

@@ -6,6 +6,7 @@
 
     <Window.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:AlternateNamesPreviewConverter x:Key="AlternateNamesPreview" />
     </Window.Resources>
 
     <Grid Background="{StaticResource Brush.Background.Base}">
@@ -35,24 +36,38 @@
         <ListBox Grid.Row="2" Margin="16,10,16,0" ItemsSource="{Binding FilteredGames}" SelectedItem="{Binding SelectedGame}">
             <ListBox.ItemTemplate>
                 <DataTemplate>
-                    <!-- Kullanıcı isteği: "unknown değilde manuel bağlamaya yönlendirebilirsin ...
-                         aynı yani" — "+ Yeni Oyun" (bkz. ManualLinkViewModel.NewGameSentinelKey),
-                         kataloktaki gerçek oyunlardan ayırt edilsin diye sürüm listesindeki "+ Yeni"
-                         ile AYNI Amber stille. -->
-                    <TextBlock>
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Text" Value="{Binding Title}" />
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding GameKey}" Value="__new_custom_game__">
-                                        <Setter Property="Text" Value="{Binding Title, StringFormat='+ Yeni Oyun: {0}'}" />
-                                        <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
-                                        <Setter Property="FontWeight" Value="SemiBold" />
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
+                    <StackPanel Margin="0,2">
+                        <!-- Kullanıcı isteği: "unknown değilde manuel bağlamaya yönlendirebilirsin ...
+                             aynı yani" — "+ Yeni Oyun" (bkz. ManualLinkViewModel.NewGameSentinelKey),
+                             kataloktaki gerçek oyunlardan ayırt edilsin diye sürüm listesindeki "+ Yeni"
+                             ile AYNI Amber stille. -->
+                        <TextBlock>
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Text" Value="{Binding Title}" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding GameKey}" Value="__new_custom_game__">
+                                            <Setter Property="Text" Value="{Binding Title, StringFormat='+ Yeni Oyun: {0}'}" />
+                                            <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <!-- Kullanıcı isteği: "şu listede detaylardaki gibi alternatif nameleri
+                             çıkmıyor" — arama sonucundaki her oyunun altında (varsa) LaunchBox
+                             alternatif isimleri küçük gri satır olarak gösterilir. -->
+                        <TextBlock FontSize="10" Foreground="{StaticResource Brush.Text.Secondary}"
+                                   TextTrimming="CharacterEllipsis">
+                            <TextBlock.Text>
+                                <MultiBinding Converter="{StaticResource AlternateNamesPreview}">
+                                    <Binding Path="GameId" />
+                                    <Binding Path="DataContext.AlternateNamesByGameId" RelativeSource="{RelativeSource AncestorType=Window}" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </StackPanel>
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>

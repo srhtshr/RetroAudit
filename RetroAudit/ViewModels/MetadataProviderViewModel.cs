@@ -112,7 +112,7 @@ public partial class MetadataProviderViewModel : ObservableObject
 
     public event Action<string>? RequestShowMessage;
     public event Action<(Game Game, Action CompletedCallback)>? RequestEditMetadata;
-    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action CompletedCallback, Game Game)>? RequestSearchArtwork;
+    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action<string> CompletedCallback, Game Game)>? RequestSearchArtwork;
 
     public MetadataProviderViewModel(IReadOnlyList<Game> allGames, Action<Game> onMetadataUpdated, Func<IReadOnlyList<Platform>> getOrderedPlatforms, bool useModernLayout = false)
     {
@@ -264,7 +264,7 @@ public partial class MetadataProviderViewModel : ObservableObject
         var targetFolder = Path.Combine(AppPaths.Images, item.Game.PlatformDisplayName, "Box");
         var baseFileName = GetMediaBaseFileName(item.Game);
 
-        RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, item.Game.Title, item.MissingTypeLabel, () =>
+        RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, item.Game.Title, item.MissingTypeLabel, _ =>
         {
             _onMetadataUpdated(item.Game);
             RebuildPlatformAuditSummaries();
@@ -294,16 +294,16 @@ public partial class MetadataProviderViewModel : ObservableObject
             return;
 
         var appSettings = ConfigService.LoadDefault();
-        if (string.IsNullOrWhiteSpace(appSettings.LaunchBoxDbPath) || !File.Exists(appSettings.LaunchBoxDbPath))
+        if (string.IsNullOrWhiteSpace(appSettings.MasterMetadataDbPath) || !File.Exists(appSettings.MasterMetadataDbPath))
         {
-            RequestShowMessage?.Invoke("LaunchBox.Metadata.db yolu Ayarlar > Genel'de tanımlı değil ya da bulunamadı.");
+            RequestShowMessage?.Invoke("MasterMetadata.db yolu Ayarlar > Genel'de tanımlı değil ya da bulunamadı.");
             return;
         }
 
-        using var reader = new LaunchBoxMetadataReader(appSettings.LaunchBoxDbPath);
+        using var reader = new MasterMetadataReader(appSettings.MasterMetadataDbPath);
         if (!reader.IsPlatformKnown(item.Game.Platform))
         {
-            RequestShowMessage?.Invoke("Bu platform LaunchBox metadata veritabanında tanınmadı.");
+            RequestShowMessage?.Invoke("Bu platform master metadata veritabanında tanınmadı.");
             return;
         }
 
@@ -333,7 +333,7 @@ public partial class MetadataProviderViewModel : ObservableObject
         if (match.Genres.Length > 0)
             game.Genres = string.Join(", ", match.Genres);
         game.MatchMethod = match.MatchMethod;
-        game.NeedsReview = match.Confidence < LaunchBoxMetadataReader.FuzzyAcceptThreshold;
+        game.NeedsReview = match.Confidence < MasterMetadataReader.FuzzyAcceptThreshold;
         game.ReleaseDate = match.ReleaseDate ?? game.ReleaseDate;
         game.CommunityRating = match.CommunityRating ?? game.CommunityRating;
         game.VideoUrl = match.VideoUrl ?? game.VideoUrl;

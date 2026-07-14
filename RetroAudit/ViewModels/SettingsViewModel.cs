@@ -219,7 +219,7 @@ public partial class SettingsViewModel : ObservableObject
     private ContextMenuDisplayMode contextMenuDisplayMode = ContextMenuDisplayMode.IconAndText;
 
     [ObservableProperty]
-    private string launchBoxDbPath = string.Empty;
+    private string masterMetadataDbPath = string.Empty;
 
     // DataGrid satır yüksekliği — önceden ana penceredeki araç çubuğunda bir kaydırıcıydı,
     // kalıcı olmadan her açılışta sıfırlanıyordu. Buraya taşınıp diğer Arayüz alanları gibi
@@ -296,7 +296,7 @@ public partial class SettingsViewModel : ObservableObject
             }));
 
         contextMenuDisplayMode = settings.ContextMenuDisplayMode;
-        launchBoxDbPath = settings.LaunchBoxDbPath;
+        masterMetadataDbPath = settings.MasterMetadataDbPath;
         rowHeight = settings.RowHeight;
         showVersionsAsSingleCard = settings.ShowVersionsAsSingleCard;
         groupPlatformsByCategory = settings.GroupPlatformsByCategory;
@@ -724,16 +724,16 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void BrowseLaunchBoxDb()
+    private void BrowseMasterMetadataDb()
     {
         var dialog = new OpenFileDialog
         {
-            Title = "LaunchBox.Metadata.db Seçin",
+            Title = "MasterMetadata.db Seçin",
             Filter = "SQLite veritabanı (*.db)|*.db|Tüm dosyalar (*.*)|*.*",
         };
 
         if (dialog.ShowDialog() == true)
-            LaunchBoxDbPath = dialog.FileName;
+            MasterMetadataDbPath = dialog.FileName;
     }
 
     // "Core Adı" sütunundaki Mod rozet-ComboBox'ının ItemsSource'u (bkz. LauncherTypeOption yorumu) —
@@ -1273,7 +1273,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         var settings = ConfigService.LoadDefault();
         settings.ContextMenuDisplayMode = ContextMenuDisplayMode;
-        settings.LaunchBoxDbPath = LaunchBoxDbPath;
+        settings.MasterMetadataDbPath = MasterMetadataDbPath;
         settings.RowHeight = RowHeight;
         settings.ShowVersionsAsSingleCard = ShowVersionsAsSingleCard;
         settings.GroupPlatformsByCategory = GroupPlatformsByCategory;
@@ -1295,7 +1295,7 @@ public partial class SettingsViewModel : ObservableObject
     private void LoadFromAppSettings(AppSettings settings)
     {
         ContextMenuDisplayMode = settings.ContextMenuDisplayMode;
-        LaunchBoxDbPath = settings.LaunchBoxDbPath;
+        MasterMetadataDbPath = settings.MasterMetadataDbPath;
         RowHeight = settings.RowHeight;
         ShowVersionsAsSingleCard = settings.ShowVersionsAsSingleCard;
         GroupPlatformsByCategory = settings.GroupPlatformsByCategory;

@@ -46,7 +46,7 @@ public static class CatalogSchema
             ReleaseYear INTEGER,
             Overview TEXT,
             MaxPlayers INTEGER,
-            -- LaunchBox'tan gelen ek zenginleştirme alanları (bkz. LaunchBoxMetadataReader,
+            -- LaunchBox'tan gelen ek zenginleştirme alanları (bkz. MasterMetadataReader,
             -- CatalogGame). ReleaseDate, ReleaseYear'dan daha kesin (gün/ay dahil) ama LaunchBox'ta
             -- bazı kayıtlarda hiç yok — bu yüzden ikisi de ayrı ayrı saklanıyor.
             ReleaseDate TEXT,
@@ -57,7 +57,7 @@ public static class CatalogSchema
             SteamAppId INTEGER,
             Cooperative INTEGER,
             PreferredVersionId INTEGER REFERENCES GameVersions(GameVersionId),
-            -- Bu oyun LaunchBox.Metadata.db'de gerçekten bulundu mu? Developer/Publisher/Overview/
+            -- Bu oyun MasterMetadata.db'de gerçekten bulundu mu? Developer/Publisher/Overview/
             -- ReleaseYear/MaxPlayers'ın hepsi LaunchBox'ta da boş olabileceği için (nadir ama mümkün),
             -- eşleşme durumunu bu alanların doluluğundan çıkarmak yerine ayrı bir bayrakla saklıyoruz.
             MatchedMetadata INTEGER NOT NULL DEFAULT 0,
@@ -84,7 +84,7 @@ public static class CatalogSchema
         );
 
         -- Bu oyun için önceden çözülmüş (bölge önceliğine göre tek satıra indirgenmiş, bkz.
-        -- LaunchBoxMetadataReader.GetArtwork) görsel varlık dosya adları. WPF tarafı bunu okuyup
+        -- MasterMetadataReader.GetArtwork) görsel varlık dosya adları. WPF tarafı bunu okuyup
         -- FileName'i bir CDN URL'sine çevirip isteğe bağlı olarak indiriyor — RetroAudit.db sadece
         -- "hangi görsel mevcut" bilgisini taşır, gerçek görsel verisini asla içermez.
         CREATE TABLE ArtworkAssets (

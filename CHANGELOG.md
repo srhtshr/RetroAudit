@@ -2,6 +2,24 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.28] - 2026-07-14
+
+### Added
+- **Custom oyunları katalog karşılığına otomatik katlama genişletildi**: Uygulama açılışında artık sadece birebir başlık eşleşmesine değil; aynı dosya yolu zaten gerçek bir katalog oyununa bağlıysa, CRC32 içerik olarak eşleşiyorsa, ya da LaunchBox'ın alternatif isim listesinde (tam veya normalize edilmiş) eşleşme varsa da custom kartlar gerçek katalog oyununa taşınıyor.
+- **Filtre menüleri rozet/hap görünümüne geçti**: Durum/Platform/Türler/Yayıncı/Bölge ve Actions popup'ındaki Favori/Durum grupları dahil tüm filtre dropdown'ları artık checkbox+metin yerine tıklanabilir haplar — tıklama çoklu seçime izin veriyor, hiçbiri kalmazsa otomatik "hepsini göster"e dönüyor, tıklama anında filtreyi uygulayıp popup'ı kapatıyor.
+- **"Bağla" arama kutusu artık alternatif isimlerde de arıyor**: Bir dosyayı elle bağlarken, kataloğun sadece ana başlığı değil LaunchBox alternatif isim listesi de aranıyor; sonuç listesinde her oyunun altında (varsa) alternatif isimleri gösteriliyor.
+- **LaunchBox.Metadata.db bağımlılığı kaldırıldı**: Ham (400MB, 10 tablo) dosyadan, sadece fiilen kullanılan tablo/sütunlarla damıtılmış çok daha küçük ve sade bir `MasterMetadata.db` üretiliyor; hem Builder hem "Yeniden Eşleştir" komutu artık bunu kullanıyor, Ayarlar'da yolu tanımlı değilse otomatik bulunuyor.
+
+### Changed
+- **Durum sütunu ve "Manuel" filtresi artık tutarlı**: Bir oyunun dosyası elle bağlanmış olsa bile gerçek katalog verisi (tür/yayıncı/görsel) varsa artık "Eşleşti" sayılıyor — hem ikon hem filtre sayacı aynı kuralı kullanıyor. "Manuel" artık sadece hiçbir kaynaktan hiçbir şey bulunamamış gerçek standalone kayıtlar için.
+- Filtre popup'larının genişliği daraltıldı, sıralama düğmeleri üst satırda/Temizle-OK-Cancel alt satırda ayrı gösteriliyor.
+
+### Fixed
+- **Kalıcı silinen custom oyunlar / gizli-silindi durumu her açılışta sıfırlanıyordu**: Custom (manuel eklenen) oyunlar, katalog oyunlarının aksine gizli/silindi/favori durumunu veritabanından hiç okumuyordu — çöp kutusuna atılan ya da kalıcı silinen bir custom oyun bir sonraki açılışta normal kütüphanede geri geliyordu.
+- **Aktif filtre rozetini kaldırmak grid'i boşaltabiliyordu**: Son kalan işaretli değeri kaldırınca filtre "hiçbir şeyi gösterme" durumuna düşüyordu; artık bu durum "filtre yok, hepsini göster" olarak yorumlanıyor.
+- **Manuel indirilen görsel Crop Editor'da açılınca çöküyordu**: "Ara" ile indirilen görselin gerçek dosya uzantısı (ör. .webp) yerine hep .jpg/.png varsayılıyordu — kaydedilen yol ile beklenen yol uyuşmayınca dosya bulunamıyordu. Artık gerçekten yazılan yol geri bildiriliyor; ayrıca Crop Editor açılmadan önce dosyanın varlığı kontrol ediliyor.
+- **Crop Editor'da Kaydet, "dosya başka bir işlem tarafından kullanılıyor" hatasıyla çöküyordu**: Önizleme görseli dosyayı pencere açıkken kilitli tutuyordu, üzerine yazma bu yüzden başarısız oluyordu — önizleme artık önceden tam belleğe alınmış bir kopyaya bağlanıyor.
+
 ## [0.27] - 2026-07-12
 
 ### Added

@@ -10,7 +10,7 @@ public class BuildOptions
     // Verilirse (ör. "Nintendo - Nintendo Entertainment System"), sadece o platformun DAT'ı işlenir.
     public string? PlatformFilter { get; init; }
 
-    public required string LaunchBoxDbPath { get; init; }
+    public required string MasterMetadataDbPath { get; init; }
 
     public required string OutputDbPath { get; init; }
 }

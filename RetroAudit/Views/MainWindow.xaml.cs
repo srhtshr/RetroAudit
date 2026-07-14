@@ -413,8 +413,22 @@ public partial class MainWindow : Window
         OpenCropEditor(game.ClearLogoPath, game);
     }
 
+    // Kullanıcı bulgusu: "Could not find file '...jpg'" çökmesi — HasBox/HasClearLogo (bkz.
+    // Game.cs) sadece BoxPath/ClearLogoPath'in BOŞ olmadığını kontrol ediyor, dosyanın diskte
+    // GERÇEKTEN var olduğunu değil (kayıt tarafındaki bir eşleşmezlik — bkz. MainViewModel.
+    // SearchArtwork'teki düzeltme — ya da dosyanın sonradan silinmesi/taşınması hâlâ aynı çökmeye
+    // yol açabilirdi). Artık burada da bir güvenlik ağı var: dosya yoksa çökmek yerine kullanıcıya
+    // anlaşılır bir mesaj gösteriliyor.
     private void OpenCropEditor(string imagePath, Game game)
     {
+        if (!File.Exists(imagePath))
+        {
+            MessageBox.Show(this,
+                $"Görsel dosyası bulunamadı:\n{imagePath}\n\nYeniden indirmeyi deneyin.",
+                "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
         var dialog = new CropEditorDialog { Owner = this };
         dialog.LoadImage(imagePath);
         if (dialog.DataContext is CropEditorViewModel vm)

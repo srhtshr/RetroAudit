@@ -134,7 +134,7 @@
                         </StackPanel>
                     </RadioButton>
 
-                    <TextBlock Text="LaunchBox.Metadata.db" FontWeight="Bold" Margin="0,16,0,4" />
+                    <TextBlock Text="MasterMetadata.db" FontWeight="Bold" Margin="0,16,0,4" />
                     <TextBlock Text="Sağ tık menüsündeki 'Re-match Metadata' komutu için — Builder'ın kullandığı aynı dosya, RetroAudit.db'ye yazılmaz, sadece burada tek bir oyunu yeniden eşleştirmek için okunur."
                                Foreground="{StaticResource Brush.Text.Secondary}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8" />
                     <Grid>
@@ -142,9 +142,9 @@
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
-                        <TextBox Grid.Column="0" Text="{Binding LaunchBoxDbPath, UpdateSourceTrigger=PropertyChanged}"
+                        <TextBox Grid.Column="0" Text="{Binding MasterMetadataDbPath, UpdateSourceTrigger=PropertyChanged}"
                                  VerticalContentAlignment="Center" Margin="0,0,8,0" />
-                        <Button Grid.Column="1" Content="Gözat..." Width="90" Command="{Binding BrowseLaunchBoxDbCommand}" />
+                        <Button Grid.Column="1" Content="Gözat..." Width="90" Command="{Binding BrowseMasterMetadataDbCommand}" />
                     </Grid>
                 </StackPanel>
                 </ScrollViewer>

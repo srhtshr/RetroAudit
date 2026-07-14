@@ -39,18 +39,33 @@ public static class ConfigService
         return JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
     }
 
+    // Kullanıcı isteği: "onu atalım program içinde bi yere default olarakta ayarla yollarını
+    // ordan görsün ... daha düşük boyutlu 2. bi db yapamazmıyız direk launchbox ın o dosyası
+    // olmasın diye" — MetadataProviderViewModel.ReMatchSelected artık LaunchBox'ın kendi ham
+    // (400MB, 10 tablo, çoğu kullanılmayan DOS/emulator alanı) dosyasına değil, ondan bir kez
+    // damıtılmış (MasterMetadataReader'ın FİİLEN okuduğu 4 tablo/sütun + GameImages sadece
+    // Box-Front/Screenshot-Gameplay/Clear Logo satırları) küçük bir kopyaya bakıyor — AppPaths.
+    // Metadata altında, RetroAudit.db/RetroAuditUserData.db ile AYNI taşınabilir klasörde.
+    private static readonly string DefaultMasterMetadataDbPath = Path.Combine(AppPaths.Metadata, "MasterMetadata.db");
+
     // Uygulama açılışında çağrılır (bkz. MainViewModel). Dosya yoksa (ilk çalıştırma) ya da
     // bozuksa varsayılan AppSettings döner — hiçbir zaman istisna fırlatmaz.
     public static AppSettings LoadDefault()
     {
+        AppSettings settings;
         try
         {
-            return File.Exists(DefaultSettingsPath) ? Import(DefaultSettingsPath) : new AppSettings();
+            settings = File.Exists(DefaultSettingsPath) ? Import(DefaultSettingsPath) : new AppSettings();
         }
         catch
         {
-            return new AppSettings();
+            settings = new AppSettings();
         }
+
+        if (string.IsNullOrWhiteSpace(settings.MasterMetadataDbPath) && File.Exists(DefaultMasterMetadataDbPath))
+            settings.MasterMetadataDbPath = DefaultMasterMetadataDbPath;
+
+        return settings;
     }
 
     public static void SaveDefault(AppSettings settings) => Export(settings, DefaultSettingsPath);

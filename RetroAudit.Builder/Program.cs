@@ -3,7 +3,7 @@ using RetroAudit.Catalog;
 // RetroAudit.db'yi (offline master katalog) üreten komut satırı aracı. Kullanım:
 //   dotnet run --project RetroAudit.Builder -- [--dat-folder <yol>] [--sources no-intro,redump,...]
 //                                              [--platform "Nintendo - Nintendo Entertainment System"]
-//                                              [--launchbox-db <yol>] [--output <yol>]
+//                                              [--master-metadata-db <yol>] [--output <yol>]
 // Varsayılanlar bu makinedeki gerçek konumlara göre ayarlandı; başka bir makinede argümanlarla geçilebilir.
 
 var args2 = ParseArgs(args);
@@ -22,8 +22,13 @@ var sources = (args2.GetValueOrDefault("sources") ?? "no-intro,redump,tosec")
 
 var platformFilter = args2.GetValueOrDefault("platform");
 
-var launchBoxDb = args2.GetValueOrDefault("launchbox-db")
-    ?? @"C:\Users\srhts\LaunchBox\Metadata\LaunchBox.Metadata.db";
+// Kullanıcı isteği: "daha düşük boyutlu 2. bi db yapamazmıyız direk launchbox ın o dosyası
+// olmasın diye" — MasterMetadataReader'ın fiilen okuduğu tablo/sütunlardan (+ GameImages'ın
+// sadece Box-Front/Screenshot-Gameplay/Clear Logo satırlarından) bir kez damıtılmış, LaunchBox'ın
+// ham 400MB dosyasından ~%40 daha küçük ve çok daha sade (4 tablo, DOS/emulator alanları yok) bir
+// kopya — WPF'in kendi Metadata\ klasöründe, RetroAudit.db ile aynı yerde tutuluyor.
+var masterMetadataDb = args2.GetValueOrDefault("master-metadata-db")
+    ?? @"C:\Users\srhts\Desktop\Retroaudit\RetroAudit\Metadata\MasterMetadata.db";
 
 // Taşınabilir düzende WPF uygulaması RetroAudit.db'yi kendi çalıştırılabilir dosyasının yanındaki
 // Metadata\ klasöründe arar (bkz. RetroAudit/Services/AppPaths.cs). Gerçekten tek-klasörlük bir
@@ -37,7 +42,7 @@ Console.WriteLine("RetroAudit DAT Builder");
 Console.WriteLine($"  DAT root:       {datRoot}");
 Console.WriteLine($"  Sources:        {string.Join(", ", sources)}");
 Console.WriteLine($"  Platform filter:{(platformFilter is null ? " (none — all platforms in selected sources)" : " " + platformFilter)}");
-Console.WriteLine($"  LaunchBox DB:   {launchBoxDb}");
+Console.WriteLine($"  Master metadata DB: {masterMetadataDb}");
 Console.WriteLine($"  Output DB:      {outputDb}");
 Console.WriteLine();
 
@@ -47,9 +52,9 @@ if (!Directory.Exists(datRoot))
     return 1;
 }
 
-if (!File.Exists(launchBoxDb))
+if (!File.Exists(masterMetadataDb))
 {
-    Console.Error.WriteLine($"LaunchBox metadata veritabanı bulunamadı: {launchBoxDb}");
+    Console.Error.WriteLine($"Master metadata veritabanı bulunamadı: {masterMetadataDb}");
     return 1;
 }
 
@@ -58,7 +63,7 @@ var options = new BuildOptions
     DatRoot = datRoot,
     SourceCategories = sources,
     PlatformFilter = platformFilter,
-    LaunchBoxDbPath = launchBoxDb,
+    MasterMetadataDbPath = masterMetadataDb,
     OutputDbPath = outputDb,
 };
 

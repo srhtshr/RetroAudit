@@ -26,6 +26,14 @@ public partial class ActionsColumnFilterViewModel : ObservableObject
 
         favoriteFilter.PropertyChanged += (_, e) => RecomputeIsActive(e.PropertyName);
         hasLocalFileFilter.PropertyChanged += (_, e) => RecomputeIsActive(e.PropertyName);
+
+        // Kullanıcı isteği: "tıklayınca filtre yeri kapanmıyor onuda ayarlarmısın" — alttaki iki
+        // filtrenin KENDİ popup'ı hiç render edilmiyor (bkz. Open() yorumu), bu yüzden
+        // ColumnFilterViewModel.ToggleOption bir rozete tıklandığında kendi IsPopupOpen'ını
+        // kapatsa da GÖRÜNEN popup (bu sınıfın KENDİ IsPopupOpen'ı) kapanmıyordu — FilterChanged
+        // sinyalini burada da dinleyip GERÇEK popup'ı kapatıyoruz.
+        favoriteFilter.FilterChanged += () => IsPopupOpen = false;
+        hasLocalFileFilter.FilterChanged += () => IsPopupOpen = false;
     }
 
     private void RecomputeIsActive(string? propertyName)

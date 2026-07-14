@@ -204,6 +204,25 @@ public partial class ColumnFilterViewModel : ObservableObject
             option.IsChecked = selectAll;
     }
 
+    // Kullanıcı bulgusu: "üst menüdeki badge'e tıklayıp kapattığımda hiçbişey göstermiyor" —
+    // hem ApplyFilter hem RemoveValue eskiden IsActive'i "en az bir değer işaretsiz mi" diye
+    // hesaplıyordu; bu, "hiçbir değer işaretli değil" durumunu da (ör. son kalan tek işaretli
+    // değer RemoveValue ile kaldırıldığında) "aktif filtre" sayıp SelectedValues'u boş
+    // HashSet'e çeviriyor, ApplyColumnFilter de bunu "hiçbir oyun eşleşmiyor" olarak
+    // yorumluyordu (grid boşalıyordu). Genres rozetlerinin (bkz. MainViewModel.
+    // FilterByGenreToken) ve ClearFilter'ın ZATEN yaptığı gibi: hiçbir değer işaretli
+    // kalmadıysa bu "hiçbir şeyi gösterme" değil "filtre yok/hepsini göster" anlamına gelir —
+    // hepsi otomatik yeniden işaretlenir.
+    private void RecomputeIsActive()
+    {
+        if (!Options.Any(o => o.IsChecked))
+        {
+            foreach (var option in Options)
+                option.IsChecked = true;
+        }
+        IsActive = Options.Any(o => !o.IsChecked);
+    }
+
     [RelayCommand]
     private void ApplyFilter()
     {
@@ -213,7 +232,7 @@ public partial class ColumnFilterViewModel : ObservableObject
         // yanlış bir override'ın (ör. önceki bir rozet tıklamasından kalma) rozette görünmeye
         // devam etmesini engelliyor.
         _activeSummaryOverride = null;
-        IsActive = Options.Any(o => !o.IsChecked);
+        RecomputeIsActive();
         IsPopupOpen = false;
         FilterChanged?.Invoke();
     }
@@ -262,7 +281,42 @@ public partial class ColumnFilterViewModel : ObservableObject
         if (option is not null)
             option.IsChecked = false;
 
-        IsActive = Options.Any(o => !o.IsChecked);
+        RecomputeIsActive();
+        FilterChanged?.Invoke();
+    }
+
+    // Kullanıcı isteği: "filtreleme menüsünüde badge gibi yap ... tıkladığım badge'i filtrelesin
+    // ... normalde default olarak hepsini göstersin ben bi filtreye tıklarsam o tıkladığımı
+    // gösterecek ... çoklu seçim gene yapılabilir aslında diğerleri silinmese" — checkbox'ların
+    // yerini alan rozetlerin tıklama mantığı: BAŞLANGIÇTA (hiçbir şey elle daraltılmamışken) hepsi
+    // işaretlidir ("filtre yok, hepsini göster"). Bu "el değmemiş" durumdan bir rozete tıklanırsa
+    // (Türler rozetlerindeki İLK tıklama ile AYNI mantık) SADECE o değer işaretli kalır, geri
+    // kalanı işaretsiz olur — "sadece tıkladığımı göster". Bu noktadan SONRAKİ tıklamalar (artık
+    // "el değmemiş" olmadığı için) normal çoklu-seçim toggle'ı gibi davranır: o değeri diğerlerine
+    // DOKUNMADAN işaretler/işaretsiz bırakır — kullanıcı isterse birden fazla değeri birlikte
+    // seçebilir. Hiçbir değer işaretli kalmazsa (son işaretli de kaldırılırsa) "el değmemiş" hâle
+    // (hepsi işaretli, filtre yok) otomatik geri dönülür.
+    [RelayCommand]
+    private void ToggleOption(FilterOption option)
+    {
+        var wasUntouched = Options.All(o => o.IsChecked);
+        if (wasUntouched)
+        {
+            foreach (var o in Options)
+                o.IsChecked = ReferenceEquals(o, option);
+        }
+        else
+        {
+            option.IsChecked = !option.IsChecked;
+        }
+
+        _activeSummaryOverride = null;
+        RecomputeIsActive();
+        // Kullanıcı isteği: "tıklayınca filtre yeri kapanmıyor onuda ayarlarmısın" — rozete
+        // tıklamak artık OK'a basmış gibi hemen uygulayıp popup'ı da kapatıyor (Actions
+        // popup'ındaki iki alt filtre için ActionsColumnFilterViewModel KENDİ IsPopupOpen'ını
+        // bu FilterChanged sinyaline bakarak ayrıca kapatıyor, bkz. o yorum).
+        IsPopupOpen = false;
         FilterChanged?.Invoke();
     }
 }

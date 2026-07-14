@@ -290,6 +290,78 @@
             </Border>
         </DataTemplate>
 
+        <!-- Kullanıcı isteği: "filtreleme menüsünüde badge gibi yap text gibi değilde tıklamalı
+             olsun ... gene aynı mantık" — filtre dropdown'larındaki (Durum, Platform, Türler, Actions
+             popup'ındaki Favori/Durum grupları — hepsi) checkbox+metin satırlarının ORTAK yerini alan
+             tıklanabilir hap/rozet şablonu. Tıklama mantığı ColumnFilterViewModel.ToggleOption'da (bkz.
+             o yorum): el değmemişken (hepsi işaretli) tıklanan TEK başına kalır, sonraki tıklamalar
+             diğerlerine dokunmadan çoklu seçime izin verir, hiçbiri kalmazsa hepsi geri işaretlenir.
+             Border HorizontalAlignment="Stretch" ile popup genişliğini dolduruyor — önceden her rozet
+             kendi metin uzunluğuna göre farklı genişlikte görünüyordu (kullanıcı isteği: "badge
+             genişliklerini ayarla"), artık hepsi tekdüze. Command, DataContext'i FilterOption olan bu
+             şablondan ItemsControl'ün KENDİ DataContext'ine (ilgili ColumnFilterViewModel örneği)
+             AncestorType ile ulaşıyor — Actions popup'ındaki iki alt grup (Favori/Durum) için
+             ItemsControl'ün DataContext'i doğrudan o alt filtreye bağlanmış olmalı (bkz. kullanım
+             yerleri). -->
+        <DataTemplate x:Key="FilterOptionBadgeTemplate" DataType="{x:Type models:FilterOption}">
+            <Button Cursor="Hand" Margin="0,2" HorizontalAlignment="Stretch"
+                    Command="{Binding DataContext.ToggleOptionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                    CommandParameter="{Binding}">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="badge" CornerRadius="10" Padding="8,3"
+                                Background="{StaticResource Brush.Background.Base}"
+                                BorderBrush="{StaticResource Brush.Border}" BorderThickness="1">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock x:Name="badgeText" Grid.Column="0" FontSize="11" FontWeight="SemiBold"
+                                           MaxWidth="140" TextTrimming="CharacterEllipsis"
+                                           Foreground="{StaticResource Brush.Text.Secondary}"
+                                           ToolTip="{Binding Value, Mode=OneWay}">
+                                    <Run Text="{Binding Value, Mode=OneWay}" />
+                                    <Run Text=" (" /><Run Text="{Binding Count, Mode=OneWay}" /><Run Text=")" />
+                                </TextBlock>
+                                <StackPanel Grid.Column="1" Margin="8,0,0,0" Width="54">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasHealthPercent}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <TextBlock HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold"
+                                               Foreground="{StaticResource Brush.Text.Secondary}">
+                                        <Run Text="%" />
+                                        <Run Text="{Binding HealthPercent}" />
+                                    </TextBlock>
+                                    <ProgressBar Minimum="0" Maximum="100" Height="4" Margin="0,4,0,0"
+                                                 Value="{Binding HealthPercent}"
+                                                 Foreground="{StaticResource Brush.Accent.SelectedBorder}"
+                                                 Background="{StaticResource Brush.Background.Base}" />
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="badge" Property="Background" Value="{StaticResource Brush.Background.Hover}" />
+                            </Trigger>
+                            <DataTrigger Binding="{Binding IsChecked}" Value="True">
+                                <Setter TargetName="badge" Property="Background" Value="{StaticResource Brush.Accent.Launch}" />
+                                <Setter TargetName="badge" Property="BorderThickness" Value="0" />
+                                <Setter TargetName="badgeText" Property="Foreground" Value="White" />
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </DataTemplate>
+
         <!-- DataGrid sütun başlıklarında kullanılan ortak filtre şablonu. Header'a bir
              ColumnFilterViewModel atandığında (DataGridColumn.Header, ViewModelProxy üzerinden
              bağlanıyor — bkz. DataGrid.Columns) HeaderTemplate'in DataContext'i otomatik olarak bu
@@ -323,35 +395,37 @@
                          "..." ile gösteriliyor (bkz. aşağıdaki TextTrimming). -->
                     <Border Background="{StaticResource Brush.Background.Elevated}"
                             BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
-                            CornerRadius="4" Padding="6" Width="230" MaxHeight="360">
+                            CornerRadius="4" Padding="6" Width="190" MaxHeight="360">
                         <DockPanel>
-                            <!-- Sıralama (↑A-Z / ↓Z-A) ve Temizle/OK/Cancel aynı satırda, sırasıyla
-                                 sol ve sağ hizalı — önceden sıralama üstte iki ayrı geniş düğmeydi,
-                                 kullanıcı isteğiyle bu alttaki dar butonların yanına, en sola taşındı.
-                                 IsSearchOnly sütunlarda (Title/File) hiç yok — checkbox listesi
-                                 olmadığından Temizle/OK/Cancel'ın bir işlevi kalmıyor. -->
-                            <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                                <Grid.Style>
-                                    <Style TargetType="Grid">
+                            <!-- Kullanıcı isteği: "temizle ok cancel ı bir alt satıra alsan filtre
+                                 alanının genişliği biraz daralır" — sıralama (↑A-Z/↓Z-A) ÜST satırda,
+                                 Temizle/Hepsini Seç + OK/Cancel ALT satırda — 5 düğmeyi tek satıra
+                                 sığdırmak için popup'ı geniş tutmaya gerek kalmadı (bkz. aşağıdaki
+                                 Border Width, 230'dan düşürüldü). IsSearchOnly sütunlarda (Title/File)
+                                 hiç yok — checkbox listesi olmadığından Temizle/OK/Cancel'ın bir işlevi
+                                 kalmıyor. -->
+                            <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsSearchOnly}" Value="True">
                                                 <Setter Property="Visibility" Value="Collapsed" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Grid.Style>
+                                </StackPanel.Style>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                                     <Button Content="↑A-Z" Click="SortAscending_Click" ToolTip="Sırala A-Z"
                                             FontSize="10" Padding="4,2" Margin="0,0,2,0" Cursor="Hand" />
                                     <Button Content="↓Z-A" Click="SortDescending_Click" ToolTip="Sırala Z-A"
                                             FontSize="10" Padding="4,2" Cursor="Hand" />
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
                                     <Button Content="{Binding ToggleAllLabel}" Command="{Binding ToggleAllCommand}" FontSize="10" Margin="0,0,4,0" />
                                     <Button Content="OK" Command="{Binding ApplyFilterCommand}" FontSize="10" Margin="0,0,4,0" />
                                     <Button Content="Cancel" Command="{Binding CancelFilterCommand}" FontSize="10" />
                                 </StackPanel>
-                            </Grid>
+                            </StackPanel>
 
                             <!-- Normal sütunlarda değer listesini daraltan arama kutusu; IsSearchOnly
                                  sütunlarda (Title/File) grid'i DOĞRUDAN filtreleyen tek kontrol bu.
@@ -422,60 +496,7 @@
                                         </Style.Triggers>
                                     </Style>
                                 </ScrollViewer.Style>
-                                <ItemsControl ItemsSource="{Binding OptionsView}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type models:FilterOption}">
-                                            <!-- Fare üstündeyken satırın hangi değere karşılık geldiğini
-                                                 belli etmek için hover vurgusu (Brush.Background.Hover). -->
-                                            <Border Padding="3,2" CornerRadius="2">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="Transparent" />
-                                                        <Style.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="Background" Value="{StaticResource Brush.Background.Hover}" />
-                                                            </Trigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <CheckBox IsChecked="{Binding IsChecked}" FontSize="11">
-                                                    <Grid Margin="0,1,0,1">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Grid.Column="0" FontSize="11" MaxWidth="140" TextTrimming="CharacterEllipsis"
-                                                                   ToolTip="{Binding Value, Mode=OneWay}">
-                                                            <Run Text="{Binding Value, Mode=OneWay}" />
-                                                            <Run Text=" (" /><Run Text="{Binding Count, Mode=OneWay}" /><Run Text=")" />
-                                                        </TextBlock>
-                                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Width="54">
-                                                            <StackPanel.Style>
-                                                                <Style TargetType="StackPanel">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding HasHealthPercent}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </StackPanel.Style>
-                                                            <TextBlock HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold"
-                                                                       Foreground="{StaticResource Brush.Text.Secondary}">
-                                                                <Run Text="%" />
-                                                                <Run Text="{Binding HealthPercent}" />
-                                                            </TextBlock>
-                                                            <ProgressBar Minimum="0" Maximum="100" Height="4" Margin="0,4,0,0"
-                                                                         Value="{Binding HealthPercent}"
-                                                                         Foreground="{StaticResource Brush.Accent.SelectedBorder}"
-                                                                         Background="{StaticResource Brush.Background.Base}" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </CheckBox>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <ItemsControl ItemsSource="{Binding OptionsView}" ItemTemplate="{StaticResource FilterOptionBadgeTemplate}" />
                             </ScrollViewer>
                         </DockPanel>
                     </Border>
@@ -523,30 +544,30 @@
                        Opened="FilterPopup_Opened">
                     <Border Background="{StaticResource Brush.Background.Elevated}"
                             BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
-                            CornerRadius="4" Padding="6" Width="230" MaxHeight="360">
+                            CornerRadius="4" Padding="6" Width="190" MaxHeight="360">
                         <DockPanel>
-                            <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                                <Grid.Style>
-                                    <Style TargetType="Grid">
+                            <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
                                         <Style.Triggers>
                                             <DataTrigger Binding="{Binding IsSearchOnly}" Value="True">
                                                 <Setter Property="Visibility" Value="Collapsed" />
                                             </DataTrigger>
                                         </Style.Triggers>
                                     </Style>
-                                </Grid.Style>
+                                </StackPanel.Style>
                                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
                                     <Button Content="↑A-Z" Click="SortAscending_Click" ToolTip="Sırala A-Z"
                                             FontSize="10" Padding="4,2" Margin="0,0,2,0" Cursor="Hand" />
                                     <Button Content="↓Z-A" Click="SortDescending_Click" ToolTip="Sırala Z-A"
                                             FontSize="10" Padding="4,2" Cursor="Hand" />
                                 </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
                                     <Button Content="{Binding ToggleAllLabel}" Command="{Binding ToggleAllCommand}" FontSize="10" Margin="0,0,4,0" />
                                     <Button Content="OK" Command="{Binding ApplyFilterCommand}" FontSize="10" Margin="0,0,4,0" />
                                     <Button Content="Cancel" Command="{Binding CancelFilterCommand}" FontSize="10" />
                                 </StackPanel>
-                            </Grid>
+                            </StackPanel>
 
                             <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
                                 <TextBox FontSize="11" Padding="4,2,20,2"
@@ -686,7 +707,7 @@
                        StaysOpen="False" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade">
                     <Border Background="{StaticResource Brush.Background.Elevated}"
                             BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
-                            CornerRadius="4" Padding="6" Width="230">
+                            CornerRadius="4" Padding="6" Width="190">
                         <DockPanel>
                             <Grid DockPanel.Dock="Bottom" Margin="0,6,0,0">
                                 <Button Content="Temizle" Command="{Binding ClearAllCommand}" FontSize="10"
@@ -700,33 +721,18 @@
                             <StackPanel>
                                 <TextBlock Text="Favori" FontWeight="SemiBold" FontSize="10" Margin="0,0,0,2"
                                            Foreground="{StaticResource Brush.Text.Secondary}" />
-                                <ItemsControl ItemsSource="{Binding FavoriteFilter.OptionsView}" Margin="0,0,0,6">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type models:FilterOption}">
-                                            <CheckBox IsChecked="{Binding IsChecked}" FontSize="11" Margin="2">
-                                                <TextBlock FontSize="11">
-                                                    <Run Text="{Binding Value, Mode=OneWay}" />
-                                                    <Run Text=" (" /><Run Text="{Binding Count, Mode=OneWay}" /><Run Text=")" />
-                                                </TextBlock>
-                                            </CheckBox>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <!-- DataContext bilerek FavoriteFilter'ın kendisine (ColumnFilterViewModel)
+                                     çekiliyor — FilterOptionBadgeTemplate'in Button'ı ToggleOptionCommand'a
+                                     AncestorType=ItemsControl ile ulaşıyor, bu yüzden ItemsControl'ün
+                                     KENDİ DataContext'i (üstteki ActionsColumnFilterViewModel değil) doğrudan
+                                     ilgili alt filtre olmalı. -->
+                                <ItemsControl DataContext="{Binding FavoriteFilter}" ItemsSource="{Binding OptionsView}"
+                                              ItemTemplate="{StaticResource FilterOptionBadgeTemplate}" Margin="0,0,0,6" />
 
                                 <TextBlock Text="Durum" FontWeight="SemiBold" FontSize="10" Margin="0,0,0,2"
                                            Foreground="{StaticResource Brush.Text.Secondary}" />
-                                <ItemsControl ItemsSource="{Binding HasLocalFileFilter.OptionsView}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type models:FilterOption}">
-                                            <CheckBox IsChecked="{Binding IsChecked}" FontSize="11" Margin="2">
-                                                <TextBlock FontSize="11">
-                                                    <Run Text="{Binding Value, Mode=OneWay}" />
-                                                    <Run Text=" (" /><Run Text="{Binding Count, Mode=OneWay}" /><Run Text=")" />
-                                                </TextBlock>
-                                            </CheckBox>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <ItemsControl DataContext="{Binding HasLocalFileFilter}" ItemsSource="{Binding OptionsView}"
+                                              ItemTemplate="{StaticResource FilterOptionBadgeTemplate}" />
                             </StackPanel>
                         </DockPanel>
                     </Border>
@@ -1492,13 +1498,28 @@
                                 <TextBlock FontFamily="Segoe MDL2 Assets" HorizontalAlignment="Center">
                                     <TextBlock.Style>
                                         <Style TargetType="TextBlock">
-                                            <Setter Property="Text" Value="{Binding StatusOk, Converter={StaticResource BoolToStatusGlyph}}" />
-                                            <Setter Property="Foreground" Value="{Binding StatusOk, Converter={StaticResource BoolToStatusBrush}}" />
+                                            <!-- Kullanıcı isteği: "libretronun metadatasını da entegre
+                                                 edelim, 2'sinden biriyle eşleşirse eşleşmedi çıkmasın" —
+                                                 StatusOk yerine IsEffectivelyMatched (bkz. Game.cs) —
+                                                 gerçek metadata eşleşmesi olmasa bile herhangi bir
+                                                 kaynaktan görsel bulunmuşsa artık ✓ gösteriliyor. -->
+                                            <Setter Property="Text" Value="{Binding IsEffectivelyMatched, Converter={StaticResource BoolToStatusGlyph}}" />
+                                            <Setter Property="Foreground" Value="{Binding IsEffectivelyMatched, Converter={StaticResource BoolToStatusBrush}}" />
                                             <Style.Triggers>
-                                                <DataTrigger Binding="{Binding IsManuallyLinked}" Value="True">
+                                                <!-- Kullanıcı isteği (geri alındı): "3 ününde durum
+                                                     kısmında ünlem çıkıyor hala çıkmasın eşleştiyse" —
+                                                     amber "!" artık SADECE manuel bağlı VE hâlâ hiçbir
+                                                     kaynaktan görsel/metadata bulunamamışsa gösteriliyor;
+                                                     manuel bağlı olup IsEffectivelyMatched=true olan
+                                                     satırlarda normal ✓ görünüyor (yukarıdaki Setter). -->
+                                                <MultiDataTrigger>
+                                                    <MultiDataTrigger.Conditions>
+                                                        <Condition Binding="{Binding IsManuallyLinked}" Value="True" />
+                                                        <Condition Binding="{Binding IsEffectivelyMatched}" Value="False" />
+                                                    </MultiDataTrigger.Conditions>
                                                     <Setter Property="Text" Value="&#xE7BA;" />
                                                     <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
-                                                </DataTrigger>
+                                                </MultiDataTrigger>
                                             </Style.Triggers>
                                         </Style>
                                     </TextBlock.Style>
@@ -2062,9 +2083,13 @@
                             </StackPanel>
                         </Button>
 
+                        <!-- Kullanıcı geri bildirimi: "super star force için 'eşleşmiş bir metadata
+                             kaydı yok' diyor" — HasArtworkSource (LaunchBox eşleşmesi) artık şart
+                             değil, 2. kaynak (bkz. ArtworkService.DownloadFromLibretroThumbnailsAsync)
+                             LaunchBox eşleşmesi olmadan da çalışıyor. -->
                         <Button Style="{StaticResource ContextMenuIconButtonHiddenInRecycleBin}"
                                 Command="{Binding DataContext.FetchArtworkCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                CommandParameter="{Binding}" IsEnabled="{Binding HasArtworkSource}" ToolTip="Görsel getir">
+                                CommandParameter="{Binding}" IsEnabled="{Binding HasMissingArtwork}" ToolTip="Görsel getir">
                             <StackPanel>
                                 <TextBlock Text="&#xE91B;" Style="{StaticResource ContextMenuGlyphText}" />
                                 <TextBlock Text="Artwork" Style="{StaticResource ContextMenuLabelText}" />

@@ -33,6 +33,12 @@ public partial class ManualLinkViewModel : ObservableObject
     public const string NewGameSentinelKey = "__new_custom_game__";
     private readonly Game _newGameSentinel;
 
+    // Kullanıcı isteği: "şu listede detaylardaki gibi alternatif nameleri çıkmıyor" — arama artık
+    // sadece başlığa değil, LaunchBox'ın alternatif isim listesine de bakıyor (ör. "Utsurun Desu"
+    // gibi bir Japonca romanizasyon, o oyunun ana başlığında değil sadece AlternateNames'inde
+    // olabilir); liste öğesinde de (ManualLinkWindow.xaml) küçük gri alt satır olarak gösteriliyor.
+    public IReadOnlyDictionary<int, List<string>> AlternateNamesByGameId { get; } = CatalogDatabaseService.GetAllAlternateNames();
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FilteredGames))]
     private string searchText = string.Empty;
@@ -49,7 +55,12 @@ public partial class ManualLinkViewModel : ObservableObject
         {
             var query = ShowAllPlatforms ? _allGames : _allGames.Where(g => RomImportService.PlatformNameMatchesFolder(g, _scannedFolderName));
             if (!string.IsNullOrWhiteSpace(SearchText))
-                query = query.Where(g => g.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+            {
+                query = query.Where(g =>
+                    g.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                    || (AlternateNamesByGameId.TryGetValue(g.GameId, out var names)
+                        && names.Any(n => n.Contains(SearchText, StringComparison.OrdinalIgnoreCase))));
+            }
             return new[] { _newGameSentinel }.Concat(query.OrderBy(g => g.Title, StringComparer.OrdinalIgnoreCase).Take(200));
         }
     }

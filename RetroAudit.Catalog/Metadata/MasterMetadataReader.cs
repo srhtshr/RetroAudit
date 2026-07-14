@@ -36,7 +36,7 @@ public record MetadataMatch(
 // (hiçbiri tutmazsa) fuzzy benzerlik. İlk üç kademe Confidence=1.0 ile "kesin" kabul edilir;
 // fuzzy kademe ise Confidence puanına göre CatalogBuilder tarafından "onaylı" veya "Needs Review"
 // olarak işaretlenir (bkz. FuzzyAcceptThreshold/FuzzyReviewFloor).
-public class LaunchBoxMetadataReader : IDisposable
+public class MasterMetadataReader : IDisposable
 {
     // Bu eşiğin üzeri: yeterince güvenli, doğrudan onaylı eşleşme sayılır.
     public const double FuzzyAcceptThreshold = 0.92;
@@ -56,7 +56,7 @@ public class LaunchBoxMetadataReader : IDisposable
     // aday listesini taramak yerine O(1) kova erişimiyle sadece ilgili alt kümeyi kontrol eder.
     private readonly Dictionary<string, Dictionary<string, List<(string Name, string CompareName)>>> _platformGameNameBuckets = new(StringComparer.OrdinalIgnoreCase);
 
-    public LaunchBoxMetadataReader(string dbPath)
+    public MasterMetadataReader(string dbPath)
     {
         var connectionString = new SqliteConnectionStringBuilder
         {

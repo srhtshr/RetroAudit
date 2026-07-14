@@ -63,7 +63,7 @@ public static class CatalogBuilder
         report.ExcludedByRomFileNameCount = VersionResolver.LastRunRomFileNameExclusionCount;
         report.UnknownRegionVersionCount = games.Sum(g => g.Versions.Count(v => v.Regions.Contains("Unknown", StringComparer.OrdinalIgnoreCase)));
 
-        using (var metadataReader = new LaunchBoxMetadataReader(options.LaunchBoxDbPath))
+        using (var metadataReader = new MasterMetadataReader(options.MasterMetadataDbPath))
         {
             foreach (var game in games)
             {
@@ -109,7 +109,7 @@ public static class CatalogBuilder
                     game.MatchedMetadata = true;
                     game.MatchMethod = match.MatchMethod;
                     game.MatchConfidence = match.Confidence;
-                    game.NeedsReview = match.Confidence < LaunchBoxMetadataReader.FuzzyAcceptThreshold;
+                    game.NeedsReview = match.Confidence < MasterMetadataReader.FuzzyAcceptThreshold;
                     report.MetadataMatched++;
 
                     if (match.MatchMethod == "Fuzzy")
@@ -172,7 +172,7 @@ public static class CatalogBuilder
     // TAMAMEN FARKLI olduğu oyunlar (ör. "Street Fighter Alpha 2" [USA/EU] ile "Street Fighter
     // Zero 2" [Japan] — CompareTitle'ları farklı olduğu için VersionResolver bunları iki ayrı oyun
     // sanıyordu, ama LaunchBox ikisinin de aynı DatabaseID'ye bağlı olduğunu zaten biliyor —
-    // GameAlternateTitles üzerinden AlternateName eşleşmesiyle, bkz. LaunchBoxMetadataReader).
+    // GameAlternateTitles üzerinden AlternateName eşleşmesiyle, bkz. MasterMetadataReader).
     // Sadece MetadataSourceId'si OLAN (LaunchBox'ta eşleşmiş) oyunlar için çalışır — eşleşmemiş
     // oyunlar arasında yanlış birleştirme riski yok.
     private static List<CatalogGame> MergeRegionVariants(List<CatalogGame> games, BuildReport report)

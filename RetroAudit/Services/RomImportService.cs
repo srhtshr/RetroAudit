@@ -62,7 +62,17 @@ public static class RomImportService
     // "kasıtlı dışlanan" (Beta/Unlicensed/Prototip — bkz. DatNameParser.ContainsExcludedTag, bu
     // etiketli DAT kayıtları katalog inşa edilirken zaten hiç alınmıyor) ile "gerçekten
     // katalogda/DAT'ta yok" (ör. farklı/doğrulanmamış bir dump nesli) arasında ayrım yapıyor.
-    public static RomScanResult ScanFolder(string sourceFolder, IReadOnlyList<Game> allGames, string retroAuditDataPath)
+    // alreadyLinkedPaths — kullanıcı geri bildirimi: "pinball'ı bağlamıştım halbuki, eşleşmeyenlerde
+    // gözükmemesi lazım değil mi" ... sonra "tarama esnasında klasörde ne varsa gösterse daha
+    // anlaşılır olmazmı" (rozetle gösterilmeye çevrildi) ... sonra netleşti: "zaten bağlı olanlar
+    // eşleşmeyenlerde neden gözüküyor ... tablodaki bi oyunun kartına bağlı sonuçta" — bu tarama
+    // SADECE otomatik DAT eşleşmesine bakıyor, kullanıcının ELLE (Bağla/Şu anki yoldan kullan/
+    // "+ Yeni Oyun") zaten bir oyuna bağladığı dosyaların hiç haberi yoktu. SON karar: Eşleşenler'de
+    // (RomMatch) rozetle görünmeye devam eder (o listede "bu tür DAT eşleşmesi var" bilgisi hâlâ
+    // faydalı) ama Eşleşmeyenler'e (UnmatchedRomFile) HİÇ eklenmiyor — zaten bir oyunun kartına
+    // bağlıysa "gerçekten eşleşmeyen/aksiyon bekleyen" değildir. Zip'ler için yol, arşivin KENDİSİ
+    // (girdi değil) — bkz. FilePathOverrides.FilePath'in de aynı şekilde zip'in tam yolunu tutması.
+    public static RomScanResult ScanFolder(string sourceFolder, IReadOnlyList<Game> allGames, string retroAuditDataPath, IReadOnlySet<string>? alreadyLinkedPaths = null)
     {
         var matches = new List<RomMatch>();
         var unmatched = new List<UnmatchedRomFile>();
@@ -73,9 +83,11 @@ public static class RomImportService
 
         foreach (var filePath in Directory.EnumerateFiles(sourceFolder, "*", SearchOption.AllDirectories))
         {
+            var alreadyLinked = alreadyLinkedPaths is not null && alreadyLinkedPaths.Contains(filePath);
+
             if (string.Equals(Path.GetExtension(filePath), ".zip", StringComparison.OrdinalIgnoreCase))
             {
-                ScanZipEntries(filePath, indexes, retroAuditDataPath, matches, unmatched);
+                ScanZipEntries(filePath, indexes, retroAuditDataPath, matches, unmatched, alreadyLinked);
                 continue;
             }
 
@@ -84,15 +96,24 @@ public static class RomImportService
                 out var reason, out var excludedTag, out var destinationFileNameOverride, out var matchMethod);
             if (resolved is null)
             {
-                unmatched.Add(new UnmatchedRomFile { FileName = fileName, SourcePath = filePath, Reason = reason!, ExcludedTag = excludedTag });
+                if (!alreadyLinked)
+                    unmatched.Add(new UnmatchedRomFile { FileName = fileName, SourcePath = filePath, Reason = reason!, ExcludedTag = excludedTag });
                 continue;
             }
+
+            var destinationPath = Path.Combine(retroAuditDataPath, resolved.Platform, destinationFileNameOverride ?? resolved.File);
+            // Kullanıcı geri bildirimi: "Zaten Bağlı olsa bile TÜMÜ varsayılan işaretli gelsin" —
+            // rozet (IsAlreadyLinked, bkz. resolved.HasLocalFile) sadece BİLGİ amaçlı kalıyor,
+            // hangi satırların içe aktarılacağını ETKİLEMİYOR — o zaten hemen hemen her satırı
+            // işaretsiz bırakıp "içe aktarmak için en az bir satır seçin" hatasına yol açıyordu.
+            var alreadyOwned = alreadyLinked || File.Exists(destinationPath) || resolved.HasLocalFile;
 
             matches.Add(new RomMatch
             {
                 Game = resolved,
                 SourcePath = filePath,
-                DestinationPath = Path.Combine(retroAuditDataPath, resolved.Platform, destinationFileNameOverride ?? resolved.File),
+                DestinationPath = destinationPath,
+                IsAlreadyLinked = alreadyOwned,
                 MatchMethod = matchMethod,
             });
         }
@@ -445,7 +466,9 @@ public static class RomImportService
     // bir karşılaştırma anahtarı üretir — "Bomber Man" ve "Bomberman" ya da "2010 - Street Fighter"
     // ve "2010 Street Fighter" aynı anahtara düşer. Regex KULLANILMIYOR (67 bin oyun için tek
     // seferlik ama basit bir filtre, performans/okunabilirlik açısından yeterli).
-    private static string NormalizeTitleAggressive(string title) =>
+    // internal: MainViewModel.FoldCustomGamesIntoMatchingCatalogGames de AYNI normalizasyonu
+    // alternatif isim eşleştirmesinde kullanıyor (ör. "Dragon Quest III: ..." / "... - ...").
+    internal static string NormalizeTitleAggressive(string title) =>
         new(title.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     // Tier 3/4 tie-break'te (bkz. TryResolveVersion) aynı bölge/revizyona sahip sürümleri ayıran
@@ -463,7 +486,7 @@ public static class RomImportService
     private static string? FindReissueTag(string text) =>
         ReissueTagMarkers.FirstOrDefault(marker => text.Contains(marker, StringComparison.OrdinalIgnoreCase));
 
-    private static void ScanZipEntries(string zipPath, CandidateIndexes indexes, string retroAuditDataPath, List<RomMatch> matches, List<UnmatchedRomFile> unmatched)
+    private static void ScanZipEntries(string zipPath, CandidateIndexes indexes, string retroAuditDataPath, List<RomMatch> matches, List<UnmatchedRomFile> unmatched, bool alreadyLinked = false)
     {
         // Bozuk/parola korumalı/gerçekte zip olmayan bir dosya taramayı durdurmasın — sadece atlanır.
         try
@@ -478,16 +501,24 @@ public static class RomImportService
                     out var reason, out var excludedTag, out var destinationFileNameOverride, out var matchMethod);
                 if (resolved is null)
                 {
-                    unmatched.Add(new UnmatchedRomFile { FileName = entry.Name, SourcePath = zipPath, Reason = reason!, ZipEntryName = entry.Name, ExcludedTag = excludedTag });
+                    if (!alreadyLinked)
+                        unmatched.Add(new UnmatchedRomFile { FileName = entry.Name, SourcePath = zipPath, Reason = reason!, ZipEntryName = entry.Name, ExcludedTag = excludedTag });
                     continue;
                 }
+
+                var destinationPath = Path.Combine(retroAuditDataPath, resolved.Platform, destinationFileNameOverride ?? resolved.File);
+                // Bkz. ScanFolder'daki AYNI gerekçe — hedefte zaten aynı isimli dosya varsa (standart
+                // kuralla zaten sahip olunan bir sürüm) YA DA bu OYUNUN başka bir dosyası zaten varsa
+                // (bkz. resolved.HasLocalFile) da "zaten bağlı" sayılır.
+                var alreadyOwned = alreadyLinked || File.Exists(destinationPath) || resolved.HasLocalFile;
 
                 matches.Add(new RomMatch
                 {
                     Game = resolved,
                     SourcePath = zipPath,
-                    DestinationPath = Path.Combine(retroAuditDataPath, resolved.Platform, destinationFileNameOverride ?? resolved.File),
+                    DestinationPath = destinationPath,
                     ZipEntryName = entry.Name,
+                    IsAlreadyLinked = alreadyOwned,
                     MatchMethod = matchMethod,
                 });
             }

@@ -26,6 +26,61 @@ public static class ArtworkService
     // hiç tetiklenmez, sadece JPEG/asla-büyütme mantığı devrede kalır.
     private static string BuildUrl(string fileName) => $"https://{Host}/{fileName}";
 
+    // İKİNCİ kaynak (kullanıcı isteği: "ilk kaynaktan indiremediğini diğer taraftan çekecek") —
+    // libretro-thumbnails (GitHub, RetroArch'ın resmi thumbnail arşivi). LaunchBox'ın (1. kaynak)
+    // ArtworkAssets'te hiç kaydı olmayan (ör. Commodore 64/Atari 2600'de sık görülen) ya da kaydı
+    // olup da indirilemeyen (404 vb.) görseller için devreye giriyor. Platform başına AYRI bir repo
+    // (ör. "Nintendo - Nintendo Entertainment System" -> Nintendo_-_Nintendo_Entertainment_System,
+    // sadece boşluk->alt çizgi), dosya adları No-Intro/TOSEC DAT adlarıyla BİREBİR aynı (ör.
+    // "10-Yard Fight (Japan) (Rev 1).png") — doğrulandı (bkz. gerçek repo içeriği). Bu yüzden
+    // kataloğun kendi RawDatName'i (GameVersion.RawDatName) doğrudan dosya adı olarak kullanılabiliyor,
+    // LaunchBox'takine benzer ayrı bir ID eşleştirme katmanına gerek yok.
+    private const string LibretroThumbnailsOrg = "libretro-thumbnails";
+
+    private static string? BuildLibretroThumbnailUrl(string platform, string type, string rawDatName)
+    {
+        var typeFolder = type switch
+        {
+            "Box" => "Named_Boxarts",
+            "Logo" => "Named_Logos",
+            "SS" => "Named_Snaps",
+            _ => null,
+        };
+        if (typeFolder is null || string.IsNullOrWhiteSpace(platform) || string.IsNullOrWhiteSpace(rawDatName))
+            return null;
+
+        var repo = platform.Replace(' ', '_');
+        var fileName = Uri.EscapeDataString(rawDatName + ".png");
+        return $"https://raw.githubusercontent.com/{LibretroThumbnailsOrg}/{repo}/master/{typeFolder}/{fileName}";
+    }
+
+    // İmzası DownloadAsync ile bilerek AYNI şekilde (fileName yerine platform+rawDatName) — çağıran
+    // taraf (bkz. MainViewModel.DownloadArtworkAsync) ikisini de AYNI sonraki adımla (ResizeAndEncode
+    // + kayıt) çağırıyor, kullanıcı isteği: "aynı formatta indirmesi lazım şuanki ilk kaynak gibi".
+    public static async Task<bool> DownloadFromLibretroThumbnailsAsync(string platform, string type, string rawDatName, string destinationPath, bool preserveTransparency, int maxDimension, CancellationToken cancellationToken = default)
+    {
+        var url = BuildLibretroThumbnailUrl(platform, type, rawDatName);
+        if (url is null)
+            return false;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+            var bytes = await Http.GetByteArrayAsync(url, cancellationToken);
+            var encoded = ResizeAndEncode(bytes, preserveTransparency, maxDimension);
+            await File.WriteAllBytesAsync(destinationPath, encoded, cancellationToken);
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // baseFileName = ROM dosya adıyla aynı kimlik (uzantısız) — görsel/ROM arasında 1-e-1 karşılık
     // kurar. Uzantı artık kaynak dosyadan değil, yeniden kodlama formatından geliyor (bkz.
     // DownloadAsync/preserveTransparency) — Logo (şeffaflık gerekli) PNG, diğerleri JPEG.

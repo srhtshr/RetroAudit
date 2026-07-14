@@ -164,7 +164,7 @@ public partial class MediaProviderViewModel : ObservableObject
     // Embedded arama penceresi isteği — MainWindow.xaml.cs, MainViewModel.RequestSearchArtwork
     // İLE AYNI handler'ı kullanıyor (bkz. orada), tek fark burada tuple'ın son elemanı olan
     // completedCallback ayrıca MissingItems'tan da çıkarma yapıyor.
-    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action CompletedCallback, Game Game)>? RequestSearchArtwork;
+    public event Action<(string Url, string TargetFolder, string TargetFileNameWithoutExtension, string GameTitle, string MediaTypeLabel, Action<string> CompletedCallback, Game Game)>? RequestSearchArtwork;
 
     public MediaProviderViewModel(IReadOnlyList<Game> allGames, Action<Game, string, string, string> onArtworkResolved, Func<IReadOnlyList<Platform>> getOrderedPlatforms, bool useModernLayout = false)
     {
@@ -369,11 +369,14 @@ public partial class MediaProviderViewModel : ObservableObject
         var targetFolder = Path.Combine(AppPaths.Images, item.Game.PlatformDisplayName, item.MissingType);
         var baseFileName = GetMediaBaseFileName(item.Game);
 
-        RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, item.Game.Title, mediaTypeLabel, () =>
+        // Kullanıcı bulgusu (bkz. MainViewModel.SearchArtwork'teki AYNI düzeltme): hedef dosya
+        // adının uzantısı burada TAHMİN edilmemeli — MediaSearchWindow'un GERÇEKTEN yazdığı yol
+        // (kaynak görselin/tarayıcının uzantısıyla, ör. ".webp") kullanılmalı, yoksa BoxPath var
+        // olmayan bir dosyaya işaret edip Crop Editor'da "Could not find file" ile çöküyordu.
+        RequestSearchArtwork?.Invoke((url, targetFolder, baseFileName, item.Game.Title, mediaTypeLabel, actualPath =>
         {
             MissingItems.Remove(item);
-            var destination = Path.Combine(targetFolder, baseFileName + (item.MissingType == "Logo" ? ".png" : ".jpg"));
-            _onArtworkResolved(item.Game, item.MissingType, baseFileName, destination);
+            _onArtworkResolved(item.Game, item.MissingType, baseFileName, actualPath);
             RebuildPlatformAuditSummaries();
         }, item.Game));
     }

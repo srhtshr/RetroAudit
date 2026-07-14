@@ -664,9 +664,9 @@ public class AppSettings
     // Oyun satırı sağ tık menüsünün görünüm modu (bkz. Ayarlar > Arayüz).
     public ContextMenuDisplayMode ContextMenuDisplayMode { get; set; } = ContextMenuDisplayMode.IconAndText;
 
-    // Re-match Metadata komutu için — Builder'ın kullandığı LaunchBox.Metadata.db yolu, WPF
+    // Re-match Metadata komutu için — Builder'ın kullandığı MasterMetadata.db yolu, WPF
     // tarafında da bilinmesi gerekiyor (bkz. plan: RetroAudit.Catalog referansı).
-    public string LaunchBoxDbPath { get; set; } = string.Empty;
+    public string MasterMetadataDbPath { get; set; } = string.Empty;
 
     // "Sütunlar" seçicisindeki her sütunun son görünürlük durumu (Key -> IsVisible). Kullanıcı
     // bir sütunu açıp/kapatınca MainViewModel.SaveColumnVisibility burayı güncelleyip diske yazar;

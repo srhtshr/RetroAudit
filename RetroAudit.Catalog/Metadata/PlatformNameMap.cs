@@ -6,7 +6,7 @@ namespace RetroAudit.Catalog.Metadata;
 // LaunchBox.Metadata.db'nin Platforms.Name sütunundaki gerçek isimle eşleştirmeye çalışır.
 // LaunchBox'ın kendi adlandırması tutarlı değil: bazı üretici öneklerini düşürüyor
 // ("Nintendo Entertainment System") bazılarını koruyor ("Microsoft Xbox 360", "Sony Playstation").
-// Bu yüzden birkaç aday sırayla denenir (LaunchBoxMetadataReader.ResolvePlatform); hiçbiri
+// Bu yüzden birkaç aday sırayla denenir (MasterMetadataReader.ResolvePlatform); hiçbiri
 // LaunchBox'ta yoksa eşleşme yapılmaz — yanlış platformdan veri çekmektense hiç doldurmamak tercih edildi.
 //
 // v0.10 doğruluk analizinde bulunan gerçek hata: "Sega - Mega Drive - Genesis" gibi BİRDEN FAZLA

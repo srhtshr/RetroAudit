@@ -218,7 +218,14 @@ public partial class RomImportViewModel : ObservableObject
         SelectedUnmatchedCount = 0;
         try
         {
-            var result = await Task.Run(() => RomImportService.ScanFolder(SourceFolder, _allGames, _retroAuditDataPath));
+            // Kullanıcı geri bildirimi: "pinball'ı bağlamıştım halbuki, eşleşmeyenlerde gözükmemesi
+            // lazım değil mi" — daha önce ELLE (Bağla/Şu anki yoldan kullan) herhangi bir oyuna
+            // bağlanmış dosyalar taramada tekrar "Eşleşmeyenler"e düşmesin diye (bkz.
+            // RomImportService.ScanFolder yorumu).
+            var alreadyLinkedPaths = new HashSet<string>(
+                UserDataService.GetAllFilePathOverrides().Values.SelectMany(v => v).Select(o => o.FilePath).Where(p => p is not null)!,
+                StringComparer.OrdinalIgnoreCase);
+            var result = await Task.Run(() => RomImportService.ScanFolder(SourceFolder, _allGames, _retroAuditDataPath, alreadyLinkedPaths));
             foreach (var match in result.Matches)
                 Matches.Add(match);
             foreach (var item in result.Unmatched)
@@ -481,7 +488,10 @@ public partial class RomImportViewModel : ObservableObject
         // Kullanıcı isteği: "eşleşmeyenler sekmesine geçmeden seçim yapabilecek ... içe aktarın
         // yanında, seçiliyse eşleşmeyenleri aktaracak değilse aktarmıcak" — Beta/Unl/Proto gibi
         // BİLEREK dışlananlar (bkz. IsIntentionallyExcluded) bu otomatik akışın DIŞINDA kalır,
-        // sadece "gerçekten katalogda yok" (ExcludedTag=null) satırlar aday olur.
+        // sadece "gerçekten katalogda yok" (ExcludedTag=null) satırlar aday olur. Zaten bir oyuna
+        // bağlı dosyalar (kullanıcı isteği: "tablodaki bi oyunun kartına bağlı sonuçta, eşleşmeyenlerde
+        // gözükmemesi lazım") Unmatched listesine artık hiç girmiyor (bkz. RomImportService.ScanFolder),
+        // bu yüzden burada ayrıca bir kontrole gerek yok.
         var unmatchedToImport = ImportUnmatchedAsNewGames
             ? Unmatched.Where(u => !u.IsIntentionallyExcluded).ToList()
             : new List<UnmatchedRomFile>();

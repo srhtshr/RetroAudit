@@ -56,6 +56,7 @@ public partial class Game : ObservableObject
     [NotifyPropertyChangedFor(nameof(BoxDisplayPath))]
     [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
     [NotifyPropertyChangedFor(nameof(CanFetchArtwork))]
+    [NotifyPropertyChangedFor(nameof(IsEffectivelyMatched))]
     private string boxPath = string.Empty;
 
     [ObservableProperty]
@@ -65,6 +66,7 @@ public partial class Game : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowClearLogoArea))]
     [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
     [NotifyPropertyChangedFor(nameof(CanFetchArtwork))]
+    [NotifyPropertyChangedFor(nameof(IsEffectivelyMatched))]
     private string screenshotPath = string.Empty;
 
     [ObservableProperty]
@@ -74,11 +76,20 @@ public partial class Game : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowClearLogoArea))]
     [NotifyPropertyChangedFor(nameof(HasMissingArtwork))]
     [NotifyPropertyChangedFor(nameof(CanFetchArtwork))]
+    [NotifyPropertyChangedFor(nameof(IsEffectivelyMatched))]
     private string clearLogoPath = string.Empty;
 
     public bool HasBox => !string.IsNullOrWhiteSpace(BoxPath);
     public bool HasScreenshot => !string.IsNullOrWhiteSpace(ScreenshotPath);
     public bool HasClearLogo => !string.IsNullOrWhiteSpace(ClearLogoPath);
+
+    // Kullanıcı isteği: "libretronun metadatasını da entegre edelim, 2'sinden biriyle eşleşirse
+    // eşleşmedi çıkmasın" — libretro-thumbnails'in gerçek bir metadata'sı (tür/yayıncı/açıklama)
+    // yok, sadece görsel arşivi; bu yüzden "eşleşme" tanımı genişletildi: LaunchBox metadata
+    // eşleşmesi (StatusOk) YOKSA bile, bu oyun için (hangi kaynaktan olursa olsun) en az bir görsel
+    // bulunabilmişse artık "Eşleşti" sayılır — Durum sütunu/filtresi (bkz. MainViewModel.
+    // GetMatchedStatusLabel) ve grid ikonu (bkz. MainWindow.xaml) burayı kullanır.
+    public bool IsEffectivelyMatched => StatusOk || HasBox || HasClearLogo || HasScreenshot;
 
     // Detay panelindeki tek Download/Search butonlarının görünürlüğü (kullanıcı isteği:
     // "bütün resimler varsa gösterme indirme ve arama butonunu") — üçünden BİRİ bile eksikse true.
@@ -90,7 +101,12 @@ public partial class Game : ObservableObject
     // indirilmediğini hiç yansıtmıyordu. Detay panelindeki AYNI düğme (HasMissingArtwork) zaten
     // tüm görseller tamamsa gizleniyordu — burada satır düzeni bozulmasın diye gizlemek yerine
     // devre dışı bırakılıp soluklaşıyor (bkz. MainWindow.xaml grid Actions sütunu).
-    public bool CanFetchArtwork => HasArtworkSource && HasMissingArtwork;
+    // Kullanıcı geri bildirimi: "super star force için 'eşleşmiş bir metadata kaydı yok' diyor" —
+    // HasArtworkSource (LaunchBox eşleşmesi) artık şart değil; 2. kaynak (libretro-thumbnails, bkz.
+    // ArtworkService.DownloadFromLibretroThumbnailsAsync) kataloğun kendi DAT adıyla çalışıyor,
+    // LaunchBox eşleşmesi olmayan oyunlarda da görsel bulma ihtimali var — buton artık sadece eksik
+    // görsel olup olmadığına bakıyor.
+    public bool CanFetchArtwork => HasMissingArtwork;
 
     // Detay panelinde gösterilecek gerçek yol — Has* bayrakları (yukarıda) gerçek görselin var
     // olup olmadığını (grid noktaları, "Görsel Getir" gibi yerlerde) yansıtmaya devam eder, bu

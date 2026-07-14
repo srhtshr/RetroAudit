@@ -23,13 +23,20 @@ public partial class MediaSearchWindow : Window
     private readonly string _searchUrl;
     private readonly string _targetFolder;
     private readonly string _targetFileNameWithoutExtension;
-    private Action? _completedCallback;
+    private Action<string>? _completedCallback;
     private Game? _game; // VideoUrl kaydetme için, opsiyonel
 
-    // completedCallback: indirme Completed durumuna geçtiğinde çağrılır — MainWindow bunu
-    // MainViewModel.NotifyArtworkSearched'a bağlıyor (o TEK oyunun görsel yollarını tazeler).
+    // completedCallback: indirme Completed durumuna geçtiğinde, GERÇEKTEN yazılan dosyanın tam
+    // yoluyla çağrılır — MainWindow bunu MainViewModel.NotifyArtworkSearched'a bağlıyor (o TEK
+    // oyunun görsel yollarını tazeler). Kullanıcı bulgusu: "resmi internet searchinden indirdim
+    // ... Could not find file '...(Not For Resale).jpg'" — önceden bu callback parametresizdi,
+    // çağıran taraf (MainViewModel.SearchArtwork) hedef dosya adını KENDİSİ tahmin ediyordu
+    // (Box/SS için hep ".jpg" varsayıyordu) ama asıl indirilen dosya kaynak URL'nin/tarayıcının
+    // önerdiği uzantıyla (ör. ".webp") kaydediliyordu — ikisi uyuşmadığında BoxPath var olmayan
+    // bir dosyayı gösteriyor, Crop Editor'da tıklanınca "Could not find file" ile çöküyordu. Artık
+    // GERÇEK yazılan yol buradan doğrudan geri bildiriliyor, tahmin ortadan kalktı.
     public MediaSearchWindow(string searchUrl, string targetFolder, string targetFileNameWithoutExtension,
-        string gameTitle, string mediaTypeLabel, Action? completedCallback = null, Game? game = null)
+        string gameTitle, string mediaTypeLabel, Action<string>? completedCallback = null, Game? game = null)
     {
         InitializeComponent();
         DarkTitleBarHelper.Apply(this);
@@ -46,7 +53,7 @@ public partial class MediaSearchWindow : Window
 
     private string? _lastSelectedImageUrl;
 
-    private async Task InitializeBrowserAsync(Action? completedCallback)
+    private async Task InitializeBrowserAsync(Action<string>? completedCallback)
     {
         try
         {
@@ -332,7 +339,7 @@ public partial class MediaSearchWindow : Window
         {
             UserDataService.SaveVideoUrlOverride(_game.GameKey, videoUrl);
             _game.VideoUrl = videoUrl;
-            _completedCallback?.Invoke();
+            _completedCallback?.Invoke(string.Empty);
 
             MessageBox.Show(this,
                 $"YouTube video bağlantısı başarıyla kaydedildi!\n\n{videoUrl}",
@@ -454,7 +461,7 @@ public partial class MediaSearchWindow : Window
 
             if (success)
             {
-                _completedCallback?.Invoke();
+                _completedCallback?.Invoke(destination);
                 MessageBox.Show(this,
                     "Görsel başarıyla indirildi ve RetroAudit kütüphanenize kaydedildi!",
                     "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -502,7 +509,7 @@ public partial class MediaSearchWindow : Window
     }
 
 
-    private void CoreWebView2_DownloadStarting(CoreWebView2DownloadStartingEventArgs e, Action? completedCallback)
+    private void CoreWebView2_DownloadStarting(CoreWebView2DownloadStartingEventArgs e, Action<string>? completedCallback)
     {
         var deferral = e.GetDeferral();
         try
@@ -518,12 +525,13 @@ public partial class MediaSearchWindow : Window
 
             if (completedCallback is not null)
             {
+                var resultPath = e.ResultFilePath;
                 e.DownloadOperation.StateChanged += (sender, _) =>
                 {
                     if (sender is not CoreWebView2DownloadOperation { State: CoreWebView2DownloadState.Completed })
                         return;
 
-                    completedCallback();
+                    completedCallback(resultPath);
                 };
             }
         }

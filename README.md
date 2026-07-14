@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.27)
+## Mevcut durum (v0.28)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
@@ -37,6 +37,7 @@ Tasarım dili: Visual Studio / Obsidian tarzı koyu tema (bkz. `RetroAudit/Theme
 - **Gameplay videosundan anlık görüntü**: Embedded YouTube oynatıcısında bir kamera butonu, o an oynayan kareyi Screenshot (SS) olarak kaydediyor; video gerçekten oynamıyorsa kare yakalanmıyor.
 - **"Bağla" artık ROM'suz da çalışıyor**: dosyası olmayan bir oyun da hedefe sahipsiz (kırmızı çarpı) bir sürüm kartı olarak eklenip kaynak satır tablodan gizlenebiliyor; sürüm kartındaki "Ayır" butonuyla geri alınabiliyor.
 - Üst arama kutusu alternatif isimlerde de arıyor ve aktif arama metni kaldırılabilir bir filtre rozeti olarak görünüyor; Durum filtresinde manuel bağlı oyunlar için ayrı bir kategori var.
+- **Filtre menüleri tıklanabilir rozet/hap görünümünde**: Durum/Platform/Türler/Yayıncı/Bölge ve Actions popup'ı dahil tüm filtre dropdown'ları — çoklu seçime izin veriyor, tıklama anında uygulayıp popup'ı kapatıyor. "Bağla" arama kutusu artık alternatif isimlerde de arıyor. Custom oyunlar artık aynı dosya yolu/CRC32/alternatif isim eşleşmesiyle de gerçek katalog karşılığına otomatik katlanıyor.
 
 ### Pencereler
 - **MainWindow** — Platform listesi, sanallaştırılmış oyun tablosu (DataGrid), playlist chip şeridi, seçili oyun detay paneli ve BAŞLAT butonu.
