@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using System.Threading;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -3092,6 +3094,36 @@ public partial class MainViewModel : ObservableObject
     // public: Edit Metadata penceresi kapandıktan sonra MainWindow.xaml.cs bunu çağırıp
     // DataGrid'in güncellenen değerleri (Title/Genre/... ObservableProperty olmadığı için)
     // göstermesini sağlıyor.
+    // Sütun başlığındaki "Sırala A-Z/Z-A" düğmesiyle seçilen aktif sıralama (bkz.
+    // MainWindow.xaml.cs ApplyHeaderSort). Kullanıcı bulgusu: "başlıklarda isimlerin a dan z'ye
+    // sıralamasında bi sorun var" — ApplyFilter, Games koleksiyonunu HER seferinde (platform
+    // değişimi, filtre, hatta arka planda görsel indirme sonrası) sıfırdan yeni bir
+    // ObservableCollection olarak kuruyordu; DataGrid'in ICollectionView'ına doğrudan uygulanan
+    // eski SortDescriptions yaklaşımı bu yeni koleksiyonla birlikte sessizce kayboluyordu. Artık
+    // aktif sıralama burada (ViewModel'de) saklanıyor ve ApplyFilter'ın kendisi query'yi
+    // sıralayarak kuruyor — hangi filtre/yenileme tetiklenirse tetiklensin sıralama kalıcı kalır.
+    // Kullanıcı isteği: "varsayılan olarak da A-Z sıralı olmasını bekliyordum" — hiç sıralama
+    // seçilmemişse liste DAT/katalog ekleme sırasıyla geliyordu (alfabetik değil, kafa karıştırıcı).
+    // Başlangıç değeri artık "Title"/Ascending — MainWindow.xaml.cs de Başlık sütununun ok
+    // ikonunu bu varsayılanla eşleşecek şekilde başlangıçta işaretliyor (bkz. MainWindow ctor).
+    private string? _activeSortMemberPath = nameof(Game.Title);
+    private ListSortDirection _activeSortDirection = ListSortDirection.Ascending;
+
+    private static readonly IComparer<object?> SortValueComparer = Comparer<object?>.Create((a, b) =>
+    {
+        if (ReferenceEquals(a, b)) return 0;
+        if (a is null) return -1;
+        if (b is null) return 1;
+        return Comparer<object>.Default.Compare(a, b);
+    });
+
+    public void SetActiveSort(string? memberPath, ListSortDirection direction)
+    {
+        _activeSortMemberPath = memberPath;
+        _activeSortDirection = direction;
+        ApplyFilter();
+    }
+
     public void ApplyFilter()
     {
         var query = GetFilterScopePopulation();
@@ -3119,6 +3151,14 @@ public partial class MainViewModel : ObservableObject
             PlaylistChipKind.Top25 => ComputeTopRatedForScope(query, 25),
             _ => query,
         };
+
+        if (_activeSortMemberPath is { Length: > 0 } sortMemberPath
+            && typeof(Game).GetProperty(sortMemberPath) is { } sortProperty)
+        {
+            query = _activeSortDirection == ListSortDirection.Ascending
+                ? query.OrderBy(g => sortProperty.GetValue(g), SortValueComparer)
+                : query.OrderByDescending(g => sortProperty.GetValue(g), SortValueComparer);
+        }
 
         Games = new ObservableCollection<Game>(query);
 

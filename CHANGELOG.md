@@ -2,6 +2,15 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.31] - 2026-07-14
+
+### Fixed
+- **Tabloyu tam genişliğe getir düğmesi tam ekranda paneli geri açmıyordu**: Panel kapalıyken bu düğme pencerenin tam kenarına, WindowChrome'un görünmez resize kenarlığının (ResizeBorderThickness) içine denk geliyordu — hover çalışıyor gibi görünse de tıklama non-client resize hareketi sayılıp yutuluyordu. Başlık çubuğu düğmeleriyle aynı `IsHitTestVisibleInChrome` tekniği uygulandı.
+- **Sütun başlığından "Sırala A-Z/Z-A" seçimi kalıcı değildi**: Platform değiştirme, filtre veya arka planda görsel indirme gibi herhangi bir yenileme, tabloyu sessizce sıralamasız (katalog ekleme sırasına) döndürüyordu — aktif sıralama artık ViewModel'de saklanıp her yenilemede yeniden uygulanıyor.
+
+### Changed
+- **Liste artık varsayılan olarak Başlığa göre A-Z sıralı geliyor**: Önceden hiç sıralama seçilmemişse liste DAT/katalog ekleme sırasıyla (alfabetik olmayan, kafa karıştırıcı bir düzende) geliyordu.
+
 ## [0.30] - 2026-07-14
 
 ### Added

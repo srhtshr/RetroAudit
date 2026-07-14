@@ -1948,7 +1948,20 @@
                  Arkaplanı başlık rengiyle eşleştirme denemesi (Border + Elevated) geri alındı —
                  gerçek başlık yüksekliğini bilmeden bir sızıntı kalmadan tam oturtmak mümkün
                  olmadı; düğme arkaplansız (Transparent) bırakıldı. -->
+            <!-- Kullanıcı bulgusu: "tam ekrandayken panel kapalıyken (tablo tam genişlikteyken)
+                 butona basınca panel geri açılmıyor, ama satıra tıklayınca açılıyor" — panel
+                 kapalıyken (DetailPanelColumnDef Width=0) bu düğme, Column 2 ("*") tam pencere
+                 kenarına kadar genişlediği için TAM pencere kenarına, WindowChrome'un
+                 ResizeBorderThickness="6" ile ayırdığı görünmez resize şeridinin İÇİNE denk
+                 geliyordu — DWM mouse-move'u (hover) yine de WPF'e iletiyordu ama tıklamayı
+                 non-client resize hareketi sayıp yutuyordu (panel AÇIKKEN düğme 340px içeride
+                 kaldığı için bu hiç yaşanmıyordu). İlk denemede Margin ile düğmeyi kenardan içeri
+                 çekmiştim ama bu, köşedeki scrollbar/başlık şeridiyle arasında boşluk/çizgi
+                 bırakıyordu — onun yerine başlık çubuğu düğmeleriyle (bkz. CustomTitleBarButton)
+                 AYNI teknik: IsHitTestVisibleInChrome="True", düğmeyi tam köşede/kenarda TUTARKEN
+                 tıklamaların resize kenarlığı tarafından yutulmasını engelliyor. -->
             <Button x:Name="DetailPanelToggleButton" Grid.Column="2" Command="{Binding ToggleDetailPanelCommand}"
+                    shell:WindowChrome.IsHitTestVisibleInChrome="True"
                     Width="14" Height="40" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Background="Transparent" Padding="0" Cursor="Hand"
                     ToolTip="Tabloyu tam genişliğe getir / geri al">

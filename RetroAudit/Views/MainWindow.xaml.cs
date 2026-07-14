@@ -210,6 +210,10 @@ public partial class MainWindow : Window
 
             WireColumnVisibility(vm);
             WireDetailPanelWidth(vm);
+
+            // MainViewModel'in varsayılan aktif sıralaması (Title/Ascending, bkz.
+            // MainViewModel._activeSortMemberPath) ile Başlık sütununun ok ikonu eşleşsin diye.
+            TitleColumn.SortDirection = ListSortDirection.Ascending;
         }
 
         // Kapsül menü her açıldığında (Popup.Opened her IsOpen=true geçişinde tetiklenir, ilk
@@ -706,8 +710,13 @@ public partial class MainWindow : Window
     // bkz. FilterableColumnHeader, CanUserSortColumns="False"), bu dropdown'ın en üstündeki
     // "Sırala A-Z"/"Sırala Z-A" düğmeleriyle yapılıyor. Düğme, filtre şablonunun içinde olduğu için
     // görsel ağaçta yukarı çıkıp hangi DataGridColumnHeader'a (dolayısıyla hangi DataGridColumn'a)
-    // ait olduğunu buluyoruz — WPF'in kendi otomatik sıralamasının kullandığı SortMemberPath +
-    // ICollectionView.SortDescriptions mekanizmasının aynısı, sadece manuel tetikleniyor.
+    // ait olduğunu buluyoruz.
+    // Kullanıcı bulgusu: "başlıklarda a'dan z'ye sıralamada bi sorun var" — eskiden burada
+    // doğrudan ICollectionView.SortDescriptions'a yazılıyordu, ama MainViewModel.ApplyFilter HER
+    // filtre/yenilemede Games'i sıfırdan yeni bir ObservableCollection olarak kuruyor; o an aktif
+    // olan view'ın SortDescriptions'ı yeni koleksiyonla birlikte sessizce kayboluyordu. Artık
+    // sıralama tercihi MainViewModel.SetActiveSort ile ViewModel'e (kalıcı bir alana) yazılıyor,
+    // ApplyFilter'ın kendisi query'yi sıralayarak kuruyor — bu yüzden hayatta kalıyor.
     private void SortAscending_Click(object sender, RoutedEventArgs e) => ApplyHeaderSort(sender, ListSortDirection.Ascending);
 
     private void SortDescending_Click(object sender, RoutedEventArgs e) => ApplyHeaderSort(sender, ListSortDirection.Descending);
@@ -721,9 +730,8 @@ public partial class MainWindow : Window
             string.IsNullOrEmpty(column.SortMemberPath))
             return;
 
-        var view = CollectionViewSource.GetDefaultView(GamesGrid.ItemsSource);
-        view.SortDescriptions.Clear();
-        view.SortDescriptions.Add(new SortDescription(column.SortMemberPath, direction));
+        if (DataContext is MainViewModel vm)
+            vm.SetActiveSort(column.SortMemberPath, direction);
 
         foreach (var col in GamesGrid.Columns)
             col.SortDirection = null;

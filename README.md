@@ -4,7 +4,7 @@ Retro oyun kütüphanesi düzenleme/denetleme aracı. WPF (.NET 9) + MVVM (Commu
 
 📝 [Changelog](CHANGELOG.md) • 🤖 [AI Guide](AGENTS.md) • 📄 [License](LICENSE)
 
-## Mevcut durum (v0.30)
+## Mevcut durum (v0.31)
 
 Uygulama artık **gerçek bir DAT tabanlı katalogla** çalışıyor — `Services/MockDataService.cs` tamamen kaldırıldı. Sistem iki ayrı parçadan oluşuyor:
 
