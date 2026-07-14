@@ -50,6 +50,9 @@
              — derleme sırasında YAKALANMIYOR. Bu üç stil daha aşağıda (orijinal, temaya uygun
              yerlerinde) TEKRAR tanımlanmıyor; sadece BURAYA taşındı.
              (Kullanıcı geri bildirimi: "program kapanıyor / açılmıyor" — kök neden buydu.) -->
+        <!-- Kullanıcı bulgusu: "tam ekranken ... takılma" — bu buton her satırda 3-4 kez (Favori/
+             Görsel Getir/Ara-Başlat) oluşuyor; Focusable/IsTabStop kapatmak (bkz. GenreBadgeButton'daki
+             AYNI gerekçe) WPF'in klavye gezinme/odak kapsamı hesaplarındaki gereksiz yükü azaltıyor. -->
         <Style x:Key="ActionsIconButton" TargetType="Button">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -57,6 +60,8 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Width" Value="22" />
             <Setter Property="Height" Value="22" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="IsTabStop" Value="False" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
@@ -1463,6 +1468,21 @@
                  de içerik tarafında hesaba katılmıyor. Düzeltme MainWindow.xaml.cs'te (StateChanged) —
                  sabit bir piksel sayısı yerine bu iki SystemParameters değerini TOPLAYIP GamesGrid'e
                  sağ Margin olarak uyguluyor, böylece farklı DPI ölçeklerinde de doğru kalıyor. -->
+            <!-- Kullanıcı bulgusu: "hızlıca inmeye çalıştığımda kare kare iniyor" — ScrollUnit
+                 belirtilmeyince VirtualizingPanel varsayılan olarak "Item" kullanır: her tekerlek/
+                 sürükleme hareketi TAM SATIR adımlarıyla atlar, hızlı kaydırmayı "kare kare"
+                 (basamaklı) hissettirir. "Pixel" sanallaştırmayı (Recycling) KORUYARAK akıcı, piksel
+                 bazlı kaydırma sağlıyor.
+                 CacheLength="1,1" (Page birimiyle): görünür alanın ÜSTÜNDE/ALTINDA birer "sayfa"
+                 satır önceden hazırlanıp saklanıyor (varsayılan çok daha dar bir tampon kullanır) —
+                 hızlı kaydırmada aynı anda çok fazla YENİ satırın tek bir layout/render geçişine
+                 yığılmasını azaltıyor (bkz. dotnet-trace profilinde tekli 100-200ms'lik
+                 UpdateLayout/RenderMessageHandlerCore geçişleri).
+                 Kullanıcı bulgusu: "mouse ile scrollu taşırken eş zamanlı gelmiyor, scrollbar
+                 geriden geliyor" — IsDeferredScrollingEnabled="True" denendi (sürükleme sırasında
+                 içerik hiç kaymayıp SADECE fare bırakılınca bir kez atlıyordu) ama bu "önce hiçbir
+                 şey olmuyor, sonra aniden zıplıyor" hissi orijinal (hafif gecikmeli ama SÜREKLİ takip
+                 eden) davranıştan daha rahatsız ediciydi — geri alındı. -->
             <DataGrid x:Name="GamesGrid" Grid.Column="2"
                       ItemsSource="{Binding Games}"
                       SelectedItem="{Binding SelectedGame}"
@@ -1472,9 +1492,13 @@
                       EnableColumnVirtualization="False"
                       VirtualizingPanel.IsVirtualizing="True"
                       VirtualizingPanel.VirtualizationMode="Recycling"
+                      VirtualizingPanel.ScrollUnit="Pixel"
+                      VirtualizingPanel.CacheLengthUnit="Page"
+                      VirtualizingPanel.CacheLength="1,1"
                       ScrollViewer.CanContentScroll="True"
                       ScrollViewer.HorizontalScrollBarVisibility="Auto"
                       PreviewMouseRightButtonUp="GamesGrid_PreviewMouseRightButtonUp"
+                      PreviewMouseWheel="GamesGrid_PreviewMouseWheel"
                       ColumnReordered="GamesGrid_ColumnReordered">
                 <!-- ROM'u eksik satırlar soluklaştırılır ki Play/Search sütunundaki farkın dışında da
                      eksik olan satırlar gözle bir bakışta ayırt edilebilsin. Soluklaştırma ROW değil
@@ -1549,6 +1573,15 @@
                                          virtualization, her yeni satır kendi decode'unu tetikliyor) gözle
                                          görülür bir performans sorununa yol açıyordu (kullanıcı geri
                                          bildirimi). ConverterParameter=128: 64px'lik hücre için 2x (HiDPI). -->
+                                    <!-- Kullanıcı bulgusu: "hızlı kaydırırken bazı noktalarda takılma" —
+                                         IsAsync=True denendi ama görseller bir an boş gelip SONRA
+                                         "pop" ederek beliriyordu ("orjinalliği gidiyor" — cilasız/
+                                         yamalı hissettiriyordu), bu yüzden geri alındı. Asıl çözüm
+                                         gerçek bir ÖN BELLEKLEME: kütüphane yüklendikten sonra tüm
+                                         logo görselleri arka planda (düşük öncelikli) önceden decode
+                                         edilip ThumbnailImageConverter'ın önbelleğine yazılıyor (bkz.
+                                         MainViewModel.PrewarmThumbnailCache) — kullanıcı o satıra
+                                         kaydırdığında görsel ZATEN önbellekte, senkron/anlık gösteriliyor. -->
                                     <Image Stretch="Uniform" Source="{Binding ClearLogoThumbnailPath, Converter={StaticResource ThumbnailImage}, ConverterParameter=128}"
                                            RenderOptions.BitmapScalingMode="HighQuality" />
                                 </Grid>
@@ -1778,20 +1811,29 @@
                                              SortMemberPath="Genres" Width="220">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate DataType="{x:Type models:Game}">
-                                <ItemsControl ItemsSource="{Binding GenreTokens}" VerticalAlignment="Center" Focusable="False">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Style="{StaticResource GenreBadgeButton}"
-                                                    Command="{Binding DataContext.FilterByGenreTokenCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}" Content="{Binding}" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
+                                <!-- Kullanıcı bulgusu: "kaydırırken takılma" — profilleme (dotnet-trace)
+                                     satır geri dönüşümünün en pahalı kısmının görsel ağaç boyutuyla
+                                     orantılı olduğunu gösterdi; GenreTokensPreview (bkz. Game.cs) en
+                                     fazla 4 rozet üretiyor, taşkın "+N" düz metinle özetleniyor. -->
+                                <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ItemsControl ItemsSource="{Binding GenreTokensPreview}" Focusable="False">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Style="{StaticResource GenreBadgeButton}"
+                                                        Command="{Binding DataContext.FilterByGenreTokenCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}" Content="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <TextBlock Text="{Binding GenreOverflowLabel}" VerticalAlignment="Center"
+                                               FontSize="10" Margin="2,0,0,0" Foreground="{StaticResource Brush.Text.Secondary}"
+                                               Visibility="{Binding HasGenreOverflow, Converter={StaticResource BoolToVisibility}}" />
+                                </WrapPanel>
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>

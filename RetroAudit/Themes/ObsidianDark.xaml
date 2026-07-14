@@ -299,6 +299,14 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Padding" Value="8,2" />
         <Setter Property="Margin" Value="0,1,4,1" />
+        <!-- Kullanıcı bulgusu: "tam ekranken daha çok yapıyor ... türlerdeki badge'lerde etkiler mi"
+             — tam ekranda aynı anda çok daha fazla satır (ve dolayısıyla çok daha fazla tür rozeti
+             Button'ı) görünür oluyor; her Button varsayılan olarak Focusable/IsTabStop, WPF'in
+             klavye gezinme (KeyboardNavigation) ve odak kapsamı hesaplarına dahil ediliyor — sadece
+             fareyle tıklanan küçük bir rozet için gereksiz. Kapatmak satır başına ölçülebilir bir
+             ek yükü ortadan kaldırıyor, tıklama davranışını ETKİLEMİYOR. -->
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="{x:Type Button}">

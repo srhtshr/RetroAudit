@@ -1,4 +1,5 @@
 using System.IO;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using RetroAudit.Services;
 
@@ -36,7 +37,21 @@ public partial class Game : ObservableObject
     // "Released" / "Junk" — toolbar'daki filtre butonlarıyla eşleşir. Gerçek veride
     // Games.HiddenByDefault'a karşılık gelir (Casino/Board Game/Educational gibi türler "Junk").
     public string Version { get; set; } = "Released";
-    public string Genres { get; set; } = string.Empty;
+
+    private string genres = string.Empty;
+    // Kullanıcı bulgusu: "tabloda kaydırırken takılmalar oluyor" — GenreTokens eskiden HER
+    // binding değerlendirmesinde (Recycling virtualization'da her satır geri dönüşünde) Genres
+    // string'ini yeniden Split ediyordu. Artık sadece Genres GERÇEKTEN değiştiğinde (nadir —
+    // yükleme, metadata düzenleme/yeniden eşleştirme) yeniden hesaplanıyor, aksi halde önbellekten.
+    public string Genres
+    {
+        get => genres;
+        set
+        {
+            genres = value;
+            genreTokensCache = null;
+        }
+    }
 
     // Tercih edilen (preferred) sürümün ilk ROM dosyasının adı — bir oyunun birden fazla dosyası
     // (headered/headerless gibi) olabilir, tam liste sağ paneldeki Versions listesindedir.
@@ -227,12 +242,29 @@ public partial class Game : ObservableObject
 
     // Detay panelindeki Tür rozeti için: Genres tek bir virgülle-ayrılmış string (bkz. yukarıdaki
     // Genres alanı), rozet + açılır menü bunun ayrıştırılmış tek tek parçalarını kullanır.
-    public string[] GenreTokens => string.IsNullOrWhiteSpace(Genres)
+    private string[]? genreTokensCache;
+    public string[] GenreTokens => genreTokensCache ??= (string.IsNullOrWhiteSpace(Genres)
         ? Array.Empty<string>()
-        : Genres.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        : Genres.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
     public bool HasGenres => GenreTokens.Length > 0;
     public bool HasMultipleGenres => GenreTokens.Length > 1;
     public string PrimaryGenre => GenreTokens.Length > 0 ? GenreTokens[0] : string.Empty;
+
+    // Kullanıcı bulgusu: "hızlı kaydırırken bazı noktalarda takılma oluyor" — profilleme
+    // (dotnet-trace) gösterdi ki DataGrid satır geri dönüşümünde (Recycling) en pahalı kısım
+    // WPF'in DependencyProperty geçersiz kılma/yürüme (DescendentsWalker/InvalidateDependents)
+    // maliyeti — bu, satırın GÖRSEL AĞACININ boyutuyla orantılı. Türler sütunundaki WrapPanel,
+    // ItemsControl'e verilen HER token için gerçek bir Button (kendi ControlTemplate'i, hover
+    // trigger'ı olan) yaratıyordu; sütun sabit genişlik+yükseklikte olduğu için zaten çoğu oyunda
+    // fazla token GÖRÜNMÜYORDU (WrapPanel taşkını kırpılıyordu) ama YİNE DE oluşturuluyordu. Grid
+    // hücresi artık en fazla 4 rozet + (varsa) "+N" metin etiketi gösteriyor — tıklanabilirlik
+    // ilk 4 için korunuyor, detay panelindeki tam liste (bkz. GenreTokens) etkilenmiyor.
+    private const int GenrePreviewLimit = 4;
+    public IReadOnlyList<string> GenreTokensPreview => GenreTokens.Length <= GenrePreviewLimit
+        ? GenreTokens
+        : GenreTokens.Take(GenrePreviewLimit).ToArray();
+    public string GenreOverflowLabel => GenreTokens.Length > GenrePreviewLimit ? $"+{GenreTokens.Length - GenrePreviewLimit}" : string.Empty;
+    public bool HasGenreOverflow => GenreTokens.Length > GenrePreviewLimit;
 
     // Oyun modu rozeti: LaunchBox'ın kesin bir "oyun modu" alanı yok (bkz. Cooperative alanı ve
     // CatalogDatabaseService.GetGames'teki yorum) — sadece MaxPlayers + Cooperative (ikili:

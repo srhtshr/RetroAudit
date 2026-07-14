@@ -646,6 +646,25 @@ public partial class MainWindow : Window
         e.Handled = true;
     }
 
+    // Kullanıcı isteği: "tek scrollla inme hızını artırabiliyor muyuz" — VirtualizingPanel.
+    // ScrollUnit="Pixel"e geçince (bkz. GamesGrid'in kendi yorumu) varsayılan tekerlek başına
+    // piksel miktarı küçük kalıyordu. Diğer ScrollViewer'larda (bkz. GameDetailScrollViewer_
+    // PreviewMouseWheel) zaten kullanılan AYNI "elle ScrollToVerticalOffset" deseni, sadece e.Delta
+    // burada bir çarpanla büyütülüyor. İçteki ScrollViewer'ı her tekerlek olayında yeniden aramamak
+    // için bir kez bulunup alanda (_gamesGridScrollViewer) saklanıyor.
+    private ScrollViewer? _gamesGridScrollViewer;
+    private const double GamesGridWheelSpeedMultiplier = 2.5;
+
+    private void GamesGrid_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        _gamesGridScrollViewer ??= FindVisualChild<ScrollViewer>(GamesGrid);
+        if (_gamesGridScrollViewer is null)
+            return;
+
+        _gamesGridScrollViewer.ScrollToVerticalOffset(_gamesGridScrollViewer.VerticalOffset - e.Delta * GamesGridWheelSpeedMultiplier);
+        e.Handled = true;
+    }
+
     private static T? FindVisualParent<T>(DependencyObject? element) where T : DependencyObject
     {
         while (element is not null && element is not T)

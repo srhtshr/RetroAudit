@@ -328,6 +328,44 @@ public static class CatalogDatabaseService
         return result;
     }
 
+    // MainViewModel.FoldCustomGamesIntoMatchingCatalogGames için — kullanıcı bulgusu: "program geç
+    // açılıyor", GetAllVersionRecordsByGame'in TÜM kataloğu (~116 bin satır) çekip sadece bir avuç
+    // CRC32 için kullanılması yüzünden. Bu, hedefli bir alternatif: SADECE verilen CRC32
+    // değerlerini (custom oyunların override'larında geçenler, genelde birkaç tane) sorgular.
+    public static Dictionary<string, List<int>> GetGameIdsByCrc32(IReadOnlyCollection<string> crc32Values)
+    {
+        var result = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+        if (!DatabaseExists || crc32Values.Count == 0)
+            return result;
+
+        using var connection = OpenConnection();
+        using var cmd = connection.CreateCommand();
+        var paramNames = crc32Values.Select((_, i) => $"$c{i}").ToList();
+        cmd.CommandText = $"""
+            SELECT gv.GameId, gh.Crc32
+            FROM GameVersions gv
+            JOIN GameHashes gh ON gh.GameVersionId = gv.GameVersionId
+            WHERE gh.Crc32 IN ({string.Join(",", paramNames)})
+            """;
+        var i = 0;
+        foreach (var crc32 in crc32Values)
+            cmd.Parameters.AddWithValue(paramNames[i++], crc32);
+
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+        {
+            var gameId = reader.GetInt32(0);
+            var crc32 = reader.GetString(1);
+            if (!result.TryGetValue(crc32, out var list))
+            {
+                list = new List<int>();
+                result[crc32] = list;
+            }
+            list.Add(gameId);
+        }
+        return result;
+    }
+
     // BEŞİNCİ eşleştirme katmanı (bkz. RomImportService.ResolveCandidate "Tier 5") için: LaunchBox'ın
     // AlternateNames'i (bölgesel/yeniden isimlendirilmiş sürümler — ör. "Kage" (Japan) = "Shadow of
     // the Ninja" (USA) — DAT bunları AYRI Game kayıtları olarak tutar, sadece LaunchBox bu bağlantıyı

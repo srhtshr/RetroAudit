@@ -469,6 +469,31 @@ public partial class MainViewModel : ObservableObject
 
         selectedGame = Games.FirstOrDefault();
         LoadSelectedGameVersions();
+
+        PrewarmThumbnailCache();
+    }
+
+    // Kullanıcı isteği: "cache sistemi mi yapsak" — hızlı kaydırırken ilk kez görünen bir satırın
+    // logo görselini SENKRON decode etmek (kaçınılmaz bir tek seferlik maliyet) takılmaya yol
+    // açıyordu; IsAsync=True (Binding) denendi ama görsel "pop" ederek beliriyordu, geri alındı.
+    // Bunun yerine kütüphane yüklendikten HEMEN sonra, arka planda (UI thread'i hiç bloklamadan)
+    // TÜM gerçek logo dosyaları önceden decode edilip ThumbnailImageConverter'ın önbelleğine
+    // yazılıyor — kullanıcı bir satıra kaydırdığında görsel artık neredeyse her zaman önbellekte,
+    // senkron/anlık (hiç "pop" olmadan) gösteriliyor.
+    //
+    // Kullanıcı isteği: "sen onu yükselt çünkü diğer platformlarda varya ona göre kapasite oluştur"
+    // — sabit bir varsayım yerine kapasite HER açılışta o an diskte gerçekten kaç logo varsa ona
+    // göre (üzerine %25 pay bırakarak) EnsureCapacity ile yükseltiliyor; kullanıcı zamanla başka
+    // platformlar için görsel indirdikçe otomatik büyümeye devam eder, asla küçülmez.
+    private void PrewarmThumbnailCache()
+    {
+        var logoPaths = _allGames
+            .Where(g => g.HasClearLogo)
+            .Select(g => (g.ClearLogoThumbnailPath, DecodePixelWidth: 128))
+            .ToList();
+
+        RetroAudit.Converters.ThumbnailImageConverter.EnsureCapacity((int)(logoPaths.Count * 1.25) + 500);
+        Task.Run(() => RetroAudit.Converters.ThumbnailImageConverter.PrewarmAsync(logoPaths));
     }
 
     // Ayarlar penceresi kapanınca MainWindow.xaml.cs bunu çağırır — diskteki (en son "Kaydet" ile
@@ -1106,26 +1131,35 @@ public partial class MainViewModel : ObservableObject
             .Where(g => g.GameId != 0)
             .GroupBy(g => g.GameId)
             .ToDictionary(gr => gr.Key, gr => gr.First());
-        var catalogCrc32Index = new Dictionary<string, List<Game>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var (gameId, records) in CatalogDatabaseService.GetAllVersionRecordsByGame())
-        {
-            if (!catalogGamesById.TryGetValue(gameId, out var game))
-                continue;
-            foreach (var (_, crc32) in records)
-            {
-                if (string.IsNullOrWhiteSpace(crc32))
-                    continue;
-                if (!catalogCrc32Index.TryGetValue(crc32, out var list))
-                {
-                    list = new List<Game>();
-                    catalogCrc32Index[crc32] = list;
-                }
-                if (!list.Contains(game))
-                    list.Add(game);
-            }
-        }
         var allOverrides = UserDataService.GetAllFilePathOverrides();
         var catalogGamesByKey = catalogGames.ToDictionary(g => g.GameKey);
+
+        // Kullanıcı bulgusu: "program geç açılıyor" — burada eskiden kataloğun TÜMÜNÜN
+        // (GameVersions+GameHashes, ~116 bin satır) CRC32 indeksi kuruluyordu ama sadece
+        // custom oyunların override'larında geçen bir avuç CRC32 değeri için kullanılıyordu.
+        // Artık SADECE o değerler için hedefli bir sorgu (WHERE Crc32 IN (...)) atılıyor.
+        var customCrc32Values = customGames
+            .SelectMany(c => allOverrides.TryGetValue(c.GameKey, out var overrides) ? overrides : Enumerable.Empty<FilePathOverrideInfo>())
+            .Select(o => o.Crc32)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var catalogCrc32Index = new Dictionary<string, List<Game>>(StringComparer.OrdinalIgnoreCase);
+        if (customCrc32Values.Count > 0)
+        {
+            foreach (var (crc32, gameIds) in CatalogDatabaseService.GetGameIdsByCrc32(customCrc32Values))
+            {
+                var games = gameIds
+                    .Select(id => catalogGamesById.TryGetValue(id, out var g) ? g : null)
+                    .Where(g => g is not null)
+                    .Select(g => g!)
+                    .Distinct()
+                    .ToList();
+                if (games.Count > 0)
+                    catalogCrc32Index[crc32] = games;
+            }
+        }
 
         // Kullanıcı bulgusu: "Karaoke Studio Senyou Cassette Vol. 1" custom'unun override'ı ile
         // GERÇEK katalog oyunu "Top Hit 20 Vol. 1"in KENDİ override'ı AYNI dosya yoluna işaret
@@ -1162,7 +1196,10 @@ public partial class MainViewModel : ObservableObject
         // Tier 6 (ResolveCandidate) ile AYNI iki aşamalı (tam, sonra normalize) alternatif isim
         // eşleşmesi burada da uygulanıyor — TEK aday varsa (birden fazla katalog oyunu aynı
         // alternatif adı paylaşıyorsa katlanmıyor, RomImportService ile AYNI güvenlik kuralı).
-        var alternateNamesByGameId = CatalogDatabaseService.GetAllAlternateNames();
+        // "geç açılıyor" düzeltmesinin devamı: bu tam olarak _alternateNamesByGameId field
+        // initializer'ının (yukarıda, satır ~859) yüklediği AYNI veri — 30 bin satırlık ikinci bir
+        // sorgu atmak yerine o zaten hazır sözlük burada da kullanılıyor.
+        var alternateNamesByGameId = _alternateNamesByGameId;
         var anyFolded = false;
         foreach (var custom in customGames)
         {

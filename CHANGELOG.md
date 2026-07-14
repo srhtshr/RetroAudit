@@ -2,6 +2,15 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.29] - 2026-07-14
+
+### Changed
+- **Tablo kaydırma performansı**: `dotnet-trace` ile ölçülen gerçek darboğazlara yönelik bir dizi düzeltme — Logo ve Bölge bayrağı görselleri artık küçük-decode + önbellekli (eskiden her satır geri dönüşümünde tam çözünürlükte sıfırdan decode ediliyordu); kütüphane yüklendikten sonra tüm logo görselleri arka planda (UI'ı bloklamadan) önceden decode edilip önbelleğe yazılıyor, önbellek kapasitesi diskteki gerçek görsel sayısına göre otomatik büyüyor. `VirtualizingPanel.ScrollUnit="Pixel"` ile kaydırma artık satır-satır değil piksel bazlı akıcı; sanallaştırma tamponu (`CacheLength`) genişletildi. Tür rozetleri ve Actions sütunundaki ikonlarda gereksiz klavye-odak (Focusable/IsTabStop) muhasebesi kapatıldı. Tür rozetleri grid hücresinde en fazla 4 ile sınırlandı, fazlası "+N" ile özetleniyor. Fare tekerleğiyle kaydırma hızı artırıldı.
+- Kataloğu başlangıçta custom oyunlarla eşleştiren tarama artık kataloğun tamamını (100 binin üzerinde satır) taramıyor, sadece ilgili CRC32 değerlerini hedefli sorguluyor — açılış gözle görülür şekilde hızlandı.
+
+### Fixed
+- Performans araştırması sırasında ortaya çıktı: arka planda çalışan bir uzaktan erişim servisi (ör. Chrome Remote Desktop) Windows UI Automation'ı sürekli meşgul edip kaydırmayı yavaşlatabiliyor — RetroAudit'in kendisiyle ilgili değil ama kullanıcılar için not edilmeye değer.
+
 ## [0.28] - 2026-07-14
 
 ### Added
