@@ -12,7 +12,12 @@ public static class GameKeyHelper
 }
 
 // GameState tablosundan tek bir oyun için okunan durum (bkz. UserDataService.GetAllGameStates).
-public record GameStateInfo(bool IsHidden, bool IsDeleted, bool IsPermanentlyDeleted);
+// VersionOverride: kullanıcı isteği: "istenilen oyunu junk'a atabilelim veya junktaki bi oyunu
+// release'e çekebilelim ... tek tuş toggle" — Builder'ın kataloğun kendi sınıflandırmasını (ör.
+// LaunchBox'ın belirsiz bir alternatif isim çakışması yüzünden yanlış Junk'a düşürmesi) geçersiz
+// kılar: null = geçersiz kılma yok (kataloğun kendi Version'ı geçerli), "Released"/"Junk" = kalıcı
+// olarak zorlanan değer — katalog yeniden inşa edilse bile (GameKey sabit kaldığı sürece) kaybolmaz.
+public record GameStateInfo(bool IsHidden, bool IsDeleted, bool IsPermanentlyDeleted, string? VersionOverride = null);
 
 // MetadataOverrides tablosundan tek bir oyun için okunan, kullanıcının elle düzenlediği alanlar.
 // Null olan alanlar "düzenlenmedi, katalog değeri geçerli" anlamına gelir.

@@ -270,6 +270,14 @@ public static class CatalogDatabaseService
             {
                 game.IsHidden = state.IsHidden;
                 game.IsDeleted = state.IsDeleted;
+
+                // Kullanıcı isteği: "istenilen oyunu junk'a atabilelim veya junktaki bi oyunu
+                // release'e çekebilelim" — Builder'ın kataloğun kendi sınıflandırmasını (ör.
+                // LaunchBox'ın belirsiz bir alternatif isim çakışması yüzünden yanlış Junk'a
+                // düşürmesi) geçersiz kılar (bkz. GameStateInfo.VersionOverride) — katalog yeniden
+                // inşa edilse bile GameKey sabit kaldığı sürece bu geçersiz kılma kaybolmaz.
+                if (state.VersionOverride is { Length: > 0 } versionOverride)
+                    game.Version = versionOverride;
             }
 
             game.IsFavorite = favorites.Contains(game.GameKey);

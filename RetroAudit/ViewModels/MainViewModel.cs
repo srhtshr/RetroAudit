@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Threading;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using RetroAudit.Catalog.Grouping;
@@ -928,12 +929,22 @@ public partial class MainViewModel : ObservableObject
     // yine buradan geçtiği için AYNI şekilde bulamıyordu — kullanıcının "restart'ta düzeldi"
     // izlenimi başka bir oyun/senaryo olmalı, ama bu boş game.File durumu HER ZAMAN başarısız
     // oluyordu). Artık ikisi de AYNI GetMediaBaseFileName mantığını kullanıyor.
+    // Kullanıcı isteği: "toplu indirmelerde biraz yavaşlık oluyor" — BulkFetchArtworkForGamesAsync
+    // artık birden fazla oyunu EŞ ZAMANLI indiriyor (bkz. o metot), bu yüzden RegisterDownloadedMedia
+    // artık BİRDEN FAZLA arka plan thread'inden aynı anda çağrılabiliyor; bu sözlükleri (_boxByPlatform
+    // vb., sıradan Dictionary — thread-safe DEĞİL) okuyan TryGetMediaPath de (grid binding'leri
+    // üzerinden UI thread'inden) AYNI ANDA çalışabildiği için ikisi de AYNI kilitle korunuyor.
+    private static readonly object MediaIndexLock = new();
+
     private static string? TryGetMediaPath(Dictionary<string, Dictionary<string, string>> byPlatform, Game game)
     {
         var baseName = GetMediaBaseFileName(game);
-        return byPlatform.TryGetValue(game.PlatformDisplayName, out var files) && files.TryGetValue(baseName, out var path)
-            ? path
-            : null;
+        lock (MediaIndexLock)
+        {
+            return byPlatform.TryGetValue(game.PlatformDisplayName, out var files) && files.TryGetValue(baseName, out var path)
+                ? path
+                : null;
+        }
     }
 
     private string GetBoxPath(Game game) => TryGetMediaPath(_boxByPlatform, game) ?? string.Empty;
@@ -965,12 +976,15 @@ public partial class MainViewModel : ObservableObject
         if (byPlatform is null)
             return;
 
-        if (!byPlatform.TryGetValue(platformDisplayName, out var files))
+        lock (MediaIndexLock)
         {
-            files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            byPlatform[platformDisplayName] = files;
+            if (!byPlatform.TryGetValue(platformDisplayName, out var files))
+            {
+                files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                byPlatform[platformDisplayName] = files;
+            }
+            files[baseFileName] = destination;
         }
-        files[baseFileName] = destination;
     }
 
     // NotifyRomDownloaded ile aynı desen (bkz. aşağıda) — tek bir oyun için "Görsel Getir"
@@ -1709,6 +1723,22 @@ public partial class MainViewModel : ObservableObject
         ApplyFilter();
     }
 
+    // Kullanıcı bulgusu: "Wanpaku Duck Yume Bouken" (gerçekte resmi DuckTales) LaunchBox'ın kendi
+    // verisindeki belirsiz bir alternatif isim çakışması yüzünden yanlışlıkla Junk'a düşmüştü —
+    // kök neden Builder'ın eşleştirmesinde (kataloğu yeniden inşa etmeden düzeltilemez). Kullanıcı
+    // kararı: "istenilen oyunu junk'a atabilelim veya junktaki bi oyunu release'e çekebilelim ...
+    // tek tuş toggle gibi kapsülde sabit koy" — kapsülde HER ZAMAN görünen tek bir düğme, mevcut
+    // Version'a göre karşıt değere kalıcı olarak zorluyor (bkz. GameStateInfo.VersionOverride).
+    [RelayCommand]
+    private void ToggleJunkStatus(Game game)
+    {
+        var newVersion = game.Version == "Junk" ? "Released" : "Junk";
+        UserDataService.SetVersionOverride(game.GameKey, newVersion);
+        game.Version = newVersion;
+        ApplyFilter();
+        SyncPlatformGameCounts();
+    }
+
     [RelayCommand]
     private void RestoreGame(Game game)
     {
@@ -2319,18 +2349,46 @@ public partial class MainViewModel : ObservableObject
         ArtworkDownloadProgress = 0;
         var totalDownloaded = 0;
         var totalAssets = 0;
+        var completedGames = 0;
         var cancelled = false;
+
+        // Kullanıcı bulgusu: "toplu indirmelerde biraz yavaşlık oluyor ... launchbox'ın kendi
+        // programı daha hızlı indiriyordu" — sebep görsel dönüştürme (decode/resize/encode)
+        // DEĞİL: her oyunun indirmesi bir öncekinin TAMAMEN bitmesini (ağ isteği + kayıt) bekleyerek
+        // SIRAYLA yapılıyordu. Ağ gecikmesi (her istek onlarca-yüzlerce ms) yüzlerce oyun × 4 türde
+        // katlanarak toplam süreyi domine ediyordu — LaunchBox'ın kendi indiricisi (çoğu toplu
+        // indirici gibi) muhtemelen AYNI ANDA birden fazla bağlantı kullanıyor. Burada da aynı
+        // yaklaşım: SemaphoreSlim ile sınırlı (aşırı sunucu/disk yükü olmasın diye) EŞ ZAMANLI
+        // indirme. DownloadArtworkAsync'in içindeki RegisterDownloadedMedia artık lock ile korunuyor
+        // (bkz. o metot) çünkü artık BİRDEN FAZLA arka plan thread'inden aynı anda çağrılabiliyor;
+        // NotifyArtworkDownloaded/ArtworkDownloadProgress ise Game'in bağlı (bound) özelliklerini
+        // değiştirdiği için Dispatcher ile bilerek UI thread'ine geri taşınıyor.
+        const int maxConcurrentDownloads = 6;
+        using var semaphore = new SemaphoreSlim(maxConcurrentDownloads);
         try
         {
-            for (var i = 0; i < targets.Count; i++)
+            var downloadTasks = targets.Select(async game =>
             {
-                _artworkDownloadCts.Token.ThrowIfCancellationRequested();
-                var result = await DownloadArtworkAsync(targets[i], selectedTypes, _artworkDownloadCts.Token);
-                totalDownloaded += result.Succeeded;
-                totalAssets += result.Total;
-                NotifyArtworkDownloaded(targets[i]);
-                ArtworkDownloadProgress = (double)(i + 1) / targets.Count * 100;
-            }
+                await semaphore.WaitAsync(_artworkDownloadCts.Token);
+                try
+                {
+                    var result = await DownloadArtworkAsync(game, selectedTypes, _artworkDownloadCts.Token);
+                    Interlocked.Add(ref totalDownloaded, result.Succeeded);
+                    Interlocked.Add(ref totalAssets, result.Total);
+
+                    await Application.Current.Dispatcher.InvokeAsync(() =>
+                    {
+                        NotifyArtworkDownloaded(game);
+                        var done = Interlocked.Increment(ref completedGames);
+                        ArtworkDownloadProgress = (double)done / targets.Count * 100;
+                    });
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+            await Task.WhenAll(downloadTasks);
         }
         catch (OperationCanceledException)
         {

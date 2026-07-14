@@ -2,6 +2,18 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.30] - 2026-07-14
+
+### Added
+- **Junk/Released tek tuş toggle**: Kapsül (sağ tık) menüsüne, LaunchBox'ın kendi sınıflandırmasını (ör. belirsiz bir alternatif isim çakışması yüzünden yanlışlıkla Junk'a düşen bir oyunu) geçersiz kılan, çöp kutusu dışında her zaman görünen bir "Junk Yap / Released Yap" düğmesi eklendi — seçim kalıcı, katalog yeniden inşa edilse bile GameKey sabit kaldığı sürece kaybolmuyor.
+
+### Changed
+- **Toplu görsel indirme paralelleştirildi**: İlk kaynaktan (LaunchBox) toplu görsel indirme artık sıralı değil, 6 eşzamanlı indirme ile paralel çalışıyor — ağ gecikmesi öne çıkan darboğazdı, görsel dönüştürme değil.
+- Kapsül menüsündeki ikon düğmeleri arasına daha fazla boşluk eklendi, Restore ikonu kafa karıştıran "Undo" yerine geri dönüşüm temalı bir ikonla değiştirildi.
+
+### Fixed
+- **Kapsül düğmelerinde uzun etiketler kırpılıyordu**: "Delete Perm." gibi uzun metinler, düğmenin sabit 40px dairesel arka planının köşe-yuvarlama klibi yüzünden baştan/sondan kırpılıyordu — sabit genişlik kaldırılıp minimum genişliğe çevrildi, kısa etiketler dairesel kalırken uzun etiketler içeriğe göre genişliyor.
+
 ## [0.29] - 2026-07-14
 
 ### Changed

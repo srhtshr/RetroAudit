@@ -129,6 +129,16 @@ public static class UserDataService
         // (bkz. LinkGameFileToGameAsync) hangi oyunun gizlendiğini "Ayır" geri açabilsin diye.
         EnsureColumnExists(connection, "FilePathOverrides", "SourceGameKey", "TEXT");
 
+        // Kullanıcı bulgusu: "Wanpaku Duck Yume Bouken" gerçekte resmi DuckTales iken LaunchBox'ın
+        // kendi verisindeki BELİRSİZ bir alternatif isim eşleşmesi (aynı ad iki farklı LaunchBox
+        // kaydında — biri gerçek oyun, biri bir ROM Hack) yüzünden yanlışlıkla Junk'a düşmüştü.
+        // Kök neden Builder'ın eşleştirmesinde (kataloğu yeniden inşa etmeden düzeltilemez) — bunun
+        // yerine kullanıcı istediği oyunu kapsüldeki tek-tuş toggle ile elle Junk<->Released
+        // arasında geçirebilsin diye kalıcı bir kullanıcı override'ı: NULL (override yok, kataloğun
+        // kendi sınıflandırması geçerli), 'Released' ya da 'Junk' (bkz. SetVersionOverride,
+        // CatalogDatabaseService.ApplyUserData'daki uygulanışı).
+        EnsureColumnExists(connection, "GameState", "VersionOverride", "TEXT");
+
         using (var checkCmd = connection.CreateCommand())
         {
             checkCmd.CommandText = "SELECT COUNT(*) FROM Playlists WHERE IsBuiltIn = 1 AND Name = 'Favorites'";
@@ -152,14 +162,15 @@ public static class UserDataService
         var result = new Dictionary<string, GameStateInfo>();
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT GameKey, IsHidden, IsDeleted, IsPermanentlyDeleted FROM GameState";
+        cmd.CommandText = "SELECT GameKey, IsHidden, IsDeleted, IsPermanentlyDeleted, VersionOverride FROM GameState";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
             result[reader.GetString(0)] = new GameStateInfo(
                 reader.GetInt32(1) != 0,
                 reader.GetInt32(2) != 0,
-                reader.GetInt32(3) != 0);
+                reader.GetInt32(3) != 0,
+                reader.IsDBNull(4) ? null : reader.GetString(4));
         }
         return result;
     }
@@ -607,6 +618,17 @@ public static class UserDataService
         {
             cmd.CommandText = "UPDATE GameState SET IsHidden = $hidden WHERE GameKey = $gameKey";
             cmd.Parameters.AddWithValue("$hidden", hidden ? 1 : 0);
+        });
+
+    // Kullanıcı isteği: "istenilen oyunu junk'a atabilelim veya junktaki bi oyunu release'e
+    // çekebilelim ... tek tuş toggle" — bkz. GameStateInfo.VersionOverride yorumu. version:
+    // "Released" veya "Junk" (null geçilirse override kaldırılır, kataloğun kendi sınıflandırması
+    // geçerli olur — şu an kullanılmıyor ama API olarak destekleniyor).
+    public static void SetVersionOverride(string gameKey, string? version) =>
+        UpsertGameState(gameKey, cmd =>
+        {
+            cmd.CommandText = "UPDATE GameState SET VersionOverride = $version WHERE GameKey = $gameKey";
+            cmd.Parameters.AddWithValue("$version", (object?)version ?? DBNull.Value);
         });
 
     public static void SoftDelete(string gameKey) =>

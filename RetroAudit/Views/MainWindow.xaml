@@ -751,11 +751,20 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Margin" Value="3,0" />
+            <!-- Kullanıcı isteği: "iconların aralarını biraz aç çok sıkışık sığmıyor textler
+                 bazılarında" — 3px'ten 8px'e çıkarıldı, komşu düğmeler arasında etiket metninin
+                 taşabileceği daha fazla boşluk bırakıyor. -->
+            <Setter Property="Margin" Value="8,0" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Bg" CornerRadius="20" Width="40" Height="40" Background="Transparent">
+                        <!-- Kullanıcı bulgusu: "Delete Perm." gibi uzun etiketler CornerRadius'un
+                             oluşturduğu klip yüzünden baştan/sondan kırpılıyordu (Border, sabit
+                             Width="40" + köşe yuvarlama birleşince içeriği 40px'lik daireye
+                             kırpıyor) — sabit Width kaldırıldı, MinWidth="40" ile kısa etiketler
+                             (Restore, Delete) hâlâ 40px'lik daire gibi görünürken uzun etiketler
+                             içeriğe göre genişleyip oval bir hap şekline dönüşüyor, kırpma olmuyor. -->
+                        <Border x:Name="Bg" CornerRadius="20" MinWidth="40" Height="40" Padding="6,0" Background="Transparent">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <ControlTemplate.Triggers>
@@ -2049,11 +2058,69 @@
                             </StackPanel>
                         </Button>
 
+                        <!-- Kullanıcı bulgusu: "Wanpaku Duck Yume Bouken" (gerçekte resmi DuckTales)
+                             LaunchBox'ın belirsiz bir alternatif isim çakışması yüzünden yanlışlıkla
+                             Junk'a düşmüştü — kullanıcı kararı: "istenilen oyunu junk'a atabilelim
+                             veya junktaki bi oyunu release'e çekebilelim ... tek tuş toggle gibi
+                             kapsülde sabit koy" — HER ZAMAN görünen (sadece çöp kutusunda gizli) tek
+                             düğme, mevcut Version'a göre ikon/etiketi VE eylemi karşıtına çeviriyor
+                             (bkz. MainViewModel.ToggleJunkStatusCommand). Etiketler kısa tutuldu
+                             ("Delete Perm." ile aynı uzunluk sınırı) — önceki "Junk'tan Çıkar" kapsül
+                             genişliğine sığmayıp kırpılıyordu. -->
+                        <Button Style="{StaticResource ContextMenuIconButtonHiddenInRecycleBin}"
+                                Command="{Binding DataContext.ToggleJunkStatusCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}">
+                            <StackPanel>
+                                <TextBlock>
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource ContextMenuGlyphText}">
+                                            <Setter Property="Text" Value="&#xE7BA;" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Version}" Value="Junk">
+                                                    <Setter Property="Text" Value="&#xE73E;" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock>
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock" BasedOn="{StaticResource ContextMenuLabelText}">
+                                            <Setter Property="Text" Value="Junk Yap" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Version}" Value="Junk">
+                                                    <Setter Property="Text" Value="Released Yap" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </StackPanel>
+                            <Button.ToolTip>
+                                <TextBlock>
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="Junk'a At" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Version}" Value="Junk">
+                                                    <Setter Property="Text" Value="Junk'tan Çıkar (Released Say)" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Button.ToolTip>
+                        </Button>
+
                         <!-- Delete / Restore: Recycle Bin dışında Delete (çöp kutusuna taşı), Recycle
                              Bin chip'i içindeyken Restore. Kullanıcı isteği: "Restore için ayrı icon
                              kullan" — Delete'in çöp kutusu glifiyle (E74D) karışmasın diye Restore'da
-                             AYRI bir glif (E777, "Undo"). Kalıcı silme ayrı bir düğme (sadece çöp
-                             kutusundayken görünür), onay PermanentDeleteConfirmationDialog ile alınır. -->
+                             AYRI bir glif. Kullanıcı bulgusu: "RESTORE'un iconu kafa karıştırıyor,
+                             geri dönüşüm iconu koyabilirsin" — E777 ("Undo", genel bir geri-al oku
+                             gibi görünüyordu) yerine E72C ("Refresh" — dairesel/geri döngü oku,
+                             "restore" için daha açık bir görsel dil) kullanılıyor. Kalıcı silme ayrı
+                             bir düğme (sadece çöp kutusundayken görünür), onay
+                             PermanentDeleteConfirmationDialog ile alınır. -->
                         <Button ToolTip="Delete/Restore">
                             <StackPanel>
                                 <TextBlock>
@@ -2062,7 +2129,7 @@
                                             <Setter Property="Text" Value="&#xE74D;" />
                                             <Style.Triggers>
                                                 <DataTrigger Binding="{Binding IsDeleted}" Value="True">
-                                                    <Setter Property="Text" Value="&#xE777;" />
+                                                    <Setter Property="Text" Value="&#xE72C;" />
                                                 </DataTrigger>
                                             </Style.Triggers>
                                         </Style>
