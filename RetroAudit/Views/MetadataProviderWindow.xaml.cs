@@ -1,3 +1,6 @@
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Input;
 using RetroAudit.Models;
@@ -18,7 +21,7 @@ public partial class MetadataProviderWindow : Window
         var vm = new MetadataProviderViewModel(
             mainVm.AllGames,
             game => mainVm.NotifyMetadataEdited(game),
-            () => mainVm.GetVisiblePlatformOrder(),
+            () => mainVm.GetAllPlatformsOrdered(),
             mainVm.ProviderDesignMode == ProviderDesignMode.Modern);
         Action<Game> metadataChangedHandler = _ => vm.RefreshAll();
 
@@ -111,6 +114,30 @@ public partial class MetadataProviderWindow : Window
         {
             MessageBox.Show(this, $"Media Provider acilamadi:\n{ex.Message}", "RetroAudit", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void ExportPlatformSummariesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MetadataProviderViewModel vm)
+            return;
+
+        var lines = vm.PlatformAuditSummaries.Select(s =>
+            $"{s.PlatformDisplayName} | Toplam {s.TotalGames} | Eşleşen {s.MatchedCount} | Eşleşmeyen {s.UnmatchedCount} | " +
+            $"Tür {s.MissingGenresCount} | Yayıncı {s.MissingPublisherCount} | Açıklama {s.MissingDescriptionCount} | Yıl {s.MissingYearCount} | Sürüm {s.MissingVersionCount} | Bağlı {s.ManuallyLinkedCount}");
+        var tempPath = Path.Combine(Path.GetTempPath(), "RetroAudit_MetadataProviderDisaAktar.txt");
+        File.WriteAllLines(tempPath, lines);
+        Process.Start(new ProcessStartInfo("notepad.exe", tempPath) { UseShellExecute = true });
+    }
+
+    private void ExportMissingItemsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MetadataProviderViewModel vm)
+            return;
+
+        var lines = vm.MissingItems.Select(i => $"{i.Title} | {i.Platform} | {i.MissingTypeLabel} | {i.Crc32}");
+        var tempPath = Path.Combine(Path.GetTempPath(), "RetroAudit_EksikOgelerDisaAktar.txt");
+        File.WriteAllLines(tempPath, lines);
+        Process.Start(new ProcessStartInfo("notepad.exe", tempPath) { UseShellExecute = true });
     }
 
     private void SearchItem_Click(object sender, RoutedEventArgs e)

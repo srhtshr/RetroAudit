@@ -463,7 +463,6 @@ public partial class SettingsViewModel : ObservableObject
         // geriye dönük "Lime3DS" eşlemesi, MigrateLegacyPlatformNames'teki tek seferlik isim göçü).
         ("Nintendo 3DS", "Azahar", "", LauncherType.StandaloneEXE, "\"%ROM%\""),
         ("Mega-CD - Sega CD", "Genesis Plus GX", "PicoDrive", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
-        ("32X", "PicoDrive", "Genesis Plus GX", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
         ("Saturn", "Beetle Saturn", "Kronos", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
         ("PlayStation Vita", "Vita3K", "", LauncherType.StandaloneEXE, "\"%ROM%\""),
         ("Atari 5200", "Atari800", "", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
@@ -473,7 +472,6 @@ public partial class SettingsViewModel : ObservableObject
         ("PC Engine - TurboGrafx-16", "Beetle PCE", "Beetle PCE Fast", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
         ("NEC PC Engine CD", "Beetle PCE Fast", "Mednafen", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
         ("SNK Neo Geo CD", "NeoCD", "", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
-        ("Neo Geo Pocket", "Beetle NeoPop", "Race", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
         ("Neo Geo Pocket Color", "Beetle NeoPop", "Race", LauncherType.RetroArchCore, "-L \"%CORE%\" \"%ROM%\""),
     };
 
@@ -503,6 +501,20 @@ public partial class SettingsViewModel : ObservableObject
         // hem de artık desteklenen bir emülatörü yok, satır tamamen kaldırıldı.
         "Xbox One",
         "Microsoft Xbox One",
+        // Kullanıcı isteği: "cdi yi silelim... emulatorleri ile birlikte her yerden yani... aynı
+        // emulator başka platform için kullanılıyorsa dursun" — bu 4 platformun TÜM oyunları
+        // Recycle Bin'e taşındı (bkz. CatalogDatabaseService.HiddenSidebarPlatformNames), aynı
+        // isteğin emülatör tarafı: bu platformlara özel emülatör satırları da kaldırılıyor.
+        // "Neo Geo Pocket Color" (74 oyunluk asıl kütüphane) ayrı tutuluyor, sadece kısa ömürlü
+        // orijinal "Neo Geo Pocket" (9 oyun) kaldırıldı. PicoDrive/Beetle NeoPop gibi paylaşılan
+        // çekirdekler başka platformların (Genesis, Neo Geo Pocket Color) kendi satırlarında hâlâ
+        // kullanıldığı için hiçbir çekirdek/emülatör dosyası silinmiyor, sadece bu platformlara ait
+        // ayarlar satırı kaldırılıyor.
+        "CD-i",
+        "PC-FX",
+        "32X",
+        "Neo Geo Pocket",
+        "3DO",
     };
 
     private void MigrateLegacyPlatformNames()

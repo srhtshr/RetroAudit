@@ -57,7 +57,27 @@ public static partial class DatNameParser
     [GeneratedRegex(@"^Rev\s*([A-Za-z0-9]+)$", RegexOptions.IgnoreCase)]
     private static partial Regex RevisionTokenRegex();
 
-    public static ParsedDatName Parse(string rawName)
+    // Amiga sahne DAT'ları No-Intro'nun "(...)" etiketleme kuralını kullanmıyor — sürüm bilgisi
+    // başlığın SONUNA çıplak (parantezsiz) bir token olarak ekleniyor (ör. "Ambermoon v1.01",
+    // "Dread r1A08"). ParenGroupRegex bunları hiç yakalamadığı için (parantez yok) ayrı bir
+    // kontrol gerekiyor. Kullanıcı + araştırma ile netleşen kapsam SADECE gerçek sürüm kalıpları:
+    // v0.09/v1.1/v2.0, r3/r57/r1905/r1A08 (hex rev kodu), rev1/rev2, release 2, alpha v6, beta 1,
+    // rc4, wip1. AGA/CD32/CDTV/ECS/OCS/WHDLoad/Trainer/Cracked/Fixed gibi dağıtım etiketlerine
+    // kasten dokunulmuyor (aynı oyun mu farklı dağıtım mı belirsiz, ayrı bir karar konusu).
+    //
+    // ÖNEMLİ — sadece Amiga'ya scope'lu (bkz. Parse'ın platformName parametresi): ilk denemede bu
+    // kontrol TÜM platformlara uygulanmıştı ve gerçek veriyle test edilince NES "Family Basic
+    // V2.0/V2.1/V3" (üç AYRI ürün), Xbox "Wireless Adapter Setup v1.0", Xbox 360 "Experience Demo
+    // v7.1/v7.2/v7.5" gibi başlıklarda "v-sayı" ifadesinin oyunun GERÇEK adının bir PARÇASI olduğu,
+    // sürüm eki OLMADIĞI ortaya çıktı — bunlar yanlışlıkla tek karta birleştiriliyordu ve daha önce
+    // işlenmiş 16 platformdaki override'ların GameKey'ini kaydırıp kopuk bırakıyordu. Bu yüzden bu
+    // regex SADECE Commodore - Amiga DAT girdilerinde çalışır.
+    [GeneratedRegex(@"(?<=\s)(v\d+(?:\.\d+)*|r[0-9a-fA-F]{1,6}|rev\d+|release\s\d+|alpha\s?v?\d+|beta\s\d+|rc\d+|wip\d+)$", RegexOptions.IgnoreCase)]
+    private static partial Regex BareVersionSuffixRegex();
+
+    private const string AmigaPlatformName = "Commodore - Amiga";
+
+    public static ParsedDatName Parse(string rawName, string? platformName = null)
     {
         var regions = new List<string>();
         string? versionLabel = null;
@@ -108,6 +128,18 @@ public static partial class DatNameParser
         var cleanTitle = ParenGroupRegex().Replace(rawName, string.Empty);
         cleanTitle = BracketGroupRegex().Replace(cleanTitle, string.Empty);
         cleanTitle = Regex.Replace(cleanTitle, @"\s{2,}", " ").Trim();
+
+        // Parantez içi bir sürüm etiketi zaten bulunduysa (No-Intro "(Rev 1)" vb.) çıplak sondaki
+        // token'a bakılmıyor — iki mekanizma aynı kayıtta asla birlikte tetiklenmiyor.
+        if (versionLabel is null && string.Equals(platformName, AmigaPlatformName, StringComparison.Ordinal))
+        {
+            var suffixMatch = BareVersionSuffixRegex().Match(cleanTitle);
+            if (suffixMatch.Success)
+            {
+                versionLabel = suffixMatch.Value.Trim();
+                cleanTitle = cleanTitle[..suffixMatch.Index].TrimEnd();
+            }
+        }
 
         return new ParsedDatName(cleanTitle, regions.ToArray(), versionLabel, shouldExclude);
     }

@@ -36,6 +36,21 @@ public static class CatalogDatabaseService
     // Builder tarafındaki karşılığı: RetroAudit.Catalog/Dat/PlatformAllowList.cs.
     private const string RemovedPlatformName = "NEC - PC Engine CD - TurboGrafx-CD";
 
+    // Kullanıcı isteği: "cdi yi silelim... platformları kaldırdın dimi komple sistemden genel
+    // olarak... emulatorleri ile birlikte her yerden yani" — bu platformların TÜM oyunları zaten
+    // Recycle Bin'e taşındı (GameState.IsDeleted=1, geri alınabilir — RemovedPlatformName'in
+    // aksine burada GetGames() SQL filtresine DOKUNULMUYOR, yoksa Recycle Bin'deki kayıtlar da
+    // görünmez olurdu). Kalan tek iz sol paneldeki "0 oyun" rozetli boş platform satırıydı — sadece
+    // GetPlatforms() burada filtreleniyor ki sidebar'da da hiç görünmesinler.
+    private static readonly HashSet<string> HiddenSidebarPlatformNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Philips - CD-i",
+        "NEC - PC-FX",
+        "Sega - 32X",
+        "SNK - Neo Geo Pocket",
+        "The 3DO Company - 3DO",
+    };
+
     private static SqliteConnection OpenConnection()
     {
         var connection = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = DbPath }.ConnectionString);
@@ -70,7 +85,7 @@ public static class CatalogDatabaseService
         while (reader.Read())
         {
             var name = reader.GetString(0);
-            if (name == RemovedPlatformName)
+            if (name == RemovedPlatformName || HiddenSidebarPlatformNames.Contains(name))
                 continue;
 
             platforms.Add(new Platform
@@ -278,6 +293,8 @@ public static class CatalogDatabaseService
                 // inşa edilse bile GameKey sabit kaldığı sürece bu geçersiz kılma kaybolmaz.
                 if (state.VersionOverride is { Length: > 0 } versionOverride)
                     game.Version = versionOverride;
+
+                game.HasManualMetadataSourceOverride = state.MetadataSourceIdOverride.HasValue;
             }
 
             game.IsFavorite = favorites.Contains(game.GameKey);
@@ -293,7 +310,51 @@ public static class CatalogDatabaseService
                 if (ov.VideoUrl is { Length: > 0 }) game.VideoUrl = ov.VideoUrl;
                 if (ov.ReleaseYear is { } releaseYear) game.ReleaseYear = releaseYear;
                 if (ov.Region is { Length: > 0 }) game.Region = ov.Region;
+                if (ov.WikipediaUrl is { Length: > 0 }) game.WikipediaUrl = ov.WikipediaUrl;
             }
+        }
+
+        ApplyAutoVersionGrouping(games, states);
+    }
+
+    // Kullanıcı isteği: "ayrı ayrı gözükmesin, Bağla mantığında olacak, onlar tek kayıt gibi
+    // düşün" — aynı platformda AYNI LaunchBox metadata hedefine (kendi baked-in MetadataSourceId'si
+    // ya da elle MetadataSourceIdOverride) çözülen birden fazla Game varsa, bunlar artık ayrı ayrı
+    // satır olarak görünmesin, tek bir "asıl" kaydın Sürümler listesinde toplansın (bkz.
+    // Game.MergedIntoGameId, MainViewModel.LoadSelectedGameVersions). "Asıl" seçimi: elle
+    // bağlanmamış (gerçek/doğal eşleşme) > en düşük GameId — MainViewModel.BulkLinkAsync'teki
+    // "custom OLMAYAN > en düşük GameId" önceliğiyle aynı mantık.
+    private static void ApplyAutoVersionGrouping(List<Game> games, Dictionary<string, GameStateInfo> states)
+    {
+        var groups = new Dictionary<(string Platform, int SourceId), List<Game>>();
+        foreach (var game in games)
+        {
+            var overrideId = states.TryGetValue(game.GameKey, out var state) ? state.MetadataSourceIdOverride : null;
+            var effectiveId = overrideId ?? game.MetadataSourceId;
+            if (effectiveId is null)
+                continue;
+
+            var key = (game.Platform, effectiveId.Value);
+            if (!groups.TryGetValue(key, out var list))
+            {
+                list = new List<Game>();
+                groups[key] = list;
+            }
+            list.Add(game);
+        }
+
+        foreach (var group in groups.Values)
+        {
+            if (group.Count < 2)
+                continue;
+
+            var primary = group
+                .OrderBy(g => g.HasManualMetadataSourceOverride)
+                .ThenBy(g => g.GameId)
+                .First();
+
+            foreach (var duplicate in group.Where(g => g != primary))
+                duplicate.MergedIntoGameId = primary.GameId;
         }
     }
 

@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using RetroAudit.Models;
@@ -12,6 +14,12 @@ namespace RetroAudit.Views;
 public partial class MediaProviderWindow : Window
 {
     private readonly MainViewModel _mainVm;
+
+    // Kullanıcı isteği: "indirme barı providerın içinde gözükse" — bu pencerenin kendi DataContext'i
+    // MediaProviderViewModel, ama indirme ilerlemesi (ArtworkDownloadProgress vb.) MainViewModel'de
+    // yaşıyor. XAML'de RelativeSource={RelativeSource AncestorType=Window} ile bu property'ye
+    // ulaşabilmek için public olarak açılıyor.
+    public MainViewModel MainVm => _mainVm;
 
     public MediaProviderWindow(MainViewModel mainVm)
     {
@@ -28,7 +36,7 @@ public partial class MediaProviderWindow : Window
             mainVm.RegisterDownloadedMedia(type, game.PlatformDisplayName, baseFileName, destination);
             mainVm.NotifyArtworkDownloaded(game);
             mainVm.ApplyFilter();
-        }, () => mainVm.GetVisiblePlatformOrder(), mainVm.ProviderDesignMode == ProviderDesignMode.Modern);
+        }, () => mainVm.GetAllPlatformsOrdered(), mainVm.ProviderDesignMode == ProviderDesignMode.Modern);
         Action<Game> metadataChangedHandler = _ => vm.RefreshAll();
 
         vm.RequestShowMessage += message =>
@@ -49,6 +57,11 @@ public partial class MediaProviderWindow : Window
         Closed += (_, _) => mainVm.PlatformListOrderChanged -= vm.RefreshPlatformOrder;
         mainVm.GameMetadataChanged += metadataChangedHandler;
         Closed += (_, _) => mainVm.GameMetadataChanged -= metadataChangedHandler;
+
+        // Kullanıcı isteği: "provider açıkken ana UI'daki çubuk gizlensin, kapanınca geri gelsin"
+        // — bkz. MainViewModel.ShowMainArtworkProgressBar.
+        mainVm.IsMediaProviderWindowOpen = true;
+        Closed += (_, _) => mainVm.IsMediaProviderWindowOpen = false;
 
         // Pencere kapatıldığında Owner (MainWindow) odağının kaybolmasını (minimize gibi görünmesini) engelle
         Closed += (s, e) =>
@@ -90,6 +103,48 @@ public partial class MediaProviderWindow : Window
     // veriliyor. Aynı oyunun birden fazla satırı (ör. hem Kapak hem Logo eksik) seçilse bile
     // Distinct ile oyun başına TEK indirme yapılıyor (o oyunun eksik TÜM türleri zaten tek seferde
     // sorulup indiriliyor).
+    // Kullanıcı isteği: "otomatik indirin yanına hepsini seç butonu koy" — hangi görünüm (Liste/
+    // Tablo) o an görünürse kullanıcı zaten onu kullanacak; ikisi de AYNI MissingItems'a bağlı
+    // olduğu için görünmeyen kontrolde SelectAll çağırmak zararsız, sadece emin olmak için ikisi
+    // de çağrılıyor.
+    // GEÇİCİ: kullanıcı isteği "sayıları dışarı aktarmak için bişey ekle oraya geçici not
+    // defterine atsın" — platform kartlarındaki Logo/Box/SS/Video/Wiki eksik sayılarını elle
+    // toplayıp doğrulayabilmek için (bkz. MainWindow.xaml.cs ExportVisibleGamesButton_Click ile
+    // AYNI desen). Kaldırılabilir.
+    private void ExportPlatformSummariesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MediaProviderViewModel vm)
+            return;
+
+        var lines = vm.PlatformAuditSummaries.Select(s =>
+            $"{s.PlatformDisplayName} | Toplam {s.TotalGames} | Eşleşen {s.MatchedCount} | Eşleşmeyen {s.UnmatchedCount} | " +
+            $"Logo {s.MissingLogoCount} | Box {s.MissingBoxCount} | SS {s.MissingScreenshotCount} | Video {s.MissingVideoCount} | Wiki {s.MissingWikipediaCount}");
+        var tempPath = Path.Combine(Path.GetTempPath(), "RetroAudit_ProviderDisaAktar.txt");
+        File.WriteAllLines(tempPath, lines);
+        Process.Start(new ProcessStartInfo("notepad.exe", tempPath) { UseShellExecute = true });
+    }
+
+    // Metadata Provider'daki "Listeyi Dışa Aktar" ile AYNI mantık (bkz. MetadataProviderWindow.
+    // xaml.cs ExportMissingItemsButton_Click) — kullanıcı isteği: "media providera da aynı
+    // mantıkta dışa aktarma ekle, chatgpt'ye onlara baktırayım dışarı aktarıp". Eksik öğe
+    // listesini (görsel türü + CRC32 dahil) düz metin olarak dışa aktarır.
+    private void ExportMissingItemsButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MediaProviderViewModel vm)
+            return;
+
+        var lines = vm.MissingItems.Select(i => $"{i.Title} | {i.Platform} | {i.MissingTypeLabel} | {i.Crc32}");
+        var tempPath = Path.Combine(Path.GetTempPath(), "RetroAudit_EksikGorsellerDisaAktar.txt");
+        File.WriteAllLines(tempPath, lines);
+        Process.Start(new ProcessStartInfo("notepad.exe", tempPath) { UseShellExecute = true });
+    }
+
+    private void SelectAllButton_Click(object sender, RoutedEventArgs e)
+    {
+        MissingItemsList.SelectAll();
+        MissingItemsGrid.SelectAll();
+    }
+
     private async void AutoDownloadButton_Click(object sender, RoutedEventArgs e)
     {
         if (DataContext is not MediaProviderViewModel vm)

@@ -50,4 +50,10 @@ public class GameVersion
     // Ayrıca fileless kartın beklenen dosya adlarını (Hashes) da kaynağın kendi katalog verisinden
     // göstermek için kullanılıyor (bkz. LoadSelectedGameVersions).
     public string? SourceGameKey { get; set; }
+
+    // Bu kart, MainViewModel.LoadSelectedGameVersions tarafından otomatik sürüm-gruplamayla
+    // (bkz. Game.MergedIntoGameId) eklenmiş bir "kardeş" oyunun kendi sürümüyse, o kardeşin
+    // başlığı — kullanıcının aynı platformda farklı isimli iki DAT kaydının aslında tek oyun
+    // olduğunu anlayabilmesi için (bölge/versiyon etiketi tek başına bunu anlatmaz).
+    public string? MergedFromTitle { get; set; }
 }

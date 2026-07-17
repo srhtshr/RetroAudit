@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -230,6 +231,21 @@ public partial class MainWindow : Window
             scale.BeginAnimation(ScaleTransform.ScaleYProperty, new DoubleAnimation(0.9, 1.0, duration) { EasingFunction = ease });
             ContextMenuBorder.BeginAnimation(OpacityProperty, new DoubleAnimation(0.0, 1.0, duration));
         };
+    }
+
+    // GEÇİCİ (kullanıcı isteği: "tabloda gözükenleri text olarak dışa aktarabileceğim buton,
+    // notepad'de açsın, eşleşmeyenleri kontrol için toplu kopyalayıp atabileyim") — o an tabloda
+    // GÖRÜNEN (filtre/arama uygulanmış) satırları Başlık | Platform | Durum olarak düz metne
+    // yazıp Notepad'de açar. Kaldırmak için bu metodu ve XAML'deki "Dışa Aktar" Button'ını sil.
+    private void ExportVisibleGamesButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var lines = vm.Games.Select(g => $"{g.Title} | {g.PlatformDisplayName} | {(g.IsEffectivelyMatched ? "Eşleşti" : "Eşleşmedi")}");
+        var tempPath = Path.Combine(Path.GetTempPath(), "RetroAudit_TabloDisaAktar.txt");
+        File.WriteAllLines(tempPath, lines);
+        Process.Start(new ProcessStartInfo("notepad.exe", tempPath) { UseShellExecute = true });
     }
 
     // Özel başlık çubuğundaki üç düğme — sürükleme/çift-tık-büyüt/sağ-tık-sistem-menüsü zaten
@@ -801,6 +817,35 @@ public partial class MainWindow : Window
         {
             if (!columnsByKey.TryGetValue(option.Key, out var column))
                 continue;
+
+            // Kullanıcı isteği: "platform sütununu all platform harici kaldıralım all platformda
+            // gözüksün sadece" — "Platform" sütunu iki koşulun İKİSİNE de bağlı: kullanıcının
+            // "Sütunlar" seçicisindeki checkbox'ı (option.IsVisible) VE o an "All Platforms"
+            // seçili mi (vm.PlatformColumnVisibility) — ikisi de "görünür" demeden sütun
+            // gösterilmiyor. Diğer tüm sütunlar sadece option.IsVisible'a bakmaya devam ediyor.
+            if (option.Key == "Platform")
+            {
+                void UpdatePlatformColumnVisibility() =>
+                    column.Visibility = option.IsVisible && vm.PlatformColumnVisibility == Visibility.Visible
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+
+                UpdatePlatformColumnVisibility();
+                option.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName != nameof(option.IsVisible))
+                        return;
+
+                    UpdatePlatformColumnVisibility();
+                    vm.SaveColumnVisibility();
+                };
+                vm.PropertyChanged += (_, e) =>
+                {
+                    if (e.PropertyName == nameof(MainViewModel.PlatformColumnVisibility))
+                        UpdatePlatformColumnVisibility();
+                };
+                continue;
+            }
 
             column.Visibility = option.IsVisible ? Visibility.Visible : Visibility.Collapsed;
             option.PropertyChanged += (_, e) =>

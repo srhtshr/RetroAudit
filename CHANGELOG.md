@@ -2,6 +2,18 @@
 
 Bu proje küçük, sık sürümlerle ilerler (0.01, 0.02, ...). Henüz bir SemVer/1.0 taahhüdü yoktur.
 
+## [0.32] - 2026-07-17
+
+### Added
+- **Wikipedia bağlantısı alanı**: `MetadataOverrides` tablosuna `WikipediaUrl` eklendi — düzenleme diyaloğunun bu alanı hiç göstermemesi yüzünden ilgisiz bir alan düzenlendiğinde script ile yazılan Wiki linkinin sessizce silinmemesi için `COALESCE` ile korunuyor (diğer override alanlarının aksine, bu alan koşulsuz üzerine yazılmıyor).
+- **Otomatik sürüm gruplama**: Aynı LaunchBox kaydına (BİRLEŠTİR/SÜRÜM ile veya otomatik) bağlanan DAT kayıtları artık kütüphanede ayrı ayrı satır olarak değil, "Bağla" özelliğindeki gibi tek kart olarak görünüyor — dosya taşıma/gizleme yapmadan, sadece görsel gruplama (`Game.MergedIntoGameId`, `IsEffectivelyHidden`).
+- **Metadata Provider'da platform filtresi**: İstenmeyen platformları listeden gizlemek için seçmeli bir filtre popup'ı eklendi.
+- **Media Provider'a "Listeyi Dışa Aktar"**: Metadata Provider'da zaten var olan, eksik öğe listesini ChatGPT/Gemini'ye yapıştırmak için dışa aktarma özelliği Media Provider'a da eklendi.
+
+### Data
+- **Kullanıcı verisi veritabanı (`RetroAuditUserData.db`) artık repoya dahil**: Daha önce makineye özel kabul edilip `.gitignore`'da tutuluyordu; bu, kataloğun eksik metadata'sını (Yayıncı/Tür/Açıklama/Yıl) toplu tamamlama işiyle karıştı — o veri aslında kişisel değil, programın varsayılan/gönderilen verisi olmalı. Bu sürümde dosya ignore listesinden çıkarıldı ve olduğu gibi commit edildi.
+- Wii, PlayStation Portable, PlayStation, PlayStation 2, PlayStation 3, Xbox 360, Amstrad CPC, Commodore Amiga, Commodore 64, MSX, Game Boy, Nintendo 3DS gibi ~15 platformda binlerce oyun için Yayıncı, Tür, Açıklama ve Yıl alanları dolduruldu; çok sayıda BİRLEŠTİR/SÜRÜM eşlemesi ve Wikipedia bağlantısı eklendi (ChatGPT/Gemini destekli toplu araştırma).
+
 ## [0.31] - 2026-07-14
 
 ### Fixed

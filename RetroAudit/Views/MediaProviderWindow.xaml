@@ -537,17 +537,67 @@
                 BorderBrush="{StaticResource Brush.Border}"
                 BorderThickness="1"
                 CornerRadius="6">
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                <!-- Kullanıcı isteği: "otomatik indir butonuna basıyorum indirmiyor ... görsel
-                     getir butonu varya ona bağlıcan ... toplu seçimlerede uygun olacak" — artık
-                     Command binding YOK, code-behind (bkz. AutoDownloadButton_Click) seçili satır(lar)ı
-                     toplayıp MainViewModel.BulkFetchArtworkForGamesAsync'i çağırıyor (ana tablonun
-                     "Görsel Getir"iyle AYNI mekanizma). -->
-                <!-- Kullanıcı isteği: "videolar ile ilgili filtre tek başına filtrelendiğinde
-                     veya seçilen satırın eksiği video olduğunda o komut pasif gözükmeli" — bkz.
-                     MediaProviderViewModel.CanAutoDownload. -->
-                <Button Padding="14,7" Click="AutoDownloadButton_Click" Content="Otomatik &#x0130;ndir" IsEnabled="{Binding CanAutoDownload}" />
-            </StackPanel>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Kullanıcı isteği: "şu indirme barı ... providerın içinde gözükse" — bu pencereden
+                     tetiklenen indirme aslında MainViewModel'de (bkz. AutoDownloadButton_Click ->
+                     MainViewModel.BulkFetchArtworkForGamesAsync) yürüyor, ilerlemesi eskiden sadece
+                     MainWindow'un alt çubuğunda görünüyordu (bu pencerenin ARKASINDA kalıyordu).
+                     DataContext burada MediaProviderViewModel olduğu için MainVm (bkz.
+                     MediaProviderWindow.xaml.cs) üzerinden AncestorType=Window ile MainViewModel'in
+                     property'lerine erişiliyor. "Hepsini Seç"/"Otomatik İndir"in SOLUNDAKİ boş alanda
+                     (kullanıcı isteği: "onların solundaki boş alanda") gösteriliyor. -->
+                <Grid Grid.Column="0" Margin="0,0,12,0"
+                      Visibility="{Binding MainVm.IsArtworkDownloadInProgress, RelativeSource={RelativeSource AncestorType=Window}, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Görsel indiriliyor..." VerticalAlignment="Center"
+                               FontSize="11" Foreground="{StaticResource Brush.Text.Secondary}" Margin="0,0,10,0" />
+                    <ProgressBar Grid.Column="1" Minimum="0" Maximum="100" VerticalAlignment="Center"
+                                 Value="{Binding MainVm.ArtworkDownloadProgress, RelativeSource={RelativeSource AncestorType=Window}, Mode=OneWay}" />
+                    <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11" Width="34" TextAlignment="Right"
+                               Margin="10,0,0,0" Foreground="{StaticResource Brush.Text.Secondary}"
+                               Text="{Binding MainVm.ArtworkDownloadProgress, RelativeSource={RelativeSource AncestorType=Window}, StringFormat={}{0:0}%}" />
+                    <Button Grid.Column="3" Content="Durdur" Margin="10,0,0,0" Padding="10,3" FontSize="11"
+                            Command="{Binding MainVm.CancelArtworkDownloadCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+                </Grid>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                    <!-- Kullanıcı isteği: "otomatik indir butonuna basıyorum indirmiyor ... görsel
+                         getir butonu varya ona bağlıcan ... toplu seçimlerede uygun olacak" — artık
+                         Command binding YOK, code-behind (bkz. AutoDownloadButton_Click) seçili satır(lar)ı
+                         toplayıp MainViewModel.BulkFetchArtworkForGamesAsync'i çağırıyor (ana tablonun
+                         "Görsel Getir"iyle AYNI mekanizma). -->
+                    <!-- Kullanıcı isteği: "videolar ile ilgili filtre tek başına filtrelendiğinde
+                         veya seçilen satırın eksiği video olduğunda o komut pasif gözükmeli" — bkz.
+                         MediaProviderViewModel.CanAutoDownload. -->
+                    <!-- Kullanıcı isteği: "otomatik indirin yanına hepsini seç butonu koy" — hangi
+                         görünüm (Liste/Tablo) aktifse o görünür ama ikisinin de SelectAll'ı çağrılıyor
+                         (bkz. MediaProviderWindow.xaml.cs SelectAllButton_Click) — o an görünmeyen
+                         kontrolde seçim yapmak zararsız, ikisi de AYNI MissingItems'a bağlı. -->
+                    <!-- GEÇİCİ: kullanıcı isteği "sayıları dışarı aktarmak için bişey ekle oraya
+                         geçici not defterine atsın" — platform audit rakamlarını (Logo/Box/SS/Video/
+                         Wiki eksik sayıları) elle toplayıp doğrulayabilmek için (bkz.
+                         MediaProviderWindow.xaml.cs ExportPlatformSummariesButton_Click). Kaldırılabilir. -->
+                    <!-- Kullanıcı isteği: "media providera da aynı mantıkta dışa aktarma ekle,
+                         chatgpt'ye onlara baktırayım dışarı aktarıp" — Metadata Provider'daki
+                         "Listeyi Dışa Aktar" ile AYNI (bkz. ExportMissingItemsButton_Click):
+                         eksik görsel öğe listesini (başlık/platform/tür/CRC32) düz metin olarak
+                         dışa aktarır, araştırma için LLM'e yapıştırılabilir. -->
+                    <Button Padding="14,7" Margin="0,0,8,0" Click="ExportPlatformSummariesButton_Click" Content="Dışa Aktar" />
+                    <Button Padding="14,7" Margin="0,0,8,0" Click="ExportMissingItemsButton_Click" Content="Listeyi Dışa Aktar" />
+                    <Button Padding="14,7" Margin="0,0,8,0" Click="SelectAllButton_Click" Content="Hepsini Seç" />
+                    <Button Padding="14,7" Click="AutoDownloadButton_Click" Content="Otomatik &#x0130;ndir" IsEnabled="{Binding CanAutoDownload}" />
+                </StackPanel>
+            </Grid>
         </Border>
     </Grid>
 </Window>

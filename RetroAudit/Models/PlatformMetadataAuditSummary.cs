@@ -36,5 +36,6 @@ public class PlatformMetadataAuditSummary
     public int MissingDescriptionCount { get; init; }
     public int MissingYearCount { get; init; }
     public int MissingVersionCount { get; init; }
+    public int ManuallyLinkedCount { get; init; }
     public int HealthPercent { get; init; }
 }

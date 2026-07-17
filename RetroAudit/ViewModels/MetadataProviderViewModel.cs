@@ -47,16 +47,38 @@ public class MissingMetadataItem
     }
 }
 
+// Sol paneldeki platform kartı listesi filtre popup'ının her satırı. Kullanıcı isteği:
+// "göstermeyi istemediklerimi göstermemem için seçmeli filtre" — işaret kaldırılan platform
+// AppSettings.MetadataProviderHiddenPlatforms'a yazılıp kart listesinden çıkarılır.
+public partial class PlatformVisibilityOption : ObservableObject
+{
+    public required string Name { get; init; }
+    public required string DisplayName { get; init; }
+
+    [ObservableProperty]
+    private bool isVisible = true;
+
+    partial void OnIsVisibleChanged(bool value) => VisibilityChanged?.Invoke(this);
+
+    public event Action<PlatformVisibilityOption>? VisibilityChanged;
+}
+
 public partial class MetadataProviderViewModel : ObservableObject
 {
     private readonly IReadOnlyList<Game> _allGames;
     private readonly Action<Game> _onMetadataUpdated;
     private readonly Func<IReadOnlyList<Platform>> _getOrderedPlatforms;
+    private HashSet<string> _hiddenPlatforms = new();
+    private bool _suppressPlatformVisibilityChanged;
 
     public bool UseModernLayout { get; }
 
     public ObservableCollection<PlatformMetadataAuditSummary> PlatformAuditSummaries { get; } = new();
+    public ObservableCollection<PlatformVisibilityOption> PlatformVisibilityOptions { get; } = new();
     public ObservableCollection<MissingMetadataItem> MissingItems { get; } = new();
+
+    [ObservableProperty]
+    private bool isPlatformFilterOpen;
 
     [ObservableProperty]
     private Platform? selectedPlatform;
@@ -78,6 +100,14 @@ public partial class MetadataProviderViewModel : ObservableObject
 
     [ObservableProperty]
     private bool showMissingVersion = true;
+
+    // Kullanıcı isteği: "bağlanmayanları tespit etmek için filtre ekleyelim... tekrar aynı
+    // şeyleri yollamayım geminiye" — BİRLEŞTİR/SÜRÜM ile elle bağlanmış (bkz. Game.
+    // HasManualMetadataSourceOverride) kayıtlar, hedef LaunchBox kaydı o alanda veri
+    // taşımıyorsa hâlâ "eksik" görünüp dışa aktarmada tekrar tekrar çıkabiliyordu. Varsayılan
+    // KAPALI (diğerlerinin tersine) — kullanıcı zaten bu kayıtlar için bir karar vermiştir.
+    [ObservableProperty]
+    private bool showManuallyLinked;
 
     [ObservableProperty]
     private MissingMetadataItem? selectedMissingItem;
@@ -120,6 +150,7 @@ public partial class MetadataProviderViewModel : ObservableObject
         _onMetadataUpdated = onMetadataUpdated;
         _getOrderedPlatforms = getOrderedPlatforms;
         UseModernLayout = useModernLayout;
+        _hiddenPlatforms = new HashSet<string>(ConfigService.LoadDefault().MetadataProviderHiddenPlatforms);
 
         RebuildPlatformAuditSummaries();
         SelectedPlatformSummary = PlatformAuditSummaries.FirstOrDefault();
@@ -137,6 +168,7 @@ public partial class MetadataProviderViewModel : ObservableObject
     partial void OnShowMissingDescriptionChanged(bool value) => RebuildMissingItems();
     partial void OnShowMissingYearChanged(bool value) => RebuildMissingItems();
     partial void OnShowMissingVersionChanged(bool value) => RebuildMissingItems();
+    partial void OnShowManuallyLinkedChanged(bool value) => RebuildMissingItems();
     partial void OnSearchTextChanged(string value) => RebuildMissingItems();
 
     public void RefreshPlatformOrder() => RebuildPlatformAuditSummaries();
@@ -149,22 +181,36 @@ public partial class MetadataProviderViewModel : ObservableObject
     private void RebuildPlatformAuditSummaries()
     {
         var previousPlatformName = SelectedPlatformSummary?.Platform.Name;
-        var visibleGames = _allGames.Where(g => !g.IsHidden && !g.IsDeleted).ToList();
+        var visibleGames = _allGames.Where(g => !g.IsEffectivelyHidden && !g.IsDeleted).ToList();
         var orderedPlatforms = _getOrderedPlatforms();
+
+        SyncPlatformVisibilityOptions(orderedPlatforms);
 
         PlatformAuditSummaries.Clear();
         foreach (var platform in orderedPlatforms)
         {
+            // Aggregate "RetroAudit" (All Platforms) kartı her zaman görünür kalır — sadece
+            // gerçek platform kartları filtre listesine göre gizlenebilir.
+            if (!platform.IsAllPlatforms && _hiddenPlatforms.Contains(platform.Name))
+                continue;
+
             var games = platform.IsAllPlatforms
                 ? visibleGames
                 : visibleGames.Where(g => g.Platform == platform.Name).ToList();
             var totalGames = games.Count;
             var matchedCount = games.Count(HasMatchedMetadata);
-            var missingGenresCount = games.Count(g => !g.HasGenres);
-            var missingPublisherCount = games.Count(g => !g.HasPublisher);
-            var missingDescriptionCount = games.Count(g => string.IsNullOrWhiteSpace(g.Description));
-            var missingYearCount = games.Count(g => !g.HasReleaseYear);
-            var missingVersionCount = games.Count(g => string.IsNullOrWhiteSpace(g.MatchMethod));
+            // Kullanıcı isteği: "y sürümünü x'e bağladığımızda y'nin yılı eksikse metadata
+            // provider uyarmasın, x'e bağladık zaten" — elle bağlanmış (BİRLEŞTİR/SÜRÜM, bkz.
+            // Game.HasManualMetadataSourceOverride) kayıtlar için karar zaten verilmiş sayılır;
+            // hedef LaunchBox kaydı bir alanda veri taşımasa bile kart rozetlerinde "eksik"
+            // sayılmazlar (aksi hâlde alt listedeki "Bağlı" filtresiyle tutarsız kalırdı).
+            var manuallyLinkedCount = games.Count(g => g.HasManualMetadataSourceOverride
+                && (!g.HasGenres || !g.HasPublisher || string.IsNullOrWhiteSpace(g.Description) || !g.HasReleaseYear || string.IsNullOrWhiteSpace(g.MatchMethod)));
+            var missingGenresCount = games.Count(g => !g.HasManualMetadataSourceOverride && !g.HasGenres);
+            var missingPublisherCount = games.Count(g => !g.HasManualMetadataSourceOverride && !g.HasPublisher);
+            var missingDescriptionCount = games.Count(g => !g.HasManualMetadataSourceOverride && string.IsNullOrWhiteSpace(g.Description));
+            var missingYearCount = games.Count(g => !g.HasManualMetadataSourceOverride && !g.HasReleaseYear);
+            var missingVersionCount = games.Count(g => !g.HasManualMetadataSourceOverride && string.IsNullOrWhiteSpace(g.MatchMethod));
 
             var healthPercent = totalGames == 0
                 ? 0
@@ -187,6 +233,7 @@ public partial class MetadataProviderViewModel : ObservableObject
                 MissingDescriptionCount = missingDescriptionCount,
                 MissingYearCount = missingYearCount,
                 MissingVersionCount = missingVersionCount,
+                ManuallyLinkedCount = manuallyLinkedCount,
                 HealthPercent = Math.Clamp(healthPercent, 0, 100),
             });
         }
@@ -195,13 +242,82 @@ public partial class MetadataProviderViewModel : ObservableObject
             ?? PlatformAuditSummaries.FirstOrDefault();
     }
 
+    // Platform filtre popup'ındaki checkbox listesini orderedPlatforms ile senkron tutar.
+    // Var olan seçenekleri (ve dolayısıyla event handler'larını) yeniden oluşturmadan korur —
+    // sadece yeni eklenen/kaldırılan platformları senkronlar.
+    private void SyncPlatformVisibilityOptions(IReadOnlyList<Platform> orderedPlatforms)
+    {
+        var currentNames = orderedPlatforms.Where(p => !p.IsAllPlatforms).Select(p => p.Name).ToHashSet();
+
+        for (var i = PlatformVisibilityOptions.Count - 1; i >= 0; i--)
+        {
+            if (!currentNames.Contains(PlatformVisibilityOptions[i].Name))
+                PlatformVisibilityOptions.RemoveAt(i);
+        }
+
+        var existingNames = PlatformVisibilityOptions.Select(o => o.Name).ToHashSet();
+        foreach (var platform in orderedPlatforms.Where(p => !p.IsAllPlatforms))
+        {
+            if (existingNames.Contains(platform.Name))
+                continue;
+
+            var option = new PlatformVisibilityOption
+            {
+                Name = platform.Name,
+                DisplayName = platform.DisplayName,
+                IsVisible = !_hiddenPlatforms.Contains(platform.Name),
+            };
+            option.VisibilityChanged += OnPlatformVisibilityOptionChanged;
+            PlatformVisibilityOptions.Add(option);
+        }
+    }
+
+    private void OnPlatformVisibilityOptionChanged(PlatformVisibilityOption option)
+    {
+        if (_suppressPlatformVisibilityChanged)
+            return;
+
+        if (option.IsVisible)
+            _hiddenPlatforms.Remove(option.Name);
+        else
+            _hiddenPlatforms.Add(option.Name);
+
+        var settings = ConfigService.LoadDefault();
+        settings.MetadataProviderHiddenPlatforms = _hiddenPlatforms.ToList();
+        ConfigService.SaveDefault(settings);
+
+        RebuildPlatformAuditSummaries();
+    }
+
+    [RelayCommand]
+    private void TogglePlatformFilterPopup() => IsPlatformFilterOpen = !IsPlatformFilterOpen;
+
+    [RelayCommand]
+    private void ShowAllPlatforms()
+    {
+        _hiddenPlatforms.Clear();
+
+        _suppressPlatformVisibilityChanged = true;
+        foreach (var option in PlatformVisibilityOptions)
+            option.IsVisible = true;
+        _suppressPlatformVisibilityChanged = false;
+
+        var settings = ConfigService.LoadDefault();
+        settings.MetadataProviderHiddenPlatforms = new List<string>();
+        ConfigService.SaveDefault(settings);
+
+        RebuildPlatformAuditSummaries();
+    }
+
     private static bool HasMatchedMetadata(Game game) => game.MetadataSourceId.HasValue || game.StatusOk;
 
     private void RebuildMissingItems()
     {
         MissingItems.Clear();
 
-        IEnumerable<Game> games = _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
+        IEnumerable<Game> games = _allGames.Where(g => !g.IsEffectivelyHidden && !g.IsDeleted);
+        if (!ShowManuallyLinked)
+            games = games.Where(g => !g.HasManualMetadataSourceOverride);
         if (SelectedPlatform is { IsAllPlatforms: false })
             games = games.Where(g => g.Platform == SelectedPlatform.Name);
         if (!string.IsNullOrWhiteSpace(SearchText))

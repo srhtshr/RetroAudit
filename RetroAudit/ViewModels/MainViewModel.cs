@@ -232,6 +232,29 @@ public partial class MainViewModel : ObservableObject
     public int VisibleCount => Games.Count;
     public int CurrentPlatformHealthPercent => ComputeHealthPercent(GetCurrentPlatformPopulation().ToList());
 
+    // Kullanıcı isteği: "başlık kısmında seçili olan platformun logosu gözüksün başlık text i
+    // yazmasın all platformdada retroauditin clearlogosu" — TitleColumnHeaderWithHealth artık
+    // "Başlık" metni yerine bunu gösteriyor (bkz. MainWindow.xaml). "All Platforms" seçiliyken (ya
+    // da hiç seçim yokken) AppPaths.NoImageLogo kullanılıyor — bu dosya aslında RetroAudit'in kendi
+    // marka logosu (bkz. Images/NoImage/Logo.png), PlatformAuditSummary.PlatformLogoPath'teki
+    // IsAllPlatforms dalıyla AYNI kasıtlı yeniden kullanım.
+    public string CurrentPlatformLogoPath =>
+        SelectedPlatform is { IsAllPlatforms: false } platform
+            ? CatalogDatabaseService.GetPlatformLogoPath(platform.DisplayName)
+            : AppPaths.NoImageLogo;
+
+    // Kullanıcı isteği: "sen onu eski haline al başka logo kullancam onda" — NES için denenen
+    // özel margin/width ayarları (Nintendo.png ile ilgiliydi) geri alındı; kullanıcı kendi logo
+    // dosyasını değiştirecek, tüm platformlar tekrar aynı standart 120x22/Fill kutusunu kullanıyor.
+
+    // Kullanıcı isteği: "platform sütununu all platform harici kaldıralım all platformda gözüksün
+    // sadece zaten seçilende yukarda eşşek kadar yazıyor" — belirli bir platform seçiliyken adı
+    // zaten "Başlık" sütun başlığında büyük logo olarak duruyor (bkz. CurrentPlatformLogoPath),
+    // tablodaki "Platform" sütunu bu durumda tekrar (redundant) oluyor. Sadece "All Platforms"
+    // seçiliyken (ya da hiç seçim yokken) gösteriliyor.
+    public Visibility PlatformColumnVisibility =>
+        SelectedPlatform is null || SelectedPlatform.IsAllPlatforms ? Visibility.Visible : Visibility.Collapsed;
+
     // RomImportWindow gibi ViewModel'e ayrı bağımlı pencerelerin ihtiyaç duyduğu salt-okunur
     // erişim — _allGames doğrudan dışarı sızdırılmıyor, sadece IReadOnlyList olarak.
     public IReadOnlyList<Game> AllGames => _allGames;
@@ -363,6 +386,12 @@ public partial class MainViewModel : ObservableObject
             custom.IsFavorite = favoriteKeys.Contains(custom.GameKey);
         }
         _allGames.AddRange(customGamesLoaded);
+        // Kullanıcı isteği: "sen bağlasana doğru oyuna eksikleri" — bölgesel/romanize isim farkı
+        // yüzünden otomatik eşleştirmenin (Builder'ın kendi MasterMetadataReader.FindMatch'i) hiç
+        // bulamadığı ama doğru LaunchBox DatabaseID'sinin elle bilindiği oyunlar için (bkz.
+        // GameStateInfo.MetadataSourceIdOverride) — customGameStates zaten TÜM oyunların (custom +
+        // katalog) durumunu taşıyor, ikinci bir DB sorgusuna gerek yok.
+        ApplyManualMetadataSourceOverrides(customGameStates);
         // Ekran görüntüsü: gerçek katalog "Pinball" ile manuel "Pinball" ayrı satırlarda — "bu 2
         // pinball'ı birleştirirsem kartlar tek bir yerde toplanacak dimi". Yukarıdaki birleştirme
         // sadece custom-custom arasındaydı; bu, custom bir oyunu aynı başlık+platforma sahip
@@ -670,6 +699,8 @@ public partial class MainViewModel : ObservableObject
     {
         ApplyFilter();
         OnPropertyChanged(nameof(CurrentPlatformHealthPercent));
+        OnPropertyChanged(nameof(CurrentPlatformLogoPath));
+        OnPropertyChanged(nameof(PlatformColumnVisibility));
         SaveLastSelection();
     }
 
@@ -2040,6 +2071,36 @@ public partial class MainViewModel : ObservableObject
         RequestPermanentDeleteConfirmation?.Invoke(game);
     }
 
+    // Kullanıcı isteği: "sen bağlasana doğru oyuna eksikleri" — GameKey'i MetadataSourceIdOverride
+    // taşıyan her oyunu (bkz. GameStateInfo yorumu) MasterMetadataReader.GetByDatabaseId ile
+    // doğrudan ID üzerinden çekip ReMatchMetadata/BulkReMatchMetadata ile AYNI ApplyMetadataMatch
+    // fonksiyonunu kullanarak uygular — normal bir otomatik eşleşme gibi davranır (metadata +
+    // görsel indirme akışları hiç fark etmeden çalışır). Reader SADECE override varsa açılır.
+    private void ApplyManualMetadataSourceOverrides(Dictionary<string, GameStateInfo> states)
+    {
+        var overrides = states.Where(kv => kv.Value.MetadataSourceIdOverride.HasValue).ToList();
+        if (overrides.Count == 0)
+            return;
+
+        if (string.IsNullOrWhiteSpace(_appSettings.MasterMetadataDbPath) || !File.Exists(_appSettings.MasterMetadataDbPath))
+            return;
+
+        var gamesByKey = _allGames.ToDictionary(g => g.GameKey);
+        using var reader = new MasterMetadataReader(_appSettings.MasterMetadataDbPath);
+        foreach (var (gameKey, state) in overrides)
+        {
+            if (!gamesByKey.TryGetValue(gameKey, out var game))
+                continue;
+
+            var match = reader.GetByDatabaseId(state.MetadataSourceIdOverride!.Value);
+            if (match is null)
+                continue;
+
+            ApplyMetadataMatch(game, match);
+            game.StatusOk = true;
+        }
+    }
+
     // Builder'ın CatalogBuilder.Run içinde yaptığı eşleştirmenin aynısını tek bir oyun için
     // yeniden çalıştırır (RetroAudit.Catalog'a proje referansı, bkz. RetroAudit.csproj). Sonuç
     // RetroAudit.db'ye değil doğrudan canlı Game nesnesine yazılır — bu bir kullanıcı override'ı
@@ -2147,6 +2208,19 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private double artworkDownloadProgress;
+
+    // Kullanıcı isteği: "provider açıkken ana UI'daki çubuk gizlensin, kapanınca geri gelsin" —
+    // Media Provider penceresi kendi indirme ilerleme çubuğunu gösterdiği için (bkz.
+    // MediaProviderWindow.xaml) MainWindow'daki asıl çubuk aynı anda ikinci kez görünmesin diye
+    // bu pencere açıkken gizleniyor. MediaProviderWindow.xaml.cs Loaded/Closed'da set ediyor.
+    [ObservableProperty]
+    private bool isMediaProviderWindowOpen;
+
+    public bool ShowMainArtworkProgressBar => IsArtworkDownloadInProgress && !IsMediaProviderWindowOpen;
+
+    partial void OnIsArtworkDownloadInProgressChanged(bool value) => OnPropertyChanged(nameof(ShowMainArtworkProgressBar));
+
+    partial void OnIsMediaProviderWindowOpenChanged(bool value) => OnPropertyChanged(nameof(ShowMainArtworkProgressBar));
 
     // "Görsel Getir" başlamadan önce hangi türlerin (Box/Clear Logo/Gameplay) indirileceğini
     // sormak için View'a bırakılan istek (bkz. ArtworkTypeSelectionDialog, MainWindow.xaml.cs).
@@ -2361,11 +2435,17 @@ public partial class MainViewModel : ObservableObject
         // katlanarak toplam süreyi domine ediyordu — LaunchBox'ın kendi indiricisi (çoğu toplu
         // indirici gibi) muhtemelen AYNI ANDA birden fazla bağlantı kullanıyor. Burada da aynı
         // yaklaşım: SemaphoreSlim ile sınırlı (aşırı sunucu/disk yükü olmasın diye) EŞ ZAMANLI
-        // indirme. DownloadArtworkAsync'in içindeki RegisterDownloadedMedia artık lock ile korunuyor
-        // (bkz. o metot) çünkü artık BİRDEN FAZLA arka plan thread'inden aynı anda çağrılabiliyor;
-        // NotifyArtworkDownloaded/ArtworkDownloadProgress ise Game'in bağlı (bound) özelliklerini
-        // değiştirdiği için Dispatcher ile bilerek UI thread'ine geri taşınıyor.
-        const int maxConcurrentDownloads = 6;
+        // indirme. NOT: bir ara "oyun başına" bu semafor kaldırılıp kaynak bazlı (Source1/Source2)
+        // iki ayrı semaforla değiştirilmişti — kullanıcı bulgusu: "%1'de takılı kalıyor, indiriyor
+        // ama bar ilerlemiyor, önceki sistemde böyle olmuyordu" — o değişiklik (yüzlerce oyunun
+        // TÜMÜNÜN aynı anda Task olarak başlaması, sadece ağ isteklerinin iki semaforla
+        // sınırlanması) UI/ilerleme çubuğunda gözle görülür bir gerileme yarattı, bu yüzden geri
+        // alındı — tek, kanıtlanmış "oyun başına" semafor modeline dönüldü. DownloadArtworkAsync'in
+        // içindeki RegisterDownloadedMedia artık lock ile korunuyor (bkz. o metot) çünkü artık
+        // BİRDEN FAZLA arka plan thread'inden aynı anda çağrılabiliyor; NotifyArtworkDownloaded/
+        // ArtworkDownloadProgress ise Game'in bağlı (bound) özelliklerini değiştirdiği için
+        // Dispatcher ile bilerek UI thread'ine geri taşınıyor.
+        const int maxConcurrentDownloads = 18;
         using var semaphore = new SemaphoreSlim(maxConcurrentDownloads);
         try
         {
@@ -2454,6 +2534,14 @@ public partial class MainViewModel : ObservableObject
 
             if (!downloaded)
                 downloaded = await ArtworkService.DownloadFromLibretroThumbnailsAsync(game.Platform, type, preferredRawDatName, destination, preserveTransparency, maxDimension, cancellationToken);
+
+            // Kullanıcı kararı: "Box"ta 1. kaynaktan gelen kapak yatayken (ör. "3D Cart" render)
+            // otomatik olarak 2. kaynağı da deneyen özellik (bkz. ArtworkService.IsLandscapeCover)
+            // KAPATILDI — bulk indirmede yaşanan "%1'de takılı kalıyor" sorununun olası nedenlerinden
+            // biri olabileceği düşünüldüğü için geçici olarak devre dışı bırakıldı. Ekranda hâlâ
+            // UniformToFill kullanılıyor (bkz. MainWindow.xaml Box görseli) — yatay kapaklar
+            // bozulmadan kutuyu doldurup kenarlardan kırpılıyor, sadece otomatik 2. kaynak
+            // denemesi yok.
 
             if (downloaded)
             {
@@ -2561,6 +2649,22 @@ public partial class MainViewModel : ObservableObject
                 version.IsManuallyLinked = matchingOverride is not null;
                 version.SourceGameKey = matchingOverride?.SourceGameKey;
                 versions.Add(version);
+            }
+
+            // Kullanıcı isteği: "ayrı ayrı gözükmesin, Bağla mantığında olacak, onlar tek kayıt
+            // gibi düşün" — otomatik sürüm-gruplamayla (bkz. Game.MergedIntoGameId,
+            // CatalogDatabaseService.ApplyAutoVersionGrouping) bu oyuna bağlanmış "kardeş" DAT
+            // kayıtları ana tabloda ayrı satır olarak GÖRÜNMÜYOR; onların kendi GERÇEK
+            // sürümleri/ROM dosyaları burada, bu oyunun Sürümler listesine ek kart olarak eklenir.
+            foreach (var sibling in _allGames.Where(g => g.MergedIntoGameId == SelectedGame.GameId))
+            {
+                foreach (var siblingVersion in CatalogDatabaseService.GetVersions(sibling.GameId, sibling.GameKey))
+                {
+                    siblingVersion.IsOwned = IsVersionOwned(sibling, siblingVersion);
+                    siblingVersion.SourceGameKey = sibling.GameKey;
+                    siblingVersion.MergedFromTitle = sibling.Title;
+                    versions.Add(siblingVersion);
+                }
             }
 
             // Kullanıcı isteği: "yeni olsun bi tane ona tıklayınca dosya ismi neyse onunla açsın" —
@@ -3028,8 +3132,8 @@ public partial class MainViewModel : ObservableObject
                 // AYNI kuralı uygulamalı: çöp kutusundaki/gizli bir oyun ROM'u eksik diye "Needs
                 // Search"te, ROM'u varken de "Ready to Play"de görünmemeli — o oyunlar zaten
                 // kendi chip'lerinde (Hidden/Recycle Bin) görünüyor.
-                PlaylistChipKind.ReadyToPlay => _allGames.Where(g => g.HasLocalFile && !g.IsHidden && !g.IsDeleted),
-                PlaylistChipKind.NeedsSearch => _allGames.Where(g => !g.HasLocalFile && !g.IsHidden && !g.IsDeleted),
+                PlaylistChipKind.ReadyToPlay => _allGames.Where(g => g.HasLocalFile && !g.IsEffectivelyHidden && !g.IsDeleted),
+                PlaylistChipKind.NeedsSearch => _allGames.Where(g => !g.HasLocalFile && !g.IsEffectivelyHidden && !g.IsDeleted),
                 // Sıralama/kesme burada DEĞİL, ApplyFilter'da sütun filtrelerinden SONRA
                 // uygulanıyor (bkz. orada).
                 PlaylistChipKind.Top250 or PlaylistChipKind.Top100 or PlaylistChipKind.Top25 => GetTopRatedPopulation(),
@@ -3041,7 +3145,7 @@ public partial class MainViewModel : ObservableObject
         }
         else
         {
-            query = _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
+            query = _allGames.Where(g => !g.IsEffectivelyHidden && !g.IsDeleted);
 
             if (SelectedPlatform is { IsAllPlatforms: false })
                 query = query.Where(g => g.Platform == SelectedPlatform.Name);
@@ -3065,7 +3169,7 @@ public partial class MainViewModel : ObservableObject
     // açılıp kapatıldığında değişmiyordu.
     private IEnumerable<Game> GetCurrentPlatformPopulation()
     {
-        var query = _allGames.Where(g => !g.IsHidden && !g.IsDeleted
+        var query = _allGames.Where(g => !g.IsEffectivelyHidden && !g.IsDeleted
             && ((ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk")));
         if (SelectedPlatform is { IsAllPlatforms: false })
             query = query.Where(g => g.Platform == SelectedPlatform.Name);
@@ -3163,6 +3267,8 @@ public partial class MainViewModel : ObservableObject
         Games = new ObservableCollection<Game>(query);
 
         OnPropertyChanged(nameof(CurrentPlatformHealthPercent));
+        OnPropertyChanged(nameof(CurrentPlatformLogoPath));
+        OnPropertyChanged(nameof(PlatformColumnVisibility));
         OnPropertyChanged(nameof(VisibleCount));
         OnPropertyChanged(nameof(TotalCount));
     }
@@ -3259,7 +3365,7 @@ public partial class MainViewModel : ObservableObject
 
     // Top 250/100/25 chip'lerinin filtre popülasyonu. Platform daraltması artık burada değil,
     // GetFilterScopePopulation'da TÜM chip'ler için tek/ortak bir yerde uygulanıyor (bkz. orada).
-    private IEnumerable<Game> GetTopRatedPopulation() => _allGames.Where(g => !g.IsHidden && !g.IsDeleted);
+    private IEnumerable<Game> GetTopRatedPopulation() => _allGames.Where(g => !g.IsEffectivelyHidden && !g.IsDeleted);
 
     // Uygulama açılışında BİR KEZ hesaplanır (bkz. constructor) — her oyunun KENDİ platformu
     // içindeki ağırlıklı sıralamaya göre en yüksek rozeti (Top25 > Top100 > Top250) belirlenir.
@@ -3344,6 +3450,10 @@ public partial class MainViewModel : ObservableObject
     // kullanıcı artık bu ikisini YANSITMASINI istiyor (region bayrağı/arama/sütun filtreleri gibi
     // DAHA DAR kapsamlı filtrelerden hâlâ bağımsız — rozet "Görünen" sayacı değil, sadece Released/
     // Junk açık/kapalı durumuna göre "bu platformda toplam kaç oyun var" sorusuna cevap verir).
+    // Kullanıcı bulgusu: "badge'de 1268 gözüküyor görünende 1260" — rozet IsHidden/IsDeleted'ı hiç
+    // kontrol etmiyordu (NES'te tam 7 gizli + 1 çöp kutusunda oyun vardı, farkla birebir eşleşti) —
+    // gizli/silinmiş bir oyunun "kaç oyun var" sayısına dahil olması hiçbir yorumda mantıklı değil,
+    // bu yüzden (region/arama/sütun filtrelerinin aksine) bu ikisi rozette de uygulanıyor artık.
     private void SyncPlatformGameCounts()
     {
         foreach (var platform in Platforms)
@@ -3351,7 +3461,8 @@ public partial class MainViewModel : ObservableObject
             var population = platform.IsAllPlatforms
                 ? _allGames.AsEnumerable()
                 : _allGames.Where(g => g.Platform == platform.Name);
-            platform.GameCount = population.Count(g => (ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk"));
+            platform.GameCount = population.Count(g => !g.IsEffectivelyHidden && !g.IsDeleted
+                && ((ShowReleased && g.Version == "Released") || (ShowJunk && g.Version == "Junk")));
         }
     }
 
@@ -3487,6 +3598,24 @@ public partial class MainViewModel : ObservableObject
             .Where(i => i.Platform is not null)
             .Select(i => i.Platform!)
             .ToList();
+
+    // Kullanıcı bulgusu: "resimlerdeki toplamı topladım RetroAudit toplamıyla tutmuyor" — kök neden
+    // Media/Metadata Provider'ın platform kart listesinin GetVisiblePlatformOrder() (sol paneldeki
+    // "OTHERS" kategorisi kapalıysa veya bir kategori Ayarlar'dan gizlenmişse o platformlar hiç
+    // dönmüyor) kullanmasıydı — ama "All Platforms" satırı sidebar görünürlüğünden bağımsız TÜM
+    // oyunları sayıyordu, bu yüzden kart toplamları asla aggregate'i tutturamıyordu. Provider
+    // pencereleri artık bunun yerine bu metodu kullanıyor: sidebar'da neyin açık/kapalı/gizli
+    // olduğuna bakmaksızın HER zaman tüm gerçek platformları (kullanıcının PlatformOrder'ıyla
+    // sıralı) döner.
+    public IReadOnlyList<Platform> GetAllPlatformsOrdered()
+    {
+        var result = new List<Platform>();
+        var allPlatformsEntry = Platforms.FirstOrDefault(p => p.IsAllPlatforms);
+        if (allPlatformsEntry is not null)
+            result.Add(allPlatformsEntry);
+        result.AddRange(OrderPlatforms(Platforms.Where(p => !p.IsAllPlatforms)));
+        return result;
+    }
 
     public void NotifyMetadataEdited(Game game)
     {

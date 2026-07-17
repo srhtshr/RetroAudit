@@ -201,7 +201,13 @@ public partial class MediaProviderViewModel : ObservableObject
     private void RebuildPlatformAuditSummaries()
     {
         var previousPlatformName = SelectedPlatformSummary?.Platform.Name;
-        var visibleGames = _allGames.Where(g => !g.IsHidden && !g.IsDeleted && (ShowJunk || g.Version == "Released")).ToList();
+        // Kullanıcı bulgusu: "provider ile platformda farklı gözüküyor sayılar" — asıl kök neden
+        // MainViewModel.SyncPlatformGameCounts'ın IsHidden/IsDeleted'ı hiç kontrol etmemesiydi
+        // (orada düzeltildi). Kart toplamları burada zaten "Junk oyunları dahil et" checkbox'ına
+        // (ShowJunk) bakıyor — kullanıcı kararı: bu checkbox AÇIKÇA görünür bir kontrol olduğu için
+        // (ana UI'daki Released/Junk düğmeleriyle AYNI mantık) totaller de ona uysun, "her zaman
+        // hepsini göster" yerine — checkbox işaretliyse Released+Junk, değilse sadece Released.
+        var visibleGames = _allGames.Where(g => !g.IsEffectivelyHidden && !g.IsDeleted && (ShowJunk || g.Version == "Released")).ToList();
         var orderedPlatforms = _getOrderedPlatforms();
 
         // Kullanıcı geri bildirimi: "providerda junkları dahil et dediğimde geç hesaplıyor" —
@@ -257,7 +263,7 @@ public partial class MediaProviderViewModel : ObservableObject
     {
         MissingItems.Clear();
 
-        IEnumerable<Game> games = _allGames.Where(g => !g.IsHidden && !g.IsDeleted && (ShowJunk || g.Version == "Released"));
+        IEnumerable<Game> games = _allGames.Where(g => !g.IsEffectivelyHidden && !g.IsDeleted && (ShowJunk || g.Version == "Released"));
         if (SelectedPlatform is { IsAllPlatforms: false })
             games = games.Where(g => g.Platform == SelectedPlatform.Name);
         if (!string.IsNullOrWhiteSpace(SearchText))

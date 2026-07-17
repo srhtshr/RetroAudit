@@ -134,6 +134,23 @@ public class MasterMetadataReader : IDisposable
         return FindFuzzyMatch(resolvedPlatform, compareTitle);
     }
 
+    // Kullanıcı isteği: "sen bağlasana doğru oyuna eksikleri" — bölgesel/romanize isim farkı yüzünden
+    // otomatik eşleştirmenin (FindMatch) hiç bulamadığı ama kullanıcının/benim elle DOĞRU LaunchBox
+    // kaydını (DatabaseID) bildiğimiz durumlar için — platform/isim araması YAPMADAN doğrudan ID ile
+    // tek bir kayıt çeker (bkz. MainViewModel'in kalıcı hâle getirdiği MetadataSourceIdOverride).
+    public MetadataMatch? GetByDatabaseId(int databaseId)
+    {
+        using var cmd = _connection.CreateCommand();
+        cmd.CommandText =
+            "SELECT DatabaseID, Name, Developer, Publisher, ReleaseYear, Overview, MaxPlayers, Genres, " +
+            "ReleaseDate, CommunityRating, CommunityRatingCount, VideoURL, WikipediaURL, SteamAppId, Cooperative, ReleaseType " +
+            "FROM Games WHERE DatabaseID = $databaseId LIMIT 1";
+        cmd.Parameters.AddWithValue("$databaseId", databaseId);
+
+        using var reader = cmd.ExecuteReader();
+        return reader.Read() ? ReadMatch(reader, confidence: 1.0, matchMethod: "ManualMetadataLink") : null;
+    }
+
     private MetadataMatch? FindFuzzyMatch(string resolvedPlatform, string compareTitle)
     {
         if (compareTitle.Length < PrefixLength)

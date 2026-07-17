@@ -17,7 +17,12 @@ public static class GameKeyHelper
 // LaunchBox'ın belirsiz bir alternatif isim çakışması yüzünden yanlış Junk'a düşürmesi) geçersiz
 // kılar: null = geçersiz kılma yok (kataloğun kendi Version'ı geçerli), "Released"/"Junk" = kalıcı
 // olarak zorlanan değer — katalog yeniden inşa edilse bile (GameKey sabit kaldığı sürece) kaybolmaz.
-public record GameStateInfo(bool IsHidden, bool IsDeleted, bool IsPermanentlyDeleted, string? VersionOverride = null);
+// MetadataSourceIdOverride: kullanıcı isteği: "sen bağlasana doğru oyuna eksikleri" — bölgesel/
+// romanize isim farkı yüzünden otomatik eşleştirmenin (MasterMetadataReader.FindMatch) hiç
+// bulamadığı ama doğru LaunchBox kaydının (DatabaseID) elle bilindiği durumlar için — null = elle
+// bağlama yok, dolu ise MainViewModel açılışta bu ID'yi MasterMetadataReader.GetByDatabaseId ile
+// çekip normal bir otomatik eşleşme gibi uygular (metadata + görsel indirme hepsi çalışır).
+public record GameStateInfo(bool IsHidden, bool IsDeleted, bool IsPermanentlyDeleted, string? VersionOverride = null, int? MetadataSourceIdOverride = null);
 
 // MetadataOverrides tablosundan tek bir oyun için okunan, kullanıcının elle düzenlediği alanlar.
 // Null olan alanlar "düzenlenmedi, katalog değeri geçerli" anlamına gelir.
@@ -31,7 +36,8 @@ public record MetadataOverride(
     string? VideoUrl,
     int? ReleaseYear,
     string? Region,
-    string? PreferredVersionRawName);
+    string? PreferredVersionRawName,
+    string? WikipediaUrl = null);
 
 // Playlists tablosundaki tek bir satır. IsBuiltIn=true olan (Favorites) yeniden adlandırılamaz/
 // silinemez — bkz. UserDataService.DeletePlaylist/RenamePlaylist.

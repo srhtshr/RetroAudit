@@ -33,7 +33,7 @@ public static class VersionResolver
 
         foreach (var entry in entries)
         {
-            var parsed = DatNameParser.Parse(entry.Name);
+            var parsed = DatNameParser.Parse(entry.Name, entry.PlatformName);
 
             // Oyun adı (entry.Name) "temiz" görünse bile, o oyunun ROM dosya adı(ları) ayrı bir
             // alan ve "(Aftermarket) (Unl)" gibi ek etiketler taşıyabiliyor (bkz. DatNameParser.

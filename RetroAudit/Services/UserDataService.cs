@@ -101,6 +101,12 @@ public static class UserDataService
         EnsureColumnExists(connection, "MetadataOverrides", "ReleaseYear", "INTEGER");
         EnsureColumnExists(connection, "MetadataOverrides", "Region", "TEXT");
 
+        // Kullanıcı isteği: "wikiler" — Media Provider'daki "Wiki" eksik türü (bkz.
+        // Game.WikipediaUrl/HasWikipediaUrl) şimdiye kadar SADECE LaunchBox eşleşmesinden
+        // doldurulabiliyordu, elle/araştırmayla bulunan bir Wikipedia linkini kaydedecek bir yol
+        // yoktu — diğer override alanlarıyla (Genre/Publisher/...) AYNI mekanizmaya eklendi.
+        EnsureColumnExists(connection, "MetadataOverrides", "WikipediaUrl", "TEXT");
+
         // Kullanıcı isteği: "manuel bağlanan kayıtlar ... Linked (Manual) olarak işaretlensin ...
         // hangi Game/GameVersion'a bağlandığı görülebilsin" — bkz. FilePathOverrideInfo.
         EnsureColumnExists(connection, "FilePathOverrides", "MatchMethod", "TEXT");
@@ -139,6 +145,10 @@ public static class UserDataService
         // CatalogDatabaseService.ApplyUserData'daki uygulanışı).
         EnsureColumnExists(connection, "GameState", "VersionOverride", "TEXT");
 
+        // Kullanıcı isteği: "sen bağlasana doğru oyuna eksikleri" — bkz. GameStateInfo.
+        // MetadataSourceIdOverride yorumu.
+        EnsureColumnExists(connection, "GameState", "MetadataSourceIdOverride", "INTEGER");
+
         using (var checkCmd = connection.CreateCommand())
         {
             checkCmd.CommandText = "SELECT COUNT(*) FROM Playlists WHERE IsBuiltIn = 1 AND Name = 'Favorites'";
@@ -162,7 +172,7 @@ public static class UserDataService
         var result = new Dictionary<string, GameStateInfo>();
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT GameKey, IsHidden, IsDeleted, IsPermanentlyDeleted, VersionOverride FROM GameState";
+        cmd.CommandText = "SELECT GameKey, IsHidden, IsDeleted, IsPermanentlyDeleted, VersionOverride, MetadataSourceIdOverride FROM GameState";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -170,7 +180,8 @@ public static class UserDataService
                 reader.GetInt32(1) != 0,
                 reader.GetInt32(2) != 0,
                 reader.GetInt32(3) != 0,
-                reader.IsDBNull(4) ? null : reader.GetString(4));
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                reader.IsDBNull(5) ? null : reader.GetInt32(5));
         }
         return result;
     }
@@ -180,7 +191,7 @@ public static class UserDataService
         var result = new Dictionary<string, MetadataOverride>();
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
-        cmd.CommandText = "SELECT GameKey, Title, Genre, Description, Notes, Publisher, Developer, VideoUrl, ReleaseYear, Region, PreferredVersionRawName FROM MetadataOverrides";
+        cmd.CommandText = "SELECT GameKey, Title, Genre, Description, Notes, Publisher, Developer, VideoUrl, ReleaseYear, Region, PreferredVersionRawName, WikipediaUrl FROM MetadataOverrides";
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
         {
@@ -194,7 +205,8 @@ public static class UserDataService
                 reader.IsDBNull(7) ? null : reader.GetString(7),
                 reader.IsDBNull(8) ? null : reader.GetInt32(8),
                 reader.IsDBNull(9) ? null : reader.GetString(9),
-                reader.IsDBNull(10) ? null : reader.GetString(10));
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetString(11));
         }
         return result;
     }
@@ -631,6 +643,16 @@ public static class UserDataService
             cmd.Parameters.AddWithValue("$version", (object?)version ?? DBNull.Value);
         });
 
+    // Kullanıcı isteği: "sen bağlasana doğru oyuna eksikleri" — bkz. GameStateInfo.
+    // MetadataSourceIdOverride yorumu. databaseId: LaunchBox MasterMetadata.db'deki DatabaseID
+    // (null geçilirse override kaldırılır, oyun otomatik eşleştirmeye geri döner).
+    public static void SetMetadataSourceIdOverride(string gameKey, int? databaseId) =>
+        UpsertGameState(gameKey, cmd =>
+        {
+            cmd.CommandText = "UPDATE GameState SET MetadataSourceIdOverride = $databaseId WHERE GameKey = $gameKey";
+            cmd.Parameters.AddWithValue("$databaseId", (object?)databaseId ?? DBNull.Value);
+        });
+
     public static void SoftDelete(string gameKey) =>
         UpsertGameState(gameKey, cmd =>
         {
@@ -656,14 +678,19 @@ public static class UserDataService
     {
         using var connection = OpenConnection();
         using var cmd = connection.CreateCommand();
+        // WikipediaUrl: EditMetadataViewModel'in kendi UI'ında bu alan YOK, o yüzden oradan hep
+        // null geçirilir — Title/Genre/... gibi koşulsuz üzerine yazılırsa, kullanıcı sadece bir
+        // başlık düzeltmek için "Düzenle"yi kullansa bile script'le eklenmiş bir WikipediaUrl
+        // sessizce silinirdi. PreferredVersionRawName ile AYNI COALESCE koruması burada da geçerli.
         cmd.CommandText = """
-            INSERT INTO MetadataOverrides (GameKey, Title, Genre, Description, Notes, Publisher, Developer, VideoUrl, ReleaseYear, Region, PreferredVersionRawName)
-            VALUES ($gameKey, $title, $genre, $description, $notes, $publisher, $developer, $videoUrl, $releaseYear, $region, $preferredVersionRawName)
+            INSERT INTO MetadataOverrides (GameKey, Title, Genre, Description, Notes, Publisher, Developer, VideoUrl, ReleaseYear, Region, PreferredVersionRawName, WikipediaUrl)
+            VALUES ($gameKey, $title, $genre, $description, $notes, $publisher, $developer, $videoUrl, $releaseYear, $region, $preferredVersionRawName, $wikipediaUrl)
             ON CONFLICT(GameKey) DO UPDATE SET
                 Title = $title, Genre = $genre, Description = $description, Notes = $notes,
                 Publisher = $publisher, Developer = $developer, VideoUrl = $videoUrl,
                 ReleaseYear = $releaseYear, Region = $region,
-                PreferredVersionRawName = COALESCE($preferredVersionRawName, PreferredVersionRawName)
+                PreferredVersionRawName = COALESCE($preferredVersionRawName, PreferredVersionRawName),
+                WikipediaUrl = COALESCE($wikipediaUrl, WikipediaUrl)
             """;
         cmd.Parameters.AddWithValue("$gameKey", gameKey);
         cmd.Parameters.AddWithValue("$title", (object?)overrideValue.Title ?? DBNull.Value);
@@ -676,6 +703,7 @@ public static class UserDataService
         cmd.Parameters.AddWithValue("$releaseYear", (object?)overrideValue.ReleaseYear ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$region", (object?)overrideValue.Region ?? DBNull.Value);
         cmd.Parameters.AddWithValue("$preferredVersionRawName", (object?)overrideValue.PreferredVersionRawName ?? DBNull.Value);
+        cmd.Parameters.AddWithValue("$wikipediaUrl", (object?)overrideValue.WikipediaUrl ?? DBNull.Value);
         cmd.ExecuteNonQuery();
     }
 

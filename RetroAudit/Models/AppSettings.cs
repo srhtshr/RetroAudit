@@ -765,4 +765,9 @@ public class AppSettings
 
     // Provider pencerelerinde son seçilen görünüm modu (true = Tablo/DataGrid, false = Liste/ListBox).
     public bool ProviderShowAsTable { get; set; } = false;
+
+    // Metadata Provider'ın sol panelindeki platform kartı listesinde gizlenmiş platformlar
+    // (Platform.Name, ham DAT adı) — kullanıcı isteği: "göstermeyi istemediklerimi
+    // göstermemem için seçmeli filtre". Listede olmayan platformlar varsayılan görünür sayılır.
+    public List<string> MetadataProviderHiddenPlatforms { get; set; } = new();
 }

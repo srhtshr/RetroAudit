@@ -510,27 +510,59 @@
         </DataTemplate>
 
         <DataTemplate x:Key="TitleColumnHeaderWithHealth" DataType="{x:Type models:ColumnFilterViewModel}">
-            <Grid MinHeight="30">
+            <!-- Kullanıcı isteği: "standart search bar ı logonun yanındaki barın üstüne alsak...
+                 tıklayıp açılan search bar yerine tek onu kullansak" — üst araç çubuğundaki genel
+                 arama kutusu (MainViewModel.SearchText) buraya taşındı; "Başlık" sütununun eski
+                 tıkla-aç popup'ı (arama + A-Z/Z-A düğmeleri) tamamen kaldırıldı (kullanıcı onayı:
+                 "başlık sütununda zaten a dan z ye geliyorsa direk" — sütun başlığına tıklayınca
+                 zaten yerleşik DataGrid sıralaması çalışıyor, ayrı düğmeye gerek yok). Logo/health
+                 satırının boyutları (120x22 logo, 64x5 bar) DEĞİŞTİRİLMEDİ, sadece üstüne yeni bir
+                 satır eklendi. -->
+            <Grid MinHeight="52">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Button x:Name="TitleHeaderButton" Grid.Column="0" Command="{Binding OpenCommand}" Cursor="Hand"
-                        Background="Transparent" BorderThickness="0" Padding="4,0"
-                        HorizontalContentAlignment="Left" ToolTip="Filtrele">
-                    <TextBlock Text="{Binding HeaderText}" TextTrimming="CharacterEllipsis">
+
+                <!-- WPF TextBox'ın yerleşik placeholder'ı olmadığından, eski üst araç çubuğu
+                     kutusuyla AYNI "boşken ipucu göster" deseni (bkz. altta kaldırılan Grid). -->
+                <Grid Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2" Height="22" Margin="2,0,4,4">
+                    <TextBox VerticalContentAlignment="Center" FontSize="11" Padding="6,0"
+                             Text="{Binding Data.SearchText, Source={StaticResource ViewModelProxy}, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBlock Text="Ara... (Boş alan için)" IsHitTestVisible="False"
+                               VerticalAlignment="Center" Margin="8,0,0,0" FontSize="11"
+                               Foreground="{StaticResource Brush.Text.Secondary}">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
                                 <Style.Triggers>
-                                    <DataTrigger Binding="{Binding IsActive}" Value="True">
-                                        <Setter Property="Foreground" Value="{StaticResource Brush.Accent.Amber}" />
+                                    <DataTrigger Binding="{Binding Data.SearchText, Source={StaticResource ViewModelProxy}}" Value="">
+                                        <Setter Property="Visibility" Value="Visible" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
-                </Button>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,4,0">
+                </Grid>
+
+                <!-- Seçili platformun logosu (All Platforms'ta RetroAudit'in kendi logosu, bkz.
+                     MainViewModel.CurrentPlatformLogoPath) — artık tıklanabilir popup yok.
+                     DÜZELTME: bir önceki deneme (HorizontalAlignment="Stretch") logoyu TÜM Column 0
+                     genişliğine yayıyordu, sağdaki boşluğu (kullanıcının ileride bir şey koyacağı
+                     alan) yiyordu ve orantısız dağılım çirkin duruyordu. Kullanıcı isteği aslında
+                     sabit KÜÇÜK kutunun (120x22, önceki boyut) İÇİNİ doldurmaktı — Stretch="Fill" +
+                     sabit Width/Height, kutunun kendisi büyümüyor/taşmıyor, sağda boşluk kalıyor. -->
+                <Image Grid.Row="1" Grid.Column="0"
+                       Source="{Binding Data.CurrentPlatformLogoPath, Source={StaticResource ViewModelProxy}, Mode=OneWay}"
+                       Width="120" Height="22" Stretch="Fill"
+                       HorizontalAlignment="Left" VerticalAlignment="Center"
+                       RenderOptions.BitmapScalingMode="HighQuality" />
+
+                <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,4,0">
                     <TextBlock VerticalAlignment="Center" Margin="0,0,6,0" FontSize="10" FontWeight="SemiBold"
                                Foreground="{StaticResource Brush.Text.Secondary}">
                         <Run Text="%" />
@@ -543,145 +575,6 @@
                                 Background="{StaticResource Brush.Accent.SelectedBorder}" />
                     </Border>
                 </StackPanel>
-
-                <Popup PlacementTarget="{Binding ElementName=TitleHeaderButton}" IsOpen="{Binding IsPopupOpen}"
-                       StaysOpen="False" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade"
-                       Opened="FilterPopup_Opened">
-                    <Border Background="{StaticResource Brush.Background.Elevated}"
-                            BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
-                            CornerRadius="4" Padding="6" Width="190" MaxHeight="360">
-                        <DockPanel>
-                            <StackPanel DockPanel.Dock="Bottom" Margin="0,6,0,0">
-                                <StackPanel.Style>
-                                    <Style TargetType="StackPanel">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsSearchOnly}" Value="True">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </StackPanel.Style>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
-                                    <Button Content="↑A-Z" Click="SortAscending_Click" ToolTip="Sırala A-Z"
-                                            FontSize="10" Padding="4,2" Margin="0,0,2,0" Cursor="Hand" />
-                                    <Button Content="↓Z-A" Click="SortDescending_Click" ToolTip="Sırala Z-A"
-                                            FontSize="10" Padding="4,2" Cursor="Hand" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
-                                    <Button Content="{Binding ToggleAllLabel}" Command="{Binding ToggleAllCommand}" FontSize="10" Margin="0,0,4,0" />
-                                    <Button Content="OK" Command="{Binding ApplyFilterCommand}" FontSize="10" Margin="0,0,4,0" />
-                                    <Button Content="Cancel" Command="{Binding CancelFilterCommand}" FontSize="10" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <Grid DockPanel.Dock="Top" Margin="0,0,0,4">
-                                <TextBox FontSize="11" Padding="4,2,20,2"
-                                         Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}">
-                                    <TextBox.InputBindings>
-                                        <KeyBinding Key="Return" Command="{Binding SearchCommand}" />
-                                    </TextBox.InputBindings>
-                                </TextBox>
-                                <Button Command="{Binding ClearSearchCommand}"
-                                        HorizontalAlignment="Right" VerticalAlignment="Center"
-                                        Padding="4,0" Margin="0,0,2,0" Cursor="Hand" ToolTip="Aramayı temizle">
-                                    <Button.Template>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border Background="Transparent">
-                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                            </Border>
-                                        </ControlTemplate>
-                                    </Button.Template>
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding SearchText.Length}" Value="0">
-                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                    <TextBlock Text="✕" FontSize="9">
-                                        <TextBlock.Style>
-                                            <Style TargetType="TextBlock">
-                                                <Setter Property="Foreground" Value="{StaticResource Brush.Text.Secondary}" />
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Foreground" Value="{StaticResource Brush.Text.Primary}" />
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </TextBlock.Style>
-                                    </TextBlock>
-                                </Button>
-                            </Grid>
-
-                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="260">
-                                <ScrollViewer.Style>
-                                    <Style TargetType="ScrollViewer">
-                                        <Style.Triggers>
-                                            <DataTrigger Binding="{Binding IsSearchOnly}" Value="True">
-                                                <Setter Property="Visibility" Value="Collapsed" />
-                                            </DataTrigger>
-                                        </Style.Triggers>
-                                    </Style>
-                                </ScrollViewer.Style>
-                                <ItemsControl ItemsSource="{Binding OptionsView}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate DataType="{x:Type models:FilterOption}">
-                                            <Border Padding="3,2" CornerRadius="2">
-                                                <Border.Style>
-                                                    <Style TargetType="Border">
-                                                        <Setter Property="Background" Value="Transparent" />
-                                                        <Style.Triggers>
-                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                <Setter Property="Background" Value="{StaticResource Brush.Background.Hover}" />
-                                                            </Trigger>
-                                                        </Style.Triggers>
-                                                    </Style>
-                                                </Border.Style>
-                                                <CheckBox IsChecked="{Binding IsChecked}" FontSize="11">
-                                                    <Grid Margin="0,1,0,1">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock Grid.Column="0" FontSize="11" MaxWidth="140" TextTrimming="CharacterEllipsis"
-                                                                   ToolTip="{Binding Value, Mode=OneWay}">
-                                                            <Run Text="{Binding Value, Mode=OneWay}" />
-                                                            <Run Text=" (" /><Run Text="{Binding Count, Mode=OneWay}" /><Run Text=")" />
-                                                        </TextBlock>
-                                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" Width="54">
-                                                            <StackPanel.Style>
-                                                                <Style TargetType="StackPanel">
-                                                                    <Setter Property="Visibility" Value="Collapsed" />
-                                                                    <Style.Triggers>
-                                                                        <DataTrigger Binding="{Binding HasHealthPercent}" Value="True">
-                                                                            <Setter Property="Visibility" Value="Visible" />
-                                                                        </DataTrigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </StackPanel.Style>
-                                                            <TextBlock HorizontalAlignment="Right" FontSize="10" FontWeight="SemiBold"
-                                                                       Foreground="{StaticResource Brush.Text.Secondary}">
-                                                                <Run Text="%" />
-                                                                <Run Text="{Binding HealthPercent}" />
-                                                            </TextBlock>
-                                                            <ProgressBar Minimum="0" Maximum="100" Height="4" Margin="0,4,0,0"
-                                                                         Value="{Binding HealthPercent}"
-                                                                         Foreground="{StaticResource Brush.Accent.SelectedBorder}"
-                                                                         Background="{StaticResource Brush.Background.Base}" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </CheckBox>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-                        </DockPanel>
-                    </Border>
-                </Popup>
             </Grid>
         </DataTemplate>
 
@@ -789,6 +682,20 @@
         <Style x:Key="ContextMenuIconButtonHiddenInRecycleBin" TargetType="Button" BasedOn="{StaticResource ContextMenuIconButton}">
             <Style.Triggers>
                 <DataTrigger Binding="{Binding IsDeleted}" Value="True">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- Kullanıcı bulgusu: "geri dönüşüm kutusunda toplu seçim yapınca menü böyle geliyor" —
+             yukarıdaki tekil moddaki gizleme AYNI şekilde toplu moda hiç uygulanmamıştı: Bağla/
+             Favorite/Playlist/Hide/Re-match/Artwork toplu panelde IsContextMenuSelectionAllDeleted
+             durumuna bakılmaksızın hep görünüyordu. DataContext burada Window'un kendisi olduğu
+             için (bkz. toplu StackPanel — {Binding ContextMenuGame} yok, doğrudan Window
+             DataContext=MainViewModel) IsContextMenuSelectionAllDeleted doğrudan bağlanabiliyor. -->
+        <Style x:Key="BulkContextMenuIconButtonHiddenInRecycleBin" TargetType="Button" BasedOn="{StaticResource ContextMenuIconButton}">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsContextMenuSelectionAllDeleted}" Value="True">
                     <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
             </Style.Triggers>
@@ -1033,6 +940,12 @@
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" ClipToBounds="True">
                     <Button Content="Import" Command="{Binding ImportCommand}" Margin="0,0,6,0" />
                     <Button Content="Temizle" Command="{Binding ClearFiltersCommand}" Margin="0,0,14,0" />
+
+                    <!-- GEÇİCİ (kullanıcı isteği: "tabloda gözükenleri text olarak dışa aktarabileceğim
+                         buton, notepad'de açsın, eşleşmeyenleri kontrol için toplu kopyalayıp
+                         atabileyim") — kaldırmak için bu Button'ı ve MainWindow.xaml.cs'teki
+                         ExportVisibleGamesButton_Click'i sil. -->
+                    <Button Content="Dışa Aktar" Click="ExportVisibleGamesButton_Click" Margin="0,0,14,0" />
                     <Button Content="Media Pro" Command="{Binding OpenMediaProviderCommand}" Margin="0,0,6,0" />
                     <Button Content="Metadata Pro" Command="{Binding OpenMetadataProviderCommand}" Margin="0,0,6,0" />
                     <Button Content="Crop Editor" Command="{Binding OpenCropEditorCommand}" Margin="0,0,6,0" />
@@ -1042,27 +955,9 @@
                          yanında tek tıkla erişilen ayrı bir buton. -->
                     <Button Content="Ayarlar" Margin="0,0,14,0" Command="{Binding OpenSettingsCommand}" />
 
-                    <!-- WPF TextBox'ın yerleşik bir "placeholder" özelliği olmadığından, arama kutusu
-                         boşken üzerine bindirilen bir TextBlock ile "Ara..." ipucu simüle ediliyor.
-                         TextBlock IsHitTestVisible="False" olduğu için fare tıklamalarını etkilemez. -->
-                    <Grid Width="220" Margin="0,0,14,0">
-                        <TextBox VerticalContentAlignment="Center"
-                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
-                        <TextBlock Text="Ara... (Boş alan için)" IsHitTestVisible="False"
-                                   VerticalAlignment="Center" Margin="10,0,0,0"
-                                   Foreground="{StaticResource Brush.Text.Secondary}">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SearchText}" Value="">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                    </Grid>
+                    <!-- Kullanıcı isteği: "standart search bar ı logonun yanındaki barın üstüne
+                         alsak... tek onu kullansak" — bu kutu "Başlık" sütun başlığına taşındı (bkz.
+                         TitleColumnHeaderWithHealth), buradan kaldırıldı. -->
 
                     <ToggleButton Content="Released" IsChecked="{Binding ShowReleased}" Margin="0,0,4,0" />
                     <ToggleButton Content="Junk" IsChecked="{Binding ShowJunk}" Margin="0,0,14,0" />
@@ -1099,7 +994,26 @@
                                     <ItemsControl ItemsSource="{Binding ColumnOptions}">
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate DataType="{x:Type models:ColumnVisibilityOption}">
-                                                <CheckBox Content="{Binding Header}" IsChecked="{Binding IsVisible}" Margin="2" />
+                                                <!-- Kullanıcı isteği: "platform listede gözüküyor sadece bug gibi
+                                                     duruyor o listedede gözükmesin ... all platform haricindekilerde"
+                                                     — "Platform" sütunu zaten belirli bir platform seçiliyken
+                                                     gizli (bkz. MainWindow.xaml.cs UpdatePlatformColumnVisibility),
+                                                     bu checkbox'ın kendisi de aynı durumda listeden kayboluyor. -->
+                                                <CheckBox Content="{Binding Header}" IsChecked="{Binding IsVisible}" Margin="2">
+                                                    <CheckBox.Style>
+                                                        <Style TargetType="CheckBox">
+                                                            <Style.Triggers>
+                                                                <MultiDataTrigger>
+                                                                    <MultiDataTrigger.Conditions>
+                                                                        <Condition Binding="{Binding Key}" Value="Platform" />
+                                                                        <Condition Binding="{Binding DataContext.PlatformColumnVisibility, RelativeSource={RelativeSource AncestorType=Window}}" Value="Collapsed" />
+                                                                    </MultiDataTrigger.Conditions>
+                                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                                </MultiDataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </CheckBox.Style>
+                                                </CheckBox>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
@@ -1807,7 +1721,16 @@
                                          HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding File}" SortMemberPath="File" Width="200" />
                     <!-- Düz metin (kullanıcı kararı: tabloda logo değil metin, logo sadece detay
-                         panelinde gösterilsin — bkz. aşağıda "Platform" satırı). -->
+                         panelinde gösterilsin — bkz. aşağıda "Platform" satırı).
+                         Kullanıcı isteği: "platform sütununu all platform harici kaldıralım all
+                         platformda gözüksün sadece zaten seçilende yukarda eşşek kadar yazıyor" —
+                         belirli bir platform seçiliyken adı zaten "Başlık" sütun başlığındaki logoda
+                         büyük gösteriliyor, bu sütun o durumda gereksiz tekrar oluyor (bkz.
+                         MainViewModel.PlatformColumnVisibility). DataGridColumn görsel ağacın
+                         parçası olmadığı için Visibility XAML'de DOĞRUDAN bağlanamıyor (bkz.
+                         MainWindow.xaml.cs WireColumnVisibility yorumu) — o yüzden burada binding
+                         YOK, kod-arkasında (UpdatePlatformColumnVisibility) hem "Sütunlar"
+                         checkbox'ıyla hem SelectedPlatform'la birlikte yönetiliyor. -->
                     <DataGridTextColumn x:Name="PlatformColumn" Header="{Binding Data.PlatformFilter, Source={StaticResource ViewModelProxy}}" HeaderTemplate="{StaticResource FilterableColumnHeader}"
                                          Binding="{Binding PlatformDisplayName}" SortMemberPath="PlatformDisplayName" Width="160" />
                     <!-- Kullanıcı isteği: "tablodaki türleri 1. resimdeki gibi tıklanıp
@@ -1960,9 +1883,15 @@
                  bırakıyordu — onun yerine başlık çubuğu düğmeleriyle (bkz. CustomTitleBarButton)
                  AYNI teknik: IsHitTestVisibleInChrome="True", düğmeyi tam köşede/kenarda TUTARKEN
                  tıklamaların resize kenarlığı tarafından yutulmasını engelliyor. -->
+            <!-- Kullanıcı bulgusu: "bu buton tam ekranda gene çalışmıyor" — kök neden "Başlık"
+                 sütun başlığına arama kutusu eklenince (bkz. TitleColumnHeaderWithHealth) header
+                 satırı MinHeight=30'dan 52'ye çıktı, ama bu köşe-örtme düğmesinin Height'i hâlâ
+                 eski 40'ta kalmıştı — büyümüş köşe boşluğunun altında ~12-22px kapatılmamış bir
+                 şerit kaldı, orada tekrar resize kenarlığı tıklamayı yutuyordu. Height, yeni header
+                 yüksekliğiyle AYNI oranda (header+10) büyütüldü. -->
             <Button x:Name="DetailPanelToggleButton" Grid.Column="2" Command="{Binding ToggleDetailPanelCommand}"
                     shell:WindowChrome.IsHitTestVisibleInChrome="True"
-                    Width="14" Height="40" HorizontalAlignment="Right" VerticalAlignment="Top"
+                    Width="14" Height="62" HorizontalAlignment="Right" VerticalAlignment="Top"
                     Background="Transparent" Padding="0" Cursor="Hand"
                     ToolTip="Tabloyu tam genişliğe getir / geri al">
                 <!-- Arkaplan hover'ı (rengi değişen bir kutu) bu küçük köşe hücresinde her zaman
@@ -2265,7 +2194,7 @@
                              bağlamalı" — pencere açmadan, seçili oyunlardan "asıl" olanı otomatik
                              seçip diğerlerinin dosyalarını ona sürüm olarak taşır (bkz.
                              MainViewModel.BulkLinkAsync). -->
-                        <Button Style="{StaticResource ContextMenuIconButton}"
+                        <Button Style="{StaticResource BulkContextMenuIconButtonHiddenInRecycleBin}"
                                 Command="{Binding BulkLinkCommand}" ToolTip="Başka Bir Oyuna Bağla">
                             <StackPanel>
                                 <TextBlock Text="&#xE71B;" Style="{StaticResource ContextMenuGlyphText}" />
@@ -2273,7 +2202,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Button Style="{StaticResource ContextMenuIconButton}"
+                        <Button Style="{StaticResource BulkContextMenuIconButtonHiddenInRecycleBin}"
                                 Command="{Binding BulkAddToFavoritesCommand}" ToolTip="Favorilere Ekle">
                             <StackPanel>
                                 <TextBlock Text="&#xE734;" Style="{StaticResource ContextMenuGlyphText}" />
@@ -2281,7 +2210,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Button Style="{StaticResource ContextMenuIconButton}"
+                        <Button Style="{StaticResource BulkContextMenuIconButtonHiddenInRecycleBin}"
                                 Command="{Binding ToggleAddToPlaylistPopupCommand}" ToolTip="Add to Playlist">
                             <StackPanel>
                                 <TextBlock Text="&#xE710;" Style="{StaticResource ContextMenuGlyphText}" />
@@ -2289,7 +2218,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Button Style="{StaticResource ContextMenuIconButton}"
+                        <Button Style="{StaticResource BulkContextMenuIconButtonHiddenInRecycleBin}"
                                 Command="{Binding BulkHideCommand}" ToolTip="Hide">
                             <StackPanel>
                                 <TextBlock Text="&#xE7B3;" Style="{StaticResource ContextMenuGlyphText}" />
@@ -2297,7 +2226,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Button Style="{StaticResource ContextMenuIconButton}"
+                        <Button Style="{StaticResource BulkContextMenuIconButtonHiddenInRecycleBin}"
                                 Command="{Binding BulkReMatchMetadataCommand}" ToolTip="Re-match Metadata">
                             <StackPanel>
                                 <TextBlock Text="&#xE72C;" Style="{StaticResource ContextMenuGlyphText}" />
@@ -2305,7 +2234,7 @@
                             </StackPanel>
                         </Button>
 
-                        <Button Style="{StaticResource ContextMenuIconButton}"
+                        <Button Style="{StaticResource BulkContextMenuIconButtonHiddenInRecycleBin}"
                                 Command="{Binding BulkFetchArtworkCommand}" IsEnabled="{Binding CanBulkFetchArtwork}"
                                 ToolTip="Görsel getir">
                             <StackPanel>
@@ -2347,7 +2276,7 @@
                                 </Style>
                             </Button.Style>
                             <StackPanel>
-                                <TextBlock Text="&#xE74D;" Style="{StaticResource ContextMenuGlyphText}" />
+                                <TextBlock Text="&#xE72C;" Style="{StaticResource ContextMenuGlyphText}" />
                                 <TextBlock Text="Restore" Style="{StaticResource ContextMenuLabelText}" />
                             </StackPanel>
                         </Button>
@@ -2561,7 +2490,12 @@
                                     </ContextMenu>
                                 </Border.ContextMenu>
                                 <Grid>
-                                    <Image Source="{Binding SelectedGame.BoxDisplayPath, Converter={StaticResource ThumbnailImage}, ConverterParameter=600}" Stretch="Uniform" Margin="8" />
+                                    <!-- Kullanıcı testi: "Final Stretch"/"Final Fight" gibi yatay/atipik
+                                         oranlı ("3D Cart" tarzı) kapaklarda UniformToFill (kutuyu tam
+                                         doldurup taşanı ortadan kırpma) Uniform'dan (kutunun ortasında
+                                         küçük kalıp çoğu yeri boş bırakma) daha iyi göründüğü onaylandı —
+                                         tüm kapaklar için kalıcı hale getirildi. -->
+                                    <Image Source="{Binding SelectedGame.BoxDisplayPath, Converter={StaticResource ThumbnailImage}, ConverterParameter=600}" Stretch="UniformToFill" Margin="8" />
 
                                     <!-- Top 25/100/250 rozeti (bkz. MainViewModel.ComputeTopRankBadges) —
                                          hiç kazanmadıysa hiç görünmüyor. -->
@@ -3136,7 +3070,7 @@
             <Border Grid.Column="0" Grid.ColumnSpan="4" VerticalAlignment="Bottom"
                     Background="{StaticResource Brush.Background.Panel}"
                     BorderBrush="{StaticResource Brush.Border}" BorderThickness="0,1,0,0" Padding="10,6"
-                    Visibility="{Binding IsArtworkDownloadInProgress, Converter={StaticResource BoolToVisibility}}">
+                    Visibility="{Binding ShowMainArtworkProgressBar, Converter={StaticResource BoolToVisibility}}">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />

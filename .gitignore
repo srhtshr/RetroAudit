@@ -27,10 +27,6 @@ RetroAudit.db
 /ExternalMetadata/
 /DatFiles/
 
-## Kullanıcının kişisel favori/gizli/playlist verisi (RetroAudit.db'den ayrı, WPF'in kendi
-## kalıcı deposu) — makineye özel çalışma zamanı verisi, asla commit edilmez.
-RetroAuditUserData.db
-
 ## LaunchBox.Metadata.db'den bir kez damıtılmış, ham dosyadan ~%40 küçük kopya (bkz.
 ## MasterMetadataReader) — RetroAudit.db ile AYNI gerekçe: üçüncü taraf veri, yeniden dağıtım
 ## hakkımız yok, ayrıca 200MB+ boyutunda. Sadece damıtma mantığı (Builder) source-controlled.

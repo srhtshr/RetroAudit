@@ -163,6 +163,13 @@ public partial class Game : ObservableObject
     public int? MetadataSourceId { get; set; }
     public bool HasArtworkSource => MetadataSourceId.HasValue;
 
+    // GameState.MetadataSourceIdOverride elle bağlanmış mı (BİRLEŞTİR/SÜRÜM sınıflandırması) —
+    // Metadata Provider'da "Bağlı" filtresinin bu kayıtları tekrar tekrar eksik listesine
+    // düşürmemesi için (bkz. MetadataProviderViewModel.RebuildMissingItems). Hedef LaunchBox
+    // kaydının kendisi bir alanda (ör. Açıklama) veri taşımıyorsa o alan hâlâ boş kalabilir —
+    // bu durumda kullanıcı zaten bir karar vermiştir, tekrar sorulmaması gerekir.
+    public bool HasManualMetadataSourceOverride { get; set; }
+
     // Bu oyunun KENDİ platformu içindeki ağırlıklı Topluluk Puanı sıralamasına göre en yüksek
     // rozeti — "Top 25" / "Top 100" / "Top 250" ya da hiçbiri (bkz. MainViewModel.
     // ComputeTopRankBadges, uygulama açılışında bir kez hesaplanır). Değer, Images/Badges/
@@ -318,6 +325,21 @@ public partial class Game : ObservableObject
     // yok — sadece hangi chip'in altında göründüğünü belirlemek için okunuyorlar.
     public bool IsHidden { get; set; }
     public bool IsDeleted { get; set; }
+
+    // Kullanıcı isteği: "ayrı ayrı gözükmesin, Bağla mantığında olacak, onlar tek kayıt gibi
+    // düşün" — CatalogDatabaseService.ApplyAutoVersionGrouping tarafından, aynı platformda AYNI
+    // LaunchBox metadata hedefine (kendi MetadataSourceId'si ya da elle MetadataSourceIdOverride)
+    // çözülen birden fazla Game bulunduğunda otomatik doldurulur. Doluysa bu satır ana tabloda
+    // AYRI gösterilmez, GameId'si burada yazan "asıl" oyunun Sürümler listesine bir kart olarak
+    // eklenir (bkz. MainViewModel.LoadSelectedGameVersions). Gerçek Bağla'nın aksine dosya
+    // FİZİKSEL OLARAK taşınmaz/gizlenmez (IsHidden set edilmez) — sadece görünüm bu şekilde davranır.
+    public int? MergedIntoGameId { get; set; }
+    public bool IsMergedDuplicate => MergedIntoGameId.HasValue;
+
+    // Ana tablo/Provider popülasyonlarındaki tüm "!IsHidden && !IsDeleted" süzgeçlerinin ortak
+    // kapısı — gerçek gizleme (kullanıcının Gizle'si) İLE otomatik sürüm-gruplama gizlemesini
+    // AYNI yerden yönetir, ikisini her sorguda ayrı ayrı tekrarlamak yerine.
+    public bool IsEffectivelyHidden => IsHidden || IsMergedDuplicate;
 
     public string Notes { get; set; } = string.Empty;
 

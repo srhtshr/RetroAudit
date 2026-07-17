@@ -218,7 +218,55 @@
                     CornerRadius="6">
                 <DockPanel LastChildFill="True">
                     <StackPanel DockPanel.Dock="Top" Margin="10,10,10,8">
-                        <TextBlock FontSize="16" FontWeight="Bold" Text="Metadata Audit" />
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" FontSize="16" FontWeight="Bold" Text="Metadata Audit" VerticalAlignment="Center" />
+
+                            <!-- Kullanıcı isteği: "göstermeyi istemediklerimi göstermemem için
+                                 seçmeli filtre" — sol paneldeki platform kartı listesinden
+                                 istenmeyen platformları gizleyen seçmeli filtre (bkz.
+                                 MetadataProviderViewModel.PlatformVisibilityOptions,
+                                 AppSettings.MetadataProviderHiddenPlatforms). -->
+                            <Button x:Name="PlatformFilterButton"
+                                    Grid.Column="1"
+                                    Style="{StaticResource TableSearchButtonStyle}"
+                                    Width="28" Height="28"
+                                    Command="{Binding TogglePlatformFilterPopupCommand}"
+                                    ToolTip="Platform filtresi">
+                                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="14" Text="&#xE71C;" Foreground="{StaticResource Brush.Text.Secondary}" />
+                            </Button>
+
+                            <Popup PlacementTarget="{Binding ElementName=PlatformFilterButton}"
+                                   IsOpen="{Binding IsPlatformFilterOpen}"
+                                   StaysOpen="False" Placement="Bottom" AllowsTransparency="True" PopupAnimation="Fade">
+                                <Border Background="{StaticResource Brush.Background.Elevated}"
+                                        BorderBrush="{StaticResource Brush.Border}" BorderThickness="1"
+                                        CornerRadius="4" Padding="6" Width="220">
+                                    <DockPanel>
+                                        <Button DockPanel.Dock="Bottom" Margin="0,6,0,0" FontSize="10.5"
+                                                HorizontalAlignment="Right"
+                                                Command="{Binding ShowAllPlatformsCommand}"
+                                                Content="Tümünü Göster" />
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="360">
+                                            <ItemsControl ItemsSource="{Binding PlatformVisibilityOptions}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <CheckBox Margin="2,3"
+                                                                  IsChecked="{Binding IsVisible}"
+                                                                  Content="{Binding DisplayName}"
+                                                                  Foreground="{StaticResource Brush.Text.Primary}"
+                                                                  FontSize="12" />
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </ScrollViewer>
+                                    </DockPanel>
+                                </Border>
+                            </Popup>
+                        </Grid>
                         <WrapPanel Margin="0,12,0,0">
                             <Button Content="Metadata Provider"
                                     IsHitTestVisible="False"
@@ -412,6 +460,11 @@
                             <TextBox Style="{StaticResource SearchTextBoxStyle}"
                                      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" />
                         </Border>
+                        <CheckBox Margin="2,10,0,0"
+                                  IsChecked="{Binding ShowManuallyLinked}"
+                                  Content="Elle bağlanmış (BİRLEŞTİR/SÜRÜM) kayıtları da göster"
+                                  Foreground="{StaticResource Brush.Text.Secondary}"
+                                  ToolTip="Kapalıyken GameState.MetadataSourceIdOverride ile elle bağlanmış kayıtlar bu listede ve dışa aktarmada gösterilmez." />
                     </StackPanel>
 
                     <Grid Margin="18,8,10,10">
@@ -523,6 +576,8 @@
                 BorderThickness="1"
                 CornerRadius="6">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Margin="0,0,8,0" Padding="14,7" Click="ExportPlatformSummariesButton_Click" Content="D&#x0131;&#x015F;a Aktar" />
+                <Button Margin="0,0,8,0" Padding="14,7" Click="ExportMissingItemsButton_Click" Content="Listeyi D&#x0131;&#x015F;a Aktar" />
                 <Button Margin="0,0,8,0" Padding="14,7" Command="{Binding EditSelectedCommand}" Content="D&#x00FC;zenle" />
                 <Button Padding="14,7" Command="{Binding ReMatchSelectedCommand}" Content="Yeniden E&#x015F;le&#x015F;tir" />
             </StackPanel>

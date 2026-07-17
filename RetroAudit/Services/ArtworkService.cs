@@ -87,6 +87,27 @@ public static class ArtworkService
     public static string BuildLocalPath(string imagesRoot, string platform, string typeFolder, string baseFileName, bool preserveTransparency) =>
         Path.Combine(imagesRoot, platform, typeFolder, baseFileName + (preserveTransparency ? ".png" : ".jpg"));
 
+    // Kullanıcı bulgusu: "Final Stretch" gibi bazı Box kapakları LaunchBox'ta standart dikey ön
+    // kapak yerine yatay "3D Cart" render'ı olarak geliyor — MainWindow.xaml'deki Box görseli artık
+    // UniformToFill kullandığı için hiç bozulmuyor ama kenarlardan çok kırpılıyor. Kullanıcı kararı:
+    // 1. kaynaktan (LaunchBox) inen kapak yataysa 2. kaynağı (libretro-thumbnails, genelde standart
+    // dikey ön kapak) da dene, varsa onunla değiştir — bkz. MainViewModel.DownloadArtworkAsync.
+    // Sadece boyut (frame.PixelWidth/Height) okunuyor, tam piksel decode gerekmiyor — ucuz bir kontrol.
+    public static bool IsLandscapeCover(string filePath, double aspectThreshold = 1.15)
+    {
+        try
+        {
+            using var stream = File.OpenRead(filePath);
+            var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.DelayCreation, BitmapCacheOption.OnDemand);
+            var frame = decoder.Frames[0];
+            return frame.PixelWidth > frame.PixelHeight * aspectThreshold;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // Başarısızlıkta (ağ hatası, 404, disk hatası) false döner — çağıran taraf bunu bir özet
     // sayaca topluyor (bkz. RomImportViewModel'in per-item try/catch deseni). preserveTransparency:
     // Logo için PNG (alfa kanalı korunur), diğer türler için küçük/kayıplı JPEG (%90 kalite —
